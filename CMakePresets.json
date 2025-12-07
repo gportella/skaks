@@ -1,0 +1,116 @@
+{
+    "version": 5,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 24,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "dev-debug",
+            "displayName": "Debug (clang, sanitizers)",
+            "description": "Debug build using clang with sanitizers enabled.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/debug",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CHESS_ENABLE_SANITIZERS": "ON"
+            }
+        },
+        {
+            "name": "dev-release",
+            "displayName": "Release (clang, LTO)",
+            "description": "Optimized release build using clang with IPO enabled.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/release",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_BUILD_TYPE": "Release",
+                "CHESS_ENABLE_IPO": "ON"
+            }
+        },
+        {
+            "name": "asan-debug",
+            "displayName": "Debug (AddressSanitizer)",
+            "description": "Debug build with address sanitizer only.",
+            "inherits": "dev-debug",
+            "cacheVariables": {
+                "CHESS_ENABLE_SANITIZERS": "ON"
+            }
+        },
+        {
+            "name": "linux-cross-x86_64",
+            "displayName": "Cross compile to Linux x86_64",
+            "description": "Cross-compiles using clang for x86_64 Linux target.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-x86_64",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/clang-linux-x86_64.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CHESS_ENABLE_IPO": "ON",
+                "CHESS_ENABLE_SANITIZERS": "OFF"
+            }
+        },
+        {
+            "name": "linux-cross-arm64",
+            "displayName": "Cross compile to Linux arm64",
+            "description": "Cross-compiles using clang for arm64 Linux target.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux-arm64",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/clang-linux-arm64.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CHESS_ENABLE_IPO": "ON",
+                "CHESS_ENABLE_SANITIZERS": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "dev-debug",
+            "configurePreset": "dev-debug"
+        },
+        {
+            "name": "dev-release",
+            "configurePreset": "dev-release"
+        },
+        {
+            "name": "asan-debug",
+            "configurePreset": "asan-debug"
+        },
+        {
+            "name": "linux-cross-x86_64",
+            "configurePreset": "linux-cross-x86_64"
+        },
+        {
+            "name": "linux-cross-arm64",
+            "configurePreset": "linux-cross-arm64"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "dev-debug",
+            "configurePreset": "dev-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "dev-release",
+            "configurePreset": "dev-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "asan-debug",
+            "configurePreset": "asan-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+# Build directories
+/build/
+**/build/
+
+# CMake-generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+Testing/
+CTestTestfile.cmake
+
+# IDE/editor state
+.vscode/
+.idea/
+*.user
+*.swp
+*.swo
+
+# macOS
+.DS_Store
