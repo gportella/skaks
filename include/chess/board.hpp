@@ -34,11 +34,12 @@ struct PieceList {
 };
 
 struct Board {
-  std::array<Bitboard, kPieceCount> pieces_bb;
+  std::array<Bitboard, kPieceCount + 1> pieces_bb = {0};
   std::array<OccupancyType, 64> pieces = {OccupancyType::empty};
   Bitboard occupancy[3];
   SideToMove side_to_move = SideToMove::White;
   CastlingRights castling_rights = CastlingRights::NoCastling;
+  Bitboard ep_square = 0;
   int en_passant = -1;
   int ply_count = 0;
   int fifty_move_counter = 0;
@@ -75,5 +76,8 @@ inline FenFields split_fen(std::string_view fen) {
 }
 
 Board initial_board(std::string_view fen);
-void termianl_board_print(const Board& board);
+void terminal_board_print(const Board& board);
+void terminal_mask_print(Bitboard mask, const Board& board);
+Bitboard calculate_occupancy(const Board& board, PieceColor color);
+
 } // namespace chess

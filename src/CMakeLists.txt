@@ -1,6 +1,7 @@
 add_library(chess_engine_core STATIC
   board.cpp
   engine.cpp
+  attack_masks.cpp
 )
 
 target_include_directories(chess_engine_core

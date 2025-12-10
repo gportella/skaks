@@ -1,6 +1,15 @@
 # chess_engine_c++
 
-Simple toy engine, for learning
+Simple toy engine, for learning. 
+
+### Building emition of moves
+
+#### Pins
+> Pins are pending
+- Find your king square.
+- Compute lines from enemy sliders (bishops/rooks/queens) to your king.
+- Identify pieces that lie on those lines and are the only blocker = pinned set.
+- Restrict pinned piece moves to the pin line direction (pawns: only forward if file-pin; only the diagonal that aligns if diagonal-pin; none if rank-pin). Usually computed once per node and applied as masks before emission or checked during make_move.
 
 ## Prerequisites
 

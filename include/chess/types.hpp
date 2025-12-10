@@ -35,9 +35,26 @@ enum class Square {
 
 constexpr Bitboard U64_MASK = std::numeric_limits<std::uint64_t>::max(); // 0xFFFFFFFFFFFFFFFF
 constexpr Bitboard FILE_A = 0x0101010101010101ULL;
+constexpr Bitboard FILE_B = FILE_A << 1;
+constexpr Bitboard FILE_G = FILE_A << 6;
 constexpr Bitboard FILE_H = 0x8080808080808080ULL;
+constexpr Bitboard RANK_1 = 0x00000000000000FFULL;
+constexpr Bitboard RANK_2 = RANK_1 << 8;
+constexpr Bitboard RANK_3 = RANK_1 << 16;
+constexpr Bitboard RANK_4 = RANK_1 << 24;
+constexpr Bitboard RANK_5 = RANK_1 << 32;
+constexpr Bitboard RANK_6 = RANK_1 << 40;
+constexpr Bitboard RANK_7 = RANK_1 << 48;
+constexpr Bitboard RANK_8 = RANK_1 << 56;
 constexpr Bitboard NOT_FILE_A = ~FILE_A;
 constexpr Bitboard NOT_FILE_H = ~FILE_H;
+constexpr bool is_white(OccupancyType occ) {
+  return static_cast<std::size_t>(occ) < static_cast<std::size_t>(OccupancyType::bP);
+}
+
+constexpr SideToMove flip_side(SideToMove side) {
+  return side == SideToMove::White ? SideToMove::Black : SideToMove::White;
+}
 
 struct FenFields {
   std::string_view placement;
