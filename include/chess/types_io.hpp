@@ -5,6 +5,11 @@
 #include <string_view>
 
 namespace chess {
+
+constexpr std::size_t to_index(SideToMove s) noexcept {
+  return static_cast<std::size_t>(s);
+}
+
 inline constexpr std::string_view to_string(SideToMove side) {
   return side == SideToMove::White ? "White" : "Black";
 }
