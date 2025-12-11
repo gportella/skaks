@@ -20,6 +20,11 @@ enum class CastlingRights {
   BlackQueenside = 8
 };
 
+inline constexpr CastlingRights WK = CastlingRights::WhiteKingside;
+inline constexpr CastlingRights WQ = CastlingRights::WhiteQueenside;
+inline constexpr CastlingRights BK = CastlingRights::BlackKingside;
+inline constexpr CastlingRights BQ = CastlingRights::BlackQueenside;
+
 // clang-format off
 enum class Square {
   A1, B1, C1, D1, E1, F1, G1, H1,

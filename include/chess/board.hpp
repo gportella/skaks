@@ -47,8 +47,7 @@ struct Board {
   PieceColor king_captured = PieceColor::None;
   std::array<int, 2> king_positions = {-1, -1};
   PieceList rook_list[2];
-  PieceList bishop_list[2];
-  PieceList knight_list[2];
+  PieceList king_list[2];
   PieceList pawn_list[2];
 };
 

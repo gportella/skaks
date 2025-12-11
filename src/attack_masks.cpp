@@ -7,6 +7,7 @@
 #include <assert.h>
 
 namespace chess {
+
 // Helpers
 inline int poplsb(Bitboard& bb) {
   // Returns index of least significant set bit and clears it
@@ -667,7 +668,153 @@ void emit_king_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
                                       /*promo=*/OccupancyType::empty,
                                       /*flags=*/0);
     }
+
+    CastlingRights castle_rights = king_castle_rights(b, stm);
+    // Kingside castling
+    if (castle_rights == (white ? WK : BK)) {
+      int to = white ? static_cast<int>(Square::G1) : static_cast<int>(Square::G8);
+      assert(move_count < kMaxMovementCount);
+      out[move_count++] = encode_move(from, to,
+                                      /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
+                                      /*captured=*/OccupancyType::empty,
+                                      /*promo=*/OccupancyType::empty,
+                                      /*flags=*/(1u << 25)); // kingside castle flag
+    }
+    // Queenside castling
+    if (castle_rights == (white ? WQ : BQ)) {
+      int to = white ? static_cast<int>(Square::C1) : static_cast<int>(Square::C8);
+      assert(move_count < kMaxMovementCount);
+      out[move_count++] = encode_move(from, to,
+                                      /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
+                                      /*captured=*/OccupancyType::empty,
+                                      /*promo=*/OccupancyType::empty,
+                                      /*flags=*/(1u << 26)); // queenside castle flag
+    }
   }
+}
+
+bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_side) {
+  // Check for pawn attacks
+  const Bitboard target = Bitboard(1) << sq;
+  Bitboard pawn_attackers;
+  if (attacker_side == SideToMove::White) {
+    pawn_attackers = ((target & NOT_FILE_H) >> 7) | ((target & NOT_FILE_A) >> 9);
+    pawn_attackers &= board.pieces_bb[static_cast<std::size_t>(Piece::wP)];
+  } else {
+    pawn_attackers = ((target & NOT_FILE_A) << 7) | ((target & NOT_FILE_H) << 9);
+    pawn_attackers &= board.pieces_bb[static_cast<std::size_t>(Piece::bP)];
+  }
+  if (pawn_attackers)
+    return true;
+
+  // Check for knight attacks
+  Bitboard knight_attackers = knight_attack_bm(board, sq, flip_side(attacker_side));
+  knight_attackers &= board.pieces_bb[static_cast<std::size_t>(
+      attacker_side == SideToMove::White ? Piece::wN : Piece::bN)];
+  if (knight_attackers)
+    return true;
+
+  // Check for bishop/queen attacks
+  Bitboard bishop_attackers = bishop_attack_bm(board, sq, flip_side(attacker_side));
+  bishop_attackers &= board.pieces_bb[static_cast<std::size_t>(
+                          attacker_side == SideToMove::White ? Piece::wB : Piece::bB)] |
+                      board.pieces_bb[static_cast<std::size_t>(
+                          attacker_side == SideToMove::White ? Piece::wQ : Piece::bQ)];
+  if (bishop_attackers)
+    return true;
+
+  // Check for rook/queen attacks
+  Bitboard rook_attackers = rook_attack_bm(board, sq, flip_side(attacker_side));
+  rook_attackers &= board.pieces_bb[static_cast<std::size_t>(
+                        attacker_side == SideToMove::White ? Piece::wR : Piece::bR)] |
+                    board.pieces_bb[static_cast<std::size_t>(
+                        attacker_side == SideToMove::White ? Piece::wQ : Piece::bQ)];
+  if (rook_attackers)
+    return true;
+  return false;
+}
+
+CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
+  const bool white = (stm == SideToMove::White);
+  const SideToMove enemy = flip_side(stm);
+
+  const Square king_square = white ? Square::E1 : Square::E8;
+  const Square king_rook = white ? Square::H1 : Square::H8;
+  const Square queen_rook = white ? Square::A1 : Square::A8;
+  const CastlingRights king_flag = white ? WK : BK;
+  const CastlingRights queen_flag = white ? WQ : BQ;
+
+  const std::array<Square, 2> king_path_squares =
+      white ? std::array<Square, 2>{Square::F1, Square::G1}
+            : std::array<Square, 2>{Square::F8, Square::G8};
+  const std::array<Square, 3> queen_path_squares =
+      white ? std::array<Square, 3>{Square::D1, Square::C1, Square::B1}
+            : std::array<Square, 3>{Square::D8, Square::C8, Square::B8};
+  const std::array<Square, 2> king_safe_squares = king_path_squares;
+  const std::array<Square, 2> queen_safe_squares =
+      white ? std::array<Square, 2>{Square::D1, Square::C1}
+            : std::array<Square, 2>{Square::D8, Square::C8};
+
+  const auto mask_from = [](const auto& squares) {
+    Bitboard mask = 0;
+    for (Square sq : squares) {
+      mask |= Bitboard(1) << static_cast<u_int8_t>(sq);
+    }
+    return mask;
+  };
+
+  const Bitboard occ = board.occupancy[to_index(PieceColor::Both)];
+  const bool clear_king_path = (occ & mask_from(king_path_squares)) == 0;
+  const bool clear_queen_path = (occ & mask_from(queen_path_squares)) == 0;
+
+  const auto squares_are_safe = [&](const auto& squares) {
+    for (Square sq : squares) {
+      if (is_square_attacked(board, static_cast<u_int8_t>(sq), enemy)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const auto& kings = board.king_list[to_index(stm)];
+  bool king_on_start = false;
+  for (std::uint8_t i = 0; i < kings.count; ++i) {
+    if (kings.squares[i] == king_square) {
+      king_on_start = true;
+      break;
+    }
+  }
+
+  if (!king_on_start) {
+    return CastlingRights::NoCastling;
+  }
+
+  const auto& rooks = board.rook_list[to_index(stm)];
+  const auto has_rook_at = [&](Square target) {
+    for (std::uint8_t i = 0; i < rooks.count; ++i) {
+      if (rooks.squares[i] == target) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const bool king_square_safe =
+      !is_square_attacked(board, static_cast<u_int8_t>(king_square), enemy);
+
+  CastlingRights rights = CastlingRights::NoCastling;
+
+  if (king_square_safe && clear_king_path && squares_are_safe(king_safe_squares) &&
+      has_rook_at(king_rook)) {
+    rights |= king_flag;
+  }
+
+  if (king_square_safe && clear_queen_path && squares_are_safe(queen_safe_squares) &&
+      has_rook_at(queen_rook)) {
+    rights |= queen_flag;
+  }
+
+  return rights;
 }
 
 } // namespace chess

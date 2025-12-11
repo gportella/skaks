@@ -345,6 +345,10 @@ struct PawnMasks {
   Bitboard ep_captures;    // en passant captures
 };
 
+// Declarations
+
+bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_side);
+
 PawnMasks gen_pawn_masks(const Board& board, SideToMove stm);
 Bitboard knight_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
 Bitboard bishop_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
@@ -367,5 +371,8 @@ void emit_queen_moves(const Board& board, SideToMove stm,
                       std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
 void emit_king_moves(const Board& board, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+
+CastlingRights king_castle_rights(const Board& board, SideToMove stm);
+bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_side);
 
 } // namespace chess

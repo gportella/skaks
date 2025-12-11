@@ -19,6 +19,10 @@ constexpr std::size_t to_index(int sq) noexcept {
   return static_cast<std::size_t>(sq);
 }
 
+constexpr std::size_t to_index(Square sq) noexcept {
+  return static_cast<std::size_t>(sq);
+}
+
 inline constexpr std::string_view to_string(SideToMove side) {
   return side == SideToMove::White ? "White" : "Black";
 }
@@ -74,4 +78,23 @@ inline std::ostream& operator<<(std::ostream& os, SideToMove side) {
 inline std::ostream& operator<<(std::ostream& os, OccupancyType occ) {
   return os << to_string(occ);
 }
+
+inline CastlingRights operator|(CastlingRights a, CastlingRights b) {
+  return static_cast<CastlingRights>(static_cast<int>(a) | static_cast<int>(b));
+}
+inline CastlingRights operator&(CastlingRights a, CastlingRights b) {
+  return static_cast<CastlingRights>(static_cast<int>(a) & static_cast<int>(b));
+}
+inline CastlingRights& operator|=(CastlingRights& a, CastlingRights b) {
+  a = a | b;
+  return a;
+}
+inline CastlingRights& operator&=(CastlingRights& a, CastlingRights b) {
+  a = a & b;
+  return a;
+}
+inline CastlingRights operator~(CastlingRights a) {
+  return static_cast<CastlingRights>(~static_cast<int>(a) & 0xF); // only 4 bits
+}
+
 } // namespace chess

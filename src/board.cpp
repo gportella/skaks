@@ -48,6 +48,10 @@ Board parse_fen_string(std::string_view fen) {
   std::cout << "Parsing FEN: " << fen << "\n";
   FenFields fields = split_fen(fen);
 
+  board.rook_list[0] = PieceList{};
+  board.rook_list[1] = PieceList{};
+  board.king_list[0] = PieceList{};
+  board.king_list[1] = PieceList{};
   for (char c : fields.placement) {
     if (c == '/') {
       --rank;
@@ -58,6 +62,23 @@ Board parse_fen_string(std::string_view fen) {
       // Map character to OccupancyType and set board.pieces[rank * 8 + file]
       pos = rank * 8 + file;
       board.pieces[pos] = kPieceFromChar[static_cast<unsigned char>(c)];
+      // piece list
+      if (board.pieces[pos] == OccupancyType::wP) {
+        board.pawn_list[0].squares[board.pawn_list[0].count++] = static_cast<Square>(pos);
+      } else if (board.pieces[pos] == OccupancyType::bP) {
+        board.pawn_list[1].squares[board.pawn_list[1].count++] = static_cast<Square>(pos);
+      } else if (board.pieces[pos] == OccupancyType::wR) {
+        board.rook_list[0].squares[board.rook_list[0].count++] = static_cast<Square>(pos);
+      } else if (board.pieces[pos] == OccupancyType::bR) {
+        board.rook_list[1].squares[board.rook_list[1].count++] = static_cast<Square>(pos);
+      } else if (board.pieces[pos] == OccupancyType::wK) {
+        board.king_list[0].squares[board.king_list[0].count++] = static_cast<Square>(pos);
+        board.king_positions[0] = static_cast<int>(pos);
+      } else if (board.pieces[pos] == OccupancyType::bK) {
+        board.king_list[1].squares[board.king_list[1].count++] = static_cast<Square>(pos);
+        board.king_positions[1] = static_cast<int>(pos);
+      }
+
       ++file;
     }
   }
@@ -77,7 +98,7 @@ Board parse_fen_string(std::string_view fen) {
   board.fifty_move_counter =
       fields.halfmove_clock.empty() ? 0 : std::stoi(std::string(fields.halfmove_clock));
   board.side_to_move = (fields.side_to_move == "w") ? SideToMove::White : SideToMove::Black;
-  std::cout << "Set side to move: " << board.side_to_move << "\n";
+
   // Minimal FEN parsing logic can be added here
   return board;
 }
