@@ -13,6 +13,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(chess_engine_tests
   engine_tests.cpp
+  pin_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests

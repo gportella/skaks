@@ -118,3 +118,47 @@ The presets assume a clang-based cross toolchain (`clang --target=<triple>`). Ad
 - Keep memory predictable: use `std::array` for fixed data, `std::vector::reserve` for growing lists, and central allocators (arena or object pool) for transient nodes. Avoid sprinkling `new`/`delete` inside the search loop.
 - Document invariants (e.g., "move generator returns only pseudo-legal moves") right where they are enforced so future parallel work has clear contracts.
 - Maintain regression suites (perft tables, fuzz tests) and run them before and after structural changes; catching race-induced bugs is easier with a strong baseline.
+
+
+
+## Make sure to follow the rules 
+
+Often-overlooked rules and edge cases to handle in an engine beyond the basics:
+
+### En passant timing: 
+
+EP is only legal immediately after a double pawn push, and only to the single passed-over square. EP must also be legal with respect to king safety (capturing EP can open lines).
+
+### Insufficient material (automatic draws):
+
+- King vs king
+- King + bishop vs king
+- King + knight vs king
+- King + bishop vs king + bishop with both bishops on same color (no mating material)
+
+### Dead position: 
+
+No legal sequence can lead to checkmate (e.g., lone kings, kings+same-color bishops) → draw immediately (even if 50-move rule not reached).
+
+### Fivefold repetition & seventy-five-move rule (FIDE automatic draws):
+
+Fivefold repetition is an automatic draw (no claim needed).
+
+Seventy-five moves without pawn move or capture is an automatic draw, superseding the claim-based 50-move rule. Many engines still implement claim-based 50 and optionally recognize 75 as auto-draw.
+
+Threefold repetition (claim): Requires identical position including side to move, castling rights, EP availability (but not the 50-move clock). The player must claim; engines typically detect and treat as draw in search.
+
+### Castling edge cases:
+
+King must not be in check, and cannot pass through or land on checked squares.
+Squares between king and rook must be empty (rook’s path must be clear); for queen-side, b1/b8 can be occupied, but d1/d8 and c1/c8 must be empty.
+Castling rights must be intact; rights are lost if the king moves, the rook moves, or the rook is captured on its original square.
+Checkmate vs stalemate detection:
+
+### Legal move requirement for EP and castling with pins:
+
+EP or castling must not expose your king to check; legality is with respect to the resulting position.
+
+### Move repetition vs repetition of moves:
+
+Repetition is position-based, not move-string-based; castling rights and EP square must match.
