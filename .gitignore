@@ -17,6 +17,7 @@ CTestTestfile.cmake
 *.user
 *.swp
 *.swo
+.github/
 
 # macOS
 .DS_Store
