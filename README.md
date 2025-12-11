@@ -1,6 +1,8 @@
 # Skaks -- learning by doing 
 
-Simple toy engine, for learning. 
+> WIP: I don't know if I'll finish this, a lot of work.
+
+Simple toy chess engine, for learning and fun.
 
 
 ## Prerequisites
