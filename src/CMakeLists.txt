@@ -1,5 +1,6 @@
 add_library(chess_engine_core STATIC
   board.cpp
+  pins.cpp
   engine.cpp
   demo_debug.cpp
   attack_masks.cpp
