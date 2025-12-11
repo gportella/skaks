@@ -1,8 +1,7 @@
 /*
  Wonderful world of pins
 
-
- For move generation, take these into account
+For move generation, take these into account
 Check-resolution mask (optional, separate)
 compute_check_mask(Board, SideToMove) → Bitboard legal_target_mask
 If double check: only king moves allowed
