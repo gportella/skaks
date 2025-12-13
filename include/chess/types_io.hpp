@@ -79,6 +79,12 @@ inline std::ostream& operator<<(std::ostream& os, OccupancyType occ) {
   return os << to_string(occ);
 }
 
+inline constexpr int to_mask(CastlingRights cr) {
+  return static_cast<int>(cr);
+}
+inline constexpr CastlingRights from_mask(int m) {
+  return static_cast<CastlingRights>(m & 0xF); // keep to 4 bits
+}
 inline CastlingRights operator|(CastlingRights a, CastlingRights b) {
   return static_cast<CastlingRights>(static_cast<int>(a) | static_cast<int>(b));
 }

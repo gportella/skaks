@@ -4,6 +4,7 @@
 #include "chess/defaults.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
+#include "chess/zobrist.hpp"
 
 #include <array>
 #include <cctype>
@@ -126,7 +127,11 @@ Board initial_board(std::string_view fen) {
     board.pieces_bb[piece_idx] |= (Bitboard(1) << sq);
   }
 
-  std::cout << "Setting up initial board position from FEN: " << fen << "\n";
+  init_zobrist(0xDEADBEEF); // example seed
+  board.position_key = compute_position_key(board);
+
+  std::cout << "Set up initial board position from FEN: " << fen << "\n";
+
   return board;
 }
 
@@ -174,5 +179,75 @@ void terminal_mask_print(Bitboard mask, const Board& board) {
   }
   std::cout << "  ------------------------\n";
   std::cout << "    a  b  c  d  e  f  g  h\n";
+}
+
+// Set EP square after a legal double pawn push; clear otherwise.
+// Call this once per make_move, after you've decided the move is legal.
+inline void set_or_clear_en_passant(Board& b, int from, int to, bool is_pawn_move) {
+  b.ep_square = 0;
+  b.en_passant = -1;
+
+  if (!is_pawn_move)
+    return;
+
+  // Two-rank advance (rank difference of 2)
+  const int rFrom = rank_of(from);
+  const int rTo = rank_of(to);
+  if (std::abs(rTo - rFrom) != 2)
+    return;
+
+  // Middle square between from and to
+  const int mid = (from + to) / 2;
+  b.en_passant = mid;
+  b.ep_square = bb_of(mid);
+}
+
+// True if the side to move has at least one pawn that could capture EP right now.
+// This uses only ranks/files, so it doesn't depend on your internal square numbering direction.
+bool ep_capture_available(const Board& b) {
+  const int ep = b.en_passant;
+  if (ep < 0)
+    return false;
+
+  const int epFile = file_of(ep);
+  const int epRank = rank_of(ep);
+
+  if (b.side_to_move == SideToMove::White) {
+    // White would capture up to epRank; their pawn must be on epRank - 1 and adjacent file.
+    const int reqRank = epRank - 1;
+    if (reqRank < 0)
+      return false;
+
+    // Check left-adjacent pawn (file - 1)
+    if (epFile > 0) {
+      const int sq = (reqRank << 3) | (epFile - 1);
+      if (is_white_pawn(b.pieces[to_index(sq)]))
+        return true;
+    }
+    // Check right-adjacent pawn (file + 1)
+    if (epFile < 7) {
+      const int sq = (reqRank << 3) | (epFile + 1);
+      if (is_white_pawn(b.pieces[to_index(sq)]))
+        return true;
+    }
+    return false;
+  } else {
+    // Black would capture down to epRank; their pawn must be on epRank + 1 and adjacent file.
+    const int reqRank = epRank + 1;
+    if (reqRank > 7)
+      return false;
+
+    if (epFile > 0) {
+      const int sq = (reqRank << 3) | (epFile - 1);
+      if (is_black_pawn(b.pieces[to_index(sq)]))
+        return true;
+    }
+    if (epFile < 7) {
+      const int sq = (reqRank << 3) | (epFile + 1);
+      if (is_black_pawn(b.pieces[to_index(sq)]))
+        return true;
+    }
+    return false;
+  }
 }
 } // namespace chess

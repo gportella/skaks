@@ -53,10 +53,10 @@ constexpr Bitboard RANK_7 = RANK_1 << 48;
 constexpr Bitboard RANK_8 = RANK_1 << 56;
 constexpr Bitboard NOT_FILE_A = ~FILE_A;
 constexpr Bitboard NOT_FILE_H = ~FILE_H;
+
 constexpr bool is_white(OccupancyType occ) {
   return static_cast<std::size_t>(occ) < static_cast<std::size_t>(OccupancyType::bP);
 }
-
 constexpr SideToMove flip_side(SideToMove side) {
   return side == SideToMove::White ? SideToMove::Black : SideToMove::White;
 }

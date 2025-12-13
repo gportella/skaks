@@ -2,6 +2,8 @@ add_library(chess_engine_core STATIC
   board.cpp
   pins.cpp
   engine.cpp
+  zobrist.cpp
+  moves.cpp
   demo_debug.cpp
   attack_masks.cpp
 )

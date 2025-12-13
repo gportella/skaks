@@ -4,6 +4,7 @@
 #include "chess/board_arithmetic.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
+#include "moves.hpp"
 
 #include <array>
 #include <ostream>
@@ -11,43 +12,6 @@
 #include <string_view>
 
 namespace chess {
-
-inline uint32_t encode_move(int from, int to, OccupancyType moving_piece,
-                            OccupancyType captured_piece, OccupancyType promo_piece,
-                            uint32_t flags) {
-  return (uint32_t(from) & 0x3F) | ((uint32_t(to) & 0x3F) << 6) |
-         ((uint32_t(moving_piece) & 0x0F) << 12) | ((uint32_t(captured_piece) & 0x0F) << 16) |
-         ((uint32_t(promo_piece) & 0x0F) << 20) |
-         (flags & 0xFF000000u); // upper 8 bits reserved for flags
-}
-
-inline int move_from(uint32_t m) {
-  return m & 0x3F;
-}
-inline int move_to(uint32_t m) {
-  return (m >> 6) & 0x3F;
-}
-inline int move_piece(uint32_t m) {
-  return (m >> 12) & 0x0F;
-}
-inline int move_captured(uint32_t m) {
-  return (m >> 16) & 0x0F;
-}
-inline int move_promo(uint32_t m) {
-  return (m >> 20) & 0x0F;
-}
-inline bool move_is_ep(uint32_t m) {
-  return (m >> 24) & 1u;
-}
-inline bool move_is_castle(uint32_t m) {
-  return (m >> 25) & 1u;
-}
-inline bool move_is_double(uint32_t m) {
-  return (m >> 26) & 1u;
-}
-inline bool move_is_quiet(uint32_t m) {
-  return (m >> 27) & 1u;
-}
 
 struct BishopRays {
   Bitboard northeast{};
@@ -372,6 +336,8 @@ void emit_queen_moves(const Board& board, SideToMove stm,
 void emit_king_moves(const Board& board, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
 
+void emit_all_moves(const Board& board, SideToMove stm,
+                    std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
 CastlingRights king_castle_rights(const Board& board, SideToMove stm);
 bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_side);
 

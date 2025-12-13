@@ -13,6 +13,24 @@
 
 namespace chess {
 
+inline int file_of(int sq) {
+  return sq & 7;
+}
+inline int rank_of(int sq) {
+  return sq >> 3;
+}
+inline std::uint64_t bb_of(int sq) {
+  return 1ULL << sq;
+}
+
+// You must implement these tiny predicates based on your OccupancyType:
+inline bool is_white_pawn(OccupancyType o) {
+  return o == OccupancyType::wP;
+}
+inline bool is_black_pawn(OccupancyType o) {
+  return o == OccupancyType::bP;
+}
+
 struct SearchContext {
   std::array<Bitboard, kMaxMovementCount> key_stack{};
   std::size_t key_stack_size{0};
@@ -43,12 +61,16 @@ struct Board {
   int en_passant = -1;
   int ply_count = 0;
   int fifty_move_counter = 0;
-  Bitboard position_key = 0;
+  uint64_t position_key = 0;
   PieceColor king_captured = PieceColor::None;
   std::array<int, 2> king_positions = {-1, -1};
   PieceList rook_list[2];
   PieceList king_list[2];
   PieceList pawn_list[2];
+  bool is_terminal() const {
+    // todo: check for checkmate/stalemate properly
+    return king_captured != PieceColor::None;
+  }
 };
 
 inline FenFields split_fen(std::string_view fen) {
@@ -77,6 +99,7 @@ inline FenFields split_fen(std::string_view fen) {
 Board initial_board(std::string_view fen);
 void terminal_board_print(const Board& board);
 void terminal_mask_print(Bitboard mask, const Board& board);
+bool ep_capture_available(const Board& b);
 Bitboard calculate_occupancy(const Board& board, PieceColor color);
 
 } // namespace chess

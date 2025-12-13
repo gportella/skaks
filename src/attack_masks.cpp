@@ -1,6 +1,7 @@
 #include "chess/attack_masks.hpp"
 
 #include "chess/board_arithmetic.hpp"
+#include "chess/casteling.hpp"
 #include "chess/defaults.hpp"
 #include "chess/types.hpp"
 
@@ -166,7 +167,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
                                /*piece=*/OccupancyType::wP,
                                /*captured=*/OccupancyType::empty,
                                /*promo=*/OccupancyType::empty,
-                               /*flags=*/(1u << 27)); // optional quiet flag
+                               /*flags=*/kFlagQuiet); // optional quiet flag
 
       assert(move_count < kMaxMovementCount);
       out[move_count++] = m;
@@ -183,7 +184,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
                                /*piece=*/OccupancyType::wP,
                                /*captured=*/OccupancyType::empty,
                                /*promo=*/OccupancyType::empty,
-                               /*flags=*/(1u << 26)); // double-pawn-push flag
+                               /*flags=*/kFlagDoublePush); // double-pawn-push flag
       assert(move_count < kMaxMovementCount);
       out[move_count++] = m;
     }
@@ -286,7 +287,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
           out[move_count++] = encode_move(from, to, OccupancyType::wP,
                                           /*captured=*/OccupancyType::empty,
                                           /*promo=*/OccupancyType::empty,
-                                          /*flags=*/(1u << 24)); // EP flag
+                                          /*flags=*/kFlagEnPassant); // EP flag
         }
       }
       if ((Bitboard(1) << to) & NOT_FILE_H) {
@@ -296,7 +297,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
           out[move_count++] = encode_move(from, to, OccupancyType::wP,
                                           /*captured=*/OccupancyType::empty,
                                           /*promo=*/OccupancyType::empty,
-                                          /*flags=*/(1u << 24)); // EP flag
+                                          /*flags=*/kFlagEnPassant); // EP flag
         }
       }
     }
@@ -317,7 +318,7 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
                                /*piece=*/OccupancyType::bP,
                                /*captured=*/OccupancyType::empty,
                                /*promo=*/OccupancyType::empty,
-                               /*flags=*/(1u << 27));
+                               /*flags=*/kFlagQuiet); // optional quiet flag
       assert(move_count < kMaxMovementCount);
       out[move_count++] = m;
     }
@@ -333,7 +334,7 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
                                /*piece=*/OccupancyType::bP,
                                /*captured=*/OccupancyType::empty,
                                /*promo=*/OccupancyType::empty,
-                               /*flags=*/(1u << 26));
+                               /*flags=*/kFlagDoublePush); // double-pawn-push flag
       assert(move_count < kMaxMovementCount);
       out[move_count++] = m;
     }
@@ -436,7 +437,7 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
           out[move_count++] = encode_move(from, to, OccupancyType::bP,
                                           /*captured=*/OccupancyType::empty,
                                           /*promo=*/OccupancyType::empty,
-                                          /*flags=*/(1u << 24));
+                                          /*flags=*/kFlagEnPassant); // EP flag
         }
       }
       if ((Bitboard(1) << to) & NOT_FILE_A) {
@@ -446,7 +447,7 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
           out[move_count++] = encode_move(from, to, OccupancyType::bP,
                                           /*captured=*/OccupancyType::empty,
                                           /*promo=*/OccupancyType::empty,
-                                          /*flags=*/(1u << 24));
+                                          /*flags=*/kFlagEnPassant); // EP flag
         }
       }
     }
@@ -483,7 +484,7 @@ void emit_knight_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
                                       /*piece=*/white ? OccupancyType::wN : OccupancyType::bN,
                                       /*captured=*/OccupancyType::empty,
                                       /*promo=*/OccupancyType::empty,
-                                      /*flags=*/(1u << 27)); // optional quiet flag
+                                      /*flags=*/kFlagQuiet); // optional quiet flag
     }
 
     // Captures
@@ -531,7 +532,7 @@ void emit_bishop_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
                                       /*piece=*/white ? OccupancyType::wB : OccupancyType::bB,
                                       /*captured=*/OccupancyType::empty,
                                       /*promo=*/OccupancyType::empty,
-                                      /*flags=*/(1u << 27)); // optional quiet flag
+                                      /*flags=*/kFlagQuiet); // optional quiet flag
     }
 
     // Captures
@@ -572,7 +573,7 @@ void emit_rook_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
                                       /*piece=*/white ? OccupancyType::wR : OccupancyType::bR,
                                       /*captured=*/OccupancyType::empty,
                                       /*promo=*/OccupancyType::empty,
-                                      /*flags=*/(1u << 27));
+                                      /*flags=*/kFlagQuiet); // optional quiet flag
     }
 
     Bitboard captures = atk & their_occ;
@@ -617,7 +618,7 @@ void emit_queen_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxM
                                       /*piece=*/white ? OccupancyType::wQ : OccupancyType::bQ,
                                       /*captured=*/OccupancyType::empty,
                                       /*promo=*/OccupancyType::empty,
-                                      /*flags=*/(1u << 27)); // optional quiet flag
+                                      /*flags=*/kFlagQuiet); // optional quiet flag
     }
     // Captures
     Bitboard c = atk & their_occ;
@@ -634,13 +635,14 @@ void emit_queen_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxM
 }
 
 /**
- * King move emission (castling not yet handled)
+ * King move emission
  */
 void emit_king_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMovementCount>& out,
                      uint16_t& move_count) {
   const bool white = (stm == SideToMove::White);
   const Bitboard my_occ = b.occupancy[to_index(stm)];
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
+  const auto& castle_cfg = kCastlingSideConfigs[to_index(stm)];
 
   Bitboard kings = b.pieces_bb[static_cast<std::size_t>(white ? Piece::wK : Piece::bK)];
   while (kings) {
@@ -655,7 +657,7 @@ void emit_king_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
                                       /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
                                       /*captured=*/OccupancyType::empty,
                                       /*promo=*/OccupancyType::empty,
-                                      /*flags=*/(1u << 27));
+                                      /*flags=*/kFlagQuiet); // optional quiet flag
     }
 
     Bitboard captures = atk & their_occ;
@@ -670,25 +672,25 @@ void emit_king_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
     }
 
     CastlingRights castle_rights = king_castle_rights(b, stm);
-    // Kingside castling
+    // Kingside castling --> remember to also move the rook in make_move()
     if (castle_rights == (white ? WK : BK)) {
-      int to = white ? static_cast<int>(Square::G1) : static_cast<int>(Square::G8);
+      int to = static_cast<int>(castle_cfg.king_kingside_target);
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
                                       /*captured=*/OccupancyType::empty,
                                       /*promo=*/OccupancyType::empty,
-                                      /*flags=*/(1u << 25)); // kingside castle flag
+                                      /*flags=*/kFlagCastle); // kingside castle flag
     }
-    // Queenside castling
+    // Queenside castling --> remember to also move the rook in make_move()
     if (castle_rights == (white ? WQ : BQ)) {
-      int to = white ? static_cast<int>(Square::C1) : static_cast<int>(Square::C8);
+      int to = static_cast<int>(castle_cfg.king_queenside_target);
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
                                       /*captured=*/OccupancyType::empty,
                                       /*promo=*/OccupancyType::empty,
-                                      /*flags=*/(1u << 26)); // queenside castle flag
+                                      /*flags=*/kFlagCastleLong); // queenside castle flag
     }
   }
 }
@@ -735,37 +737,20 @@ bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_sid
 }
 
 CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
-  const bool white = (stm == SideToMove::White);
   const SideToMove enemy = flip_side(stm);
-
-  const Square king_square = white ? Square::E1 : Square::E8;
-  const Square king_rook = white ? Square::H1 : Square::H8;
-  const Square queen_rook = white ? Square::A1 : Square::A8;
-  const CastlingRights king_flag = white ? WK : BK;
-  const CastlingRights queen_flag = white ? WQ : BQ;
-
-  const std::array<Square, 2> king_path_squares =
-      white ? std::array<Square, 2>{Square::F1, Square::G1}
-            : std::array<Square, 2>{Square::F8, Square::G8};
-  const std::array<Square, 3> queen_path_squares =
-      white ? std::array<Square, 3>{Square::D1, Square::C1, Square::B1}
-            : std::array<Square, 3>{Square::D8, Square::C8, Square::B8};
-  const std::array<Square, 2> king_safe_squares = king_path_squares;
-  const std::array<Square, 2> queen_safe_squares =
-      white ? std::array<Square, 2>{Square::D1, Square::C1}
-            : std::array<Square, 2>{Square::D8, Square::C8};
+  const auto& cfg = kCastlingSideConfigs[to_index(stm)];
 
   const auto mask_from = [](const auto& squares) {
     Bitboard mask = 0;
     for (Square sq : squares) {
-      mask |= Bitboard(1) << static_cast<u_int8_t>(sq);
+      mask |= bit_mask(sq);
     }
     return mask;
   };
 
   const Bitboard occ = board.occupancy[to_index(PieceColor::Both)];
-  const bool clear_king_path = (occ & mask_from(king_path_squares)) == 0;
-  const bool clear_queen_path = (occ & mask_from(queen_path_squares)) == 0;
+  const bool clear_king_path = (occ & mask_from(cfg.king_path)) == 0;
+  const bool clear_queen_path = (occ & mask_from(cfg.queen_path)) == 0;
 
   const auto squares_are_safe = [&](const auto& squares) {
     for (Square sq : squares) {
@@ -779,7 +764,7 @@ CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
   const auto& kings = board.king_list[to_index(stm)];
   bool king_on_start = false;
   for (std::uint8_t i = 0; i < kings.count; ++i) {
-    if (kings.squares[i] == king_square) {
+    if (kings.squares[i] == cfg.king_start) {
       king_on_start = true;
       break;
     }
@@ -800,21 +785,67 @@ CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
   };
 
   const bool king_square_safe =
-      !is_square_attacked(board, static_cast<u_int8_t>(king_square), enemy);
+      !is_square_attacked(board, static_cast<u_int8_t>(cfg.king_start), enemy);
 
   CastlingRights rights = CastlingRights::NoCastling;
 
-  if (king_square_safe && clear_king_path && squares_are_safe(king_safe_squares) &&
-      has_rook_at(king_rook)) {
-    rights |= king_flag;
+  if (king_square_safe && clear_king_path && squares_are_safe(cfg.king_safe) &&
+      has_rook_at(cfg.rook_kingside_start)) {
+    rights |= cfg.king_flag;
   }
 
-  if (king_square_safe && clear_queen_path && squares_are_safe(queen_safe_squares) &&
-      has_rook_at(queen_rook)) {
-    rights |= queen_flag;
+  if (king_square_safe && clear_queen_path && squares_are_safe(cfg.queen_safe) &&
+      has_rook_at(cfg.rook_queenside_start)) {
+    rights |= cfg.queen_flag;
   }
 
   return rights;
+}
+
+int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
+  static const int scores[13] = {
+      0,   100, 320, 330, 500, 900,  20000, // empty, P, N, B, R, Q, K
+      100, 320, 330, 500, 900, 20000        // empty, p, n, b, r, q, k
+  };
+  return scores[static_cast<std::size_t>(captured)] * 10 - scores[static_cast<std::size_t>(piece)];
+}
+
+void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count) {
+  // Simple bubble sort based on MVV-LVA heuristic
+  for (uint16_t i = 0; i < move_count; ++i) {
+    for (uint16_t j = 0; j < move_count - i - 1; ++j) {
+      uint32_t m1 = moves[j];
+      uint32_t m2 = moves[j + 1];
+
+      OccupancyType cap1 = static_cast<OccupancyType>(move_captured(m1));
+      OccupancyType cap2 = static_cast<OccupancyType>(move_captured(m2));
+      OccupancyType piece1 = static_cast<OccupancyType>(move_piece(m1));
+      OccupancyType piece2 = static_cast<OccupancyType>(move_piece(m2));
+
+      int score1 = mvv_lva_score(cap1, piece1);
+      int score2 = mvv_lva_score(cap2, piece2);
+
+      if (score1 < score2) {
+        std::swap(moves[j], moves[j + 1]);
+      }
+    }
+  }
+}
+
+void emit_all_moves(const Board& board, SideToMove stm,
+                    std::array<uint32_t, kMaxMovementCount>& out, uint16_t& move_count) {
+  PawnMasks pm = gen_pawn_masks(board, stm);
+  if (stm == SideToMove::White) {
+    emit_white_pawn_moves(board, pm, out, move_count);
+  } else {
+    emit_black_pawn_moves(board, pm, out, move_count);
+  }
+  emit_knight_moves(board, stm, out, move_count);
+  emit_bishop_moves(board, stm, out, move_count);
+  emit_rook_moves(board, stm, out, move_count);
+  emit_queen_moves(board, stm, out, move_count);
+  emit_king_moves(board, stm, out, move_count);
+  sort_moves(out, move_count);
 }
 
 } // namespace chess
