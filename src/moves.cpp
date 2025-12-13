@@ -8,6 +8,7 @@
 #include "chess/types_io.hpp"
 #include "chess/zobrist.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 
@@ -17,9 +18,7 @@ std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, S
                                                            uint16_t& move_count) {
   std::array<uint32_t, kMaxMovementCount> moves{};
   move_count = 0;
-  std::cout << "Start with  " << move_count << " moves.\n" << std::endl;
   emit_all_moves(board, stm, moves, move_count);
-  std::cout << "Generated " << move_count << " moves.\n" << std::endl;
   return moves;
 }
 
@@ -121,7 +120,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     Move move = decode_move(moves[i]);
     Undo undo = make_move(board, move);
     int score = alphabeta_minimax(board, depth - 1, alpha, beta, flip_side(stm)).score;
-    // todo
     undo_move(board, undo);
 
     if (stm == SideToMove::White) {
@@ -163,6 +161,7 @@ inline Undo make_move(Board& b, const Move& m) {
   undo.position_key_before = b.position_key;
   undo.fifty_move_counter_before = b.fifty_move_counter;
   undo.en_passant_before = b.en_passant;
+  undo.ep_square_before = b.ep_square;
   undo.captured_pc = m.captured_pc;
   undo.castling_rights_before = b.castling_rights;
   undo.moving_pc = m.moving_pc;
@@ -173,25 +172,88 @@ inline Undo make_move(Board& b, const Move& m) {
   undo.to = m.to;
   undo.flags = m.flags;
   undo.captured_sq = undo.was_en_passant ? (white ? (m.to - 8) : (m.to + 8)) : m.to;
+  if (undo.was_en_passant) {
+    undo.captured_pc = white ? OccupancyType::bP : OccupancyType::wP;
+  }
+  std::copy(std::begin(b.occupancy), std::end(b.occupancy), std::begin(undo.occupancy));
+  undo.rook_list_before = {b.rook_list[0], b.rook_list[1]};
+  undo.king_list_before = {b.king_list[0], b.king_list[1]};
+  undo.pawn_list_before = {b.pawn_list[0], b.pawn_list[1]};
+  undo.king_positions_before = b.king_positions;
+  undo.king_captured_before = b.king_captured;
 
-  // We will first store the previous state in undo
-  // Then we will update the board according to the move
-  //   TODO Probably not finished
-  //    still need to do occupancy
-  b.pieces[to_index(m.to)] = m.promo_pc != OccupancyType::empty ? m.promo_pc : m.moving_pc;
-  b.pieces[to_index(undo.captured_sq)] = OccupancyType::empty;
+  const auto mover_index = to_index(b.side_to_move);
+  const auto enemy_index = to_index(flip_side(b.side_to_move));
+  const Square from_sq = static_cast<Square>(m.from);
+  const Square to_sq = static_cast<Square>(m.to);
+  const auto from_idx = to_index(m.from);
+  const auto to_idx = to_index(m.to);
+  const auto captured_idx = to_index(undo.captured_sq);
+
+  b.pieces[from_idx] = OccupancyType::empty;
+  if (undo.was_en_passant) {
+    b.pieces[captured_idx] = OccupancyType::empty;
+  }
+  b.pieces[to_idx] = m.promo_pc != OccupancyType::empty ? m.promo_pc : m.moving_pc;
+
+  auto update_piece_square = [](PieceList& list, Square from, Square to) {
+    for (std::uint8_t i = 0; i < list.count; ++i) {
+      if (list.squares[i] == from) {
+        list.squares[i] = to;
+        return;
+      }
+    }
+  };
+
+  auto remove_piece_square = [](PieceList& list, Square sq) {
+    for (std::uint8_t i = 0; i < list.count; ++i) {
+      if (list.squares[i] == sq) {
+        list.squares[i] = list.squares[list.count - 1];
+        --list.count;
+        return;
+      }
+    }
+  };
+
+  auto add_piece_square = [](PieceList& list, Square sq) {
+    if (list.count < list.squares.size()) {
+      list.squares[list.count++] = sq;
+    }
+  };
+
+  if (m.moving_pc == OccupancyType::wK || m.moving_pc == OccupancyType::bK) {
+    b.king_positions[mover_index] = m.to;
+    update_piece_square(b.king_list[mover_index], from_sq, to_sq);
+  }
+  if (m.moving_pc == OccupancyType::wR || m.moving_pc == OccupancyType::bR) {
+    update_piece_square(b.rook_list[mover_index], from_sq, to_sq);
+  }
+  if (m.moving_pc == OccupancyType::wP || m.moving_pc == OccupancyType::bP) {
+    if (m.promo_pc == OccupancyType::empty) {
+      update_piece_square(b.pawn_list[mover_index], from_sq, to_sq);
+    }
+  }
 
   // normal capture, could be en passant or regular capture
-  if ((m.promo_pc == OccupancyType::empty) && (m.captured_pc != OccupancyType::empty)) {
+  if ((m.promo_pc == OccupancyType::empty) && (undo.captured_pc != OccupancyType::empty)) {
     // 0 is the moving piece, 1 is the captured piece or the rook in castling
-    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.captured_pc) - 1];
+    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1];
     undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
 
     // bitboard updates
     // remove bit from the captured piece, remove from the "from" square, add to the "to" square
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(m.captured_pc) - 1], undo.captured_sq);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1], undo.captured_sq);
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.to);
+
+    remove_piece_square(b.rook_list[enemy_index], static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.pawn_list[enemy_index], static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.king_list[enemy_index], static_cast<Square>(undo.captured_sq));
+    if (undo.captured_pc == OccupancyType::wK || undo.captured_pc == OccupancyType::bK) {
+      b.king_positions[enemy_index] = -1;
+      b.king_captured =
+          (undo.captured_pc == OccupancyType::wK) ? PieceColor::White : PieceColor::Black;
+    }
 
   }
   // castling 0 is king, 1 is the rook
@@ -216,6 +278,15 @@ inline Undo make_move(Board& b, const Move& m) {
         b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
         flag_is_castle(m.flags) ? (rook_kingside_target) : (rook_queenside_target));
 
+    const Square rook_from = flag_is_castle(m.flags) ? king_rook : queen_rook;
+    const Square rook_to = flag_is_castle(m.flags) ? rook_kingside_target : rook_queenside_target;
+    b.pieces[to_index(rook_from)] = OccupancyType::empty;
+    b.pieces[to_index(rook_to)] = white ? OccupancyType::wR : OccupancyType::bR;
+
+    // update rook list to reflect new rook square
+    update_piece_square(b.rook_list[mover_index], king_rook, rook_kingside_target);
+    update_piece_square(b.rook_list[mover_index], queen_rook, rook_queenside_target);
+
   }
   // promotion with no capture, 0 is the pawn, 1 is the promoted piece
   else if ((m.promo_pc != OccupancyType::empty) && (m.captured_pc == OccupancyType::empty)) {
@@ -225,18 +296,36 @@ inline Undo make_move(Board& b, const Move& m) {
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1], m.to);
 
+    remove_piece_square(b.pawn_list[mover_index], from_sq);
+    if (m.promo_pc == OccupancyType::wR || m.promo_pc == OccupancyType::bR) {
+      add_piece_square(b.rook_list[mover_index], to_sq);
+    }
+
   }
   // promotion with capture
   else if (m.promo_pc != OccupancyType::empty) {
     // 0 is the pawn being promoted, 1 capture piece, 2 is the promoted piece
-    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.captured_pc) - 1];
+    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1];
     undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
     undo.pieces_bb[2] = b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1];
 
     // bitboard updates
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(m.captured_pc) - 1], undo.captured_sq);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1], undo.captured_sq);
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1], m.to);
+
+    remove_piece_square(b.pawn_list[mover_index], from_sq);
+    remove_piece_square(b.rook_list[enemy_index], static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.pawn_list[enemy_index], static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.king_list[enemy_index], static_cast<Square>(undo.captured_sq));
+    if (undo.captured_pc == OccupancyType::wK || undo.captured_pc == OccupancyType::bK) {
+      b.king_positions[enemy_index] = -1;
+      b.king_captured =
+          (undo.captured_pc == OccupancyType::wK) ? PieceColor::White : PieceColor::Black;
+    }
+    if (m.promo_pc == OccupancyType::wR || m.promo_pc == OccupancyType::bR) {
+      add_piece_square(b.rook_list[mover_index], to_sq);
+    }
   }
   //
   else {
@@ -245,7 +334,15 @@ inline Undo make_move(Board& b, const Move& m) {
     // bitboard updates
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.to);
+
+    b.occupancy[mover_index] &= ~bit_mask(m.from);
+    b.occupancy[mover_index] |= bit_mask(m.to);
   }
+
+  b.occupancy[to_index(PieceColor::White)] = calculate_occupancy(b, PieceColor::White);
+  b.occupancy[to_index(PieceColor::Black)] = calculate_occupancy(b, PieceColor::Black);
+  b.occupancy[to_index(PieceColor::Both)] =
+      b.occupancy[to_index(PieceColor::White)] | b.occupancy[to_index(PieceColor::Black)];
 
   // Update position key and board state
   //   change to incremental update XOR later
@@ -255,6 +352,7 @@ inline Undo make_move(Board& b, const Move& m) {
                              ? 0
                              : b.fifty_move_counter + 1;
   b.en_passant = -1; // Reset en passant square
+  b.ep_square = 0;
   update_castling_rights(b, m);
 
   // Switch side to move
@@ -315,7 +413,6 @@ inline void undo_move(Board& b, const Undo& u) {
   // Switch side to move back
   b.side_to_move = flip_side(b.side_to_move);
   const bool white = (b.side_to_move == SideToMove::White);
-  const bool white = (b.side_to_move == SideToMove::White);
   const Square king_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
   const Square queen_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_start;
   const Square king_target =
@@ -331,12 +428,22 @@ inline void undo_move(Board& b, const Undo& u) {
   b.position_key = u.position_key_before;
   b.fifty_move_counter = u.fifty_move_counter_before;
   b.en_passant = u.en_passant_before;
+  b.ep_square = u.ep_square_before;
   b.castling_rights = u.castling_rights_before;
+  std::copy(std::begin(u.occupancy), std::end(u.occupancy), std::begin(b.occupancy));
+  b.rook_list[0] = u.rook_list_before[0];
+  b.rook_list[1] = u.rook_list_before[1];
+  b.king_list[0] = u.king_list_before[0];
+  b.king_list[1] = u.king_list_before[1];
+  b.pawn_list[0] = u.pawn_list_before[0];
+  b.pawn_list[1] = u.pawn_list_before[1];
+  b.king_positions = u.king_positions_before;
+  b.king_captured = u.king_captured_before;
   b.pieces[u.from] = u.moving_pc;
 
   if (u.was_en_passant) {
-    int capSq = (b.side_to_move == SideToMove::White) ? (u.to - 8) : (u.to + 8);
-    b.pieces[to_index(capSq)] = u.captured_pc;
+    b.pieces[u.captured_sq] = u.captured_pc;
+    b.pieces[u.to] = OccupancyType::empty;
   } else {
     b.pieces[u.to] = u.captured_pc;
   }
@@ -366,60 +473,57 @@ inline void undo_move(Board& b, const Undo& u) {
 
     // bitboard updates
     // set king and rook back to their original squares, remove from their new squares
-
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1],
+              flag_is_castle(u.flags) ? king_target : queen_target);
     clear_bit(
         b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
-        flag_is_castle(m.flags) ? king_rook : queen_rook);
-
-    set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1],
-            flag_is_castle(m.flags) ? king_target : queen_target);
+        flag_is_castle(u.flags) ? rook_kingside_target : rook_queenside_target);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
     set_bit(
         b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
-        flag_is_castle(m.flags) ? (rook_kingside_target) : (rook_queenside_target));
+        flag_is_castle(u.flags) ? king_rook : queen_rook);
+
+    const Square rook_from = flag_is_castle(u.flags) ? king_rook : queen_rook;
+    const Square rook_to = flag_is_castle(u.flags) ? rook_kingside_target : rook_queenside_target;
+    b.pieces[to_index(rook_to)] = OccupancyType::empty;
+    b.pieces[to_index(rook_from)] = white ? OccupancyType::wR : OccupancyType::bR;
 
   }
   // promotion with no capture, 0 is the pawn, 1 is the promoted piece
-  else if ((m.promo_pc != OccupancyType::empty) && (m.captured_pc == OccupancyType::empty)) {
-    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
-    undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1];
+  else if ((u.promo_pc != OccupancyType::empty) && (u.captured_pc == OccupancyType::empty)) {
+    b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1] = u.pieces_bb[0];
+    b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1] = u.pieces_bb[1];
 
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
-    set_bit(b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1], m.to);
+    // reset promoted piece back to a pawn
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.to);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1], u.from);
 
   }
   // promotion with capture
-  else if (m.promo_pc != OccupancyType::empty) {
+  else if (u.promo_pc != OccupancyType::empty) {
     // 0 is the pawn being promoted, 1 capture piece, 2 is the promoted piece
-    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.captured_pc) - 1];
-    undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
-    undo.pieces_bb[2] = b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1];
+    b.pieces_bb[static_cast<std::size_t>(u.captured_pc) - 1] = u.pieces_bb[0];
+    b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1] = u.pieces_bb[1];
+    b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1] = u.pieces_bb[2];
 
     // bitboard updates
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(m.captured_pc) - 1], undo.captured_sq);
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
-    set_bit(b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1], m.to);
+    // set bit to the from pawn, set bit to the captured piece, remove promoted piece from to
+    // square
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1], u.to);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.captured_pc) - 1], u.captured_sq);
   }
   //
   else {
     // quite move
-    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
+    b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1] = u.pieces_bb[0];
     // bitboard updates
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
-    set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.to);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.to);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
   }
 
   // Update position key and board state
   //   change to incremental update XOR later
   b.position_key = compute_position_key(b); // Recompute for simplicity
-  b.fifty_move_counter = (m.moving_pc == OccupancyType::wP || m.moving_pc == OccupancyType::bP ||
-                          m.captured_pc != OccupancyType::empty)
-                             ? 0
-                             : b.fifty_move_counter + 1;
-  b.en_passant = -1; // Reset en passant square
-  update_castling_rights(b, m);
-
-  // Switch side to move
-  b.side_to_move = flip_side(b.side_to_move);
 }
 } // namespace chess

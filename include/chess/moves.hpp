@@ -83,31 +83,28 @@ struct Move {
   uint8_t flags;
 };
 
-struct PieceListChange {
-  std::size_t index;
-  Square old_square;
-  bool used;
-};
-
 struct Undo {
   uint16_t from;
   uint16_t to;
   uint16_t captured_sq;
   std::array<Bitboard, MAX_BB_UPDATE_PIECES> pieces_bb = {0};
   Bitboard occupancy[3];
+  Bitboard ep_square_before;
   std::uint64_t position_key_before;
   int fifty_move_counter_before;
   int en_passant_before;
   CastlingRights castling_rights_before;
+  std::array<PieceList, 2> rook_list_before;
+  std::array<PieceList, 2> king_list_before;
+  std::array<PieceList, 2> pawn_list_before;
+  std::array<int, 2> king_positions_before;
+  PieceColor king_captured_before;
   OccupancyType captured_pc;
   OccupancyType moving_pc;
   OccupancyType promo_pc;
   uint8_t flags;
   bool was_en_passant;
   bool was_castling;
-  PieceListChange list_rook_change;
-  PieceListChange list_king_change;
-  PieceListChange list_pawn_change;
 };
 
 struct SearchResult {
