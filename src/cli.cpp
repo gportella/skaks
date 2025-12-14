@@ -7,14 +7,15 @@ namespace chess {
 
 CliParseResult parse_cli(int argc, char** argv) {
   CliParseResult result{};
-  cxxopts::Options options("chess_engine", "Skaks chess engine options");
+  cxxopts::Options options("skaks", "Skaks chess engine options");
 
   options.add_options()("d,depth", "Search depth in plies",
                         cxxopts::value<int>()->default_value("4"))(
       "m,max-moves", "Maximum number of full moves to play",
       cxxopts::value<int>()->default_value(std::to_string(kMaxMovementCount)))(
       "f,fen", "Start position in FEN notation", cxxopts::value<std::string>())(
-      "p,profile", "Enable profiling output")("h,help", "Show this help message");
+      "p,profile", "Enable profiling output")("u,uci", "Force UCI protocol mode")(
+      "s,self", "Run self-play CLI loop")("h,help", "Show this help message");
 
   try {
     const auto parsed = options.parse(argc, argv);
@@ -34,6 +35,17 @@ CliParseResult parse_cli(int argc, char** argv) {
     }
 
     result.options.enable_profile = parsed.count("profile") > 0;
+
+    const bool want_uci = parsed.count("uci") > 0;
+    const bool want_self = parsed.count("self") > 0;
+    if (want_uci && want_self) {
+      result.parse_error = true;
+      result.message = "--uci and --self cannot be used together";
+      return result;
+    }
+
+    result.options.self_play = want_self;
+    result.options.use_uci = want_uci || !want_self;
 
     if (result.options.search_depth < 0) {
       result.parse_error = true;

@@ -12,6 +12,8 @@ struct CliOptions {
   std::string fen;
   bool use_custom_fen = false;
   bool enable_profile = false;
+  bool use_uci = true;
+  bool self_play = false;
 };
 
 struct CliParseResult {

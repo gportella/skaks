@@ -49,7 +49,6 @@ Board parse_fen_string(std::string_view fen) {
   std::size_t rank = 7;
   std::size_t file = 0;
 
-  std::cout << "Parsing FEN: " << fen << "\n";
   FenFields fields = split_fen(fen);
 
   board.rook_list[0] = PieceList{};
@@ -145,8 +144,6 @@ Board initial_board(std::string_view fen) {
 
   init_zobrist(0xDEADBEEF); // example seed
   board.position_key = compute_position_key(board);
-
-  std::cout << "Set up board position from FEN: " << fen << "\n";
 
   return board;
 }

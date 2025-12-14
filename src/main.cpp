@@ -8,6 +8,7 @@
 #include "chess/search.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
+#include "chess/uci.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -24,15 +25,21 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
   }
 
+  chess::Engine engine;
+
+  if (cli.options.use_uci) {
+    chess::run_uci_loop(engine, cli.options.search_depth);
+    return EXIT_SUCCESS;
+  }
+
+  chess::Board board = chess::initial_board(cli.options.fen);
+  engine.reset_history(board);
+
   const bool profile = (std::getenv("SKAKS_PROFILE") != nullptr) || cli.options.enable_profile;
   std::chrono::steady_clock::time_point total_start{};
   if (profile) {
     total_start = std::chrono::steady_clock::now();
   }
-
-  chess::Engine engine;
-  chess::Board board = chess::initial_board(cli.options.fen);
-  engine.reset_history(board);
 
   std::cout << "Position key: 0x" << std::hex << board.position_key << std::dec << "\n";
   std::cout << "Board of color to move: " << board.side_to_move << "\n";

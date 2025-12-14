@@ -19,17 +19,18 @@ target_compile_features(chess_engine_core PUBLIC cxx_std_23)
 chess_set_default_warnings(chess_engine_core)
 chess_enable_sanitizers(chess_engine_core)
 
-add_executable(chess_engine
+add_executable(skaks
   cli.cpp
   main.cpp
+  uci.cpp
 )
 
-target_link_libraries(chess_engine
+target_link_libraries(skaks
   PRIVATE
     chess_engine_core
 )
 
-target_compile_features(chess_engine PUBLIC cxx_std_23)
+target_compile_features(skaks PUBLIC cxx_std_23)
 
-chess_set_default_warnings(chess_engine)
-chess_enable_sanitizers(chess_engine)
+chess_set_default_warnings(skaks)
+chess_enable_sanitizers(skaks)
