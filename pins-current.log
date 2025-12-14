@@ -1,0 +1,495 @@
+Parsing FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+Set up initial board position from FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+Position key: 0x43e2520676eeaba4
+Board of color to move: White
+8 | ♜  ♞  ♝  ♛  ♚  ♝  ♞  ♜  
+7 | ♟  ♟  ♟  ♟  ♟  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ·  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ·  
+3 | ·  ·  ·  ·  ·  ·  ·  ·  
+2 | ♙  ♙  ♙  ♙  ♙  ♙  ♙  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+Move: 1 Ply: 1, White to move.
+[timing] search_ms=145
+Best move score: 0
+Best move from a2 to a3
+8 | ♜  ♞  ♝  ♛  ♚  ♝  ♞  ♜  
+7 | ♟  ♟  ♟  ♟  ♟  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ·  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ·  ·  ·  ·  ·  
+2 | ·  ♙  ♙  ♙  ♙  ♙  ♙  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnbqkbnr/pppppppp/8/8/8/P7/1PPPPPPP/RNBQKBNR b KQkq - 0 1
+
+Move: 2 Ply: 2, Black to move.
+[timing] search_ms=1075
+Best move score: -95
+Best move from e7 to e5
+8 | ♜  ♞  ♝  ♛  ♚  ♝  ♞  ♜  
+7 | ♟  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ·  ·  ·  ·  ·  
+2 | ·  ♙  ♙  ♙  ♙  ♙  ♙  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnbqkbnr/pppp1ppp/8/4p3/8/P7/1PPPPPPP/RNBQKBNR w KQkq - 0 1
+
+Move: 2 Ply: 3, White to move.
+[timing] search_ms=522
+Best move score: 15
+Best move from b2 to b3
+8 | ♜  ♞  ♝  ♛  ♚  ♝  ♞  ♜  
+7 | ♟  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ·  
+3 | ♙  ♙  ·  ·  ·  ·  ·  ·  
+2 | ·  ·  ♙  ♙  ♙  ♙  ♙  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnbqkbnr/pppp1ppp/8/4p3/8/PP6/2PPPPPP/RNBQKBNR b KQkq - 0 1
+
+Move: 3 Ply: 4, Black to move.
+[timing] search_ms=3618
+Best move score: -115
+Best move from d8 to h4
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ♟  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ·  ·  ·  ·  ·  ·  
+2 | ·  ·  ♙  ♙  ♙  ♙  ♙  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/pppp1ppp/8/4p3/7q/PP6/2PPPPPP/RNBQKBNR w KQkq - 1 1
+
+Move: 3 Ply: 5, White to move.
+[timing] search_ms=792
+Best move score: 15
+Best move from d2 to d3
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ♟  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ·  ♙  ·  ·  ·  ·  
+2 | ·  ·  ♙  ·  ♙  ♙  ♙  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/pppp1ppp/8/4p3/7q/PP1P4/2P1PPPP/RNBQKBNR b KQkq - 0 1
+
+Move: 4 Ply: 6, Black to move.
+[timing] search_ms=1093
+Best move score: -115
+Best move from a7 to a6
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ♟  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ·  ♙  ·  ·  ·  ·  
+2 | ·  ·  ♙  ·  ♙  ♙  ♙  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/p7/4p3/7q/PP1P4/2P1PPPP/RNBQKBNR w KQkq - 0 1
+
+Move: 4 Ply: 7, White to move.
+[timing] search_ms=1648
+Best move score: 15
+Best move from g2 to g3
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ♟  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ·  ♙  ·  ·  ♙  ·  
+2 | ·  ·  ♙  ·  ♙  ♙  ·  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/p7/4p3/7q/PP1P2P1/2P1PP1P/RNBQKBNR b KQkq - 0 1
+
+Move: 5 Ply: 8, Black to move.
+[timing] search_ms=1088
+Best move score: -115
+Best move from a6 to a5
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ♟  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ·  ♙  ·  ·  ♙  ·  
+2 | ·  ·  ♙  ·  ♙  ♙  ·  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/p3p3/7q/PP1P2P1/2P1PP1P/RNBQKBNR w KQkq - 0 1
+
+Move: 5 Ply: 9, White to move.
+[timing] search_ms=2207
+Best move score: 15
+Best move from c2 to c3
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ♟  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ♙  ♙  ·  ·  ♙  ·  
+2 | ·  ·  ·  ·  ♙  ♙  ·  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/p3p3/7q/PPPP2P1/4PP1P/RNBQKBNR b KQkq - 0 1
+
+Move: 6 Ply: 10, Black to move.
+[timing] search_ms=1024
+Best move score: -115
+Best move from a5 to a4
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ♟  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ♙  ♙  ·  ·  ♙  ·  
+2 | ·  ·  ·  ·  ♙  ♙  ·  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/p6q/PPPP2P1/4PP1P/RNBQKBNR w KQkq - 0 1
+
+Move: 6 Ply: 11, White to move.
+[timing] search_ms=2830
+Best move score: 15
+Best move from e2 to e3
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ♟  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♙  ♙  ♙  ♙  ·  ♙  ·  
+2 | ·  ·  ·  ·  ·  ♙  ·  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/p6q/PPPPP1P1/5P1P/RNBQKBNR b KQkq - 0 1
+
+Move: 7 Ply: 12, Black to move.
+[timing] search_ms=1589
+Best move score: -115
+Best move from a4 to b3
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♟  ♙  ♙  ♙  ·  ♙  ·  
+2 | ·  ·  ·  ·  ·  ♙  ·  ♙  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/7q/PpPPP1P1/5P1P/RNBQKBNR w KQkq - 0 1
+
+Move: 7 Ply: 13, White to move.
+[timing] search_ms=4184
+Best move score: 115
+Best move from h2 to h3
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ·  ·  ·  ·  ·  ♛  
+3 | ♙  ♟  ♙  ♙  ♙  ·  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ♙  ·  ·  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/7q/PpPPP1PP/5P2/RNBQKBNR b KQkq - 0 1
+
+Move: 8 Ply: 14, Black to move.
+[timing] search_ms=1745
+Best move score: -215
+Best move from h4 to a4
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ♛  ·  ·  ·  ·  ·  ·  ·  
+3 | ♙  ♟  ♙  ♙  ♙  ·  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ♙  ·  ·  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/q7/PpPPP1PP/5P2/RNBQKBNR w KQkq - 1 1
+
+Move: 8 Ply: 15, White to move.
+[timing] search_ms=2522
+Best move score: 115
+Best move from f2 to f3
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ♛  ·  ·  ·  ·  ·  ·  ·  
+3 | ♙  ♟  ♙  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ·  ·  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/q7/PpPPPPPP/8/RNBQKBNR b KQkq - 0 1
+
+Move: 9 Ply: 16, Black to move.
+[timing] search_ms=3107
+Best move score: -315
+Best move from b3 to b2
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ♛  ·  ·  ·  ·  ·  ·  ·  
+3 | ♙  ·  ♙  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ♟  ·  ·  ·  ·  ·  ·  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/q7/P1PPPPPP/1p6/RNBQKBNR w KQkq - 0 1
+
+Move: 9 Ply: 17, White to move.
+[timing] search_ms=2925
+Best move score: 115
+Best move from c3 to c4
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ♛  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ♟  ·  ·  ·  ·  ·  ·  
+1 | ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/q1P5/P2PPPPP/1p6/RNBQKBNR b KQkq - 0 1
+
+Move: 10 Ply: 18, Black to move.
+[timing] search_ms=587
+Best move score: -1705
+Best move from a4 to d1
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ♟  ·  ·  ·  ·  ·  ·  
+1 | ♖  ♘  ♗  ♛  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/2P5/P2PPPPP/1p6/RNBqKBNR w KQkq - 0 1
+
+Move: 10 Ply: 19, White to move.
+[timing] search_ms=1184
+Best move score: 115
+Best move from e1 to d1
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ♟  ·  ·  ·  ·  ·  ·  
+1 | ♖  ♘  ♗  ♔  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/2P5/P2PPPPP/1p6/RNBK1BNR b kq - 0 1
+
+Move: 11 Ply: 20, Black to move.
+[timing] search_ms=451
+Best move score: -1735
+Best move from b2 to a1
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ·  ·  
+1 | ♛  ♘  ♗  ♔  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/2P5/P2PPPPP/8/qNBK1BNR w kq - 0 1
+
+Move: 11 Ply: 21, White to move.
+[timing] search_ms=4181
+Best move score: 1165
+Best move from c1 to b2
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ♗  ·  ·  ·  ·  ·  ·  
+1 | ♛  ♘  ·  ♔  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/2P5/P2PPPPP/1B6/qN1K1BNR b kq - 1 1
+
+Move: 12 Ply: 22, Black to move.
+[timing] search_ms=386
+Best move score: -2135
+Best move from a1 to b1
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ♗  ·  ·  ·  ·  ·  ·  
+1 | ·  ♛  ·  ♔  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/2P5/P2PPPPP/1B6/1q1K1BNR w kq - 0 1
+
+Move: 12 Ply: 23, White to move.
+[timing] search_ms=614
+Best move score: 835
+Best move from b2 to c1
+8 | ♜  ♞  ♝  ·  ♚  ♝  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♙  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ·  ·  
+1 | ·  ♛  ♗  ♔  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1kbnr/1ppp1ppp/8/4p3/2P5/P2PPPPP/8/1qBK1BNR b kq - 1 1
+
+Move: 13 Ply: 24, Black to move.
+[timing] search_ms=579
+Best move score: -2235
+Best move from f8 to a3
+8 | ♜  ♞  ♝  ·  ♚  ·  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♝  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ·  ·  
+1 | ·  ♛  ♗  ♔  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1k1nr/1ppp1ppp/8/4p3/2P5/b2PPPPP/8/1qBK1BNR w kq - 0 1
+
+Move: 13 Ply: 25, White to move.
+[timing] search_ms=2343
+Best move score: 1265
+Best move from d1 to e1
+8 | ♜  ♞  ♝  ·  ♚  ·  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ♝  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ·  ·  
+1 | ·  ♛  ♗  ·  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1k1nr/1ppp1ppp/8/4p3/2P5/b2PPPPP/8/1qB1KBNR b kq - 1 1
+
+Move: 14 Ply: 26, Black to move.
+[timing] search_ms=701
+Best move score: -2465
+Best move from a3 to c1
+8 | ♜  ♞  ♝  ·  ♚  ·  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ·  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ·  ·  
+1 | ·  ♛  ♝  ·  ♔  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1k1nr/1ppp1ppp/8/4p3/2P5/3PPPPP/8/1qb1KBNR w kq - 0 1
+
+Move: 14 Ply: 27, White to move.
+[timing] search_ms=1114
+Best move score: 2165
+Best move from e1 to f2
+8 | ♜  ♞  ♝  ·  ♚  ·  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ·  ·  ·  ♙  ♙  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ♔  ·  ·  
+1 | ·  ♛  ♝  ·  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1k1nr/1ppp1ppp/8/4p3/2P5/3PPPPP/5K2/1qb2BNR b kq - 1 1
+
+Move: 15 Ply: 28, Black to move.
+[timing] search_ms=674
+Best move score: -2555
+Best move from c1 to e3
+8 | ♜  ♞  ♝  ·  ♚  ·  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ·  ·  ·  ♙  ♝  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ♔  ·  ·  
+1 | ·  ♛  ·  ·  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1k1nr/1ppp1ppp/8/4p3/2P5/3PbPPP/5K2/1q3BNR w kq - 0 1
+
+Move: 15 Ply: 29, White to move.
+[timing] search_ms=471
+Best move score: 1695
+Best move from f2 to g2
+8 | ♜  ♞  ♝  ·  ♚  ·  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ·  ·  ·  ♙  ♝  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ♔  ·  
+1 | ·  ♛  ·  ·  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: rnb1k1nr/1ppp1ppp/8/4p3/2P5/3PbPPP/6K1/1q3BNR b kq - 1 1
+
+Move: 16 Ply: 30, Black to move.
+[timing] search_ms=1641
+Best move score: -2685
+Best move from a8 to a1
+8 | ·  ♞  ♝  ·  ♚  ·  ♞  ♜  
+7 | ·  ♟  ♟  ♟  ·  ♟  ♟  ♟  
+6 | ·  ·  ·  ·  ·  ·  ·  ·  
+5 | ·  ·  ·  ·  ♟  ·  ·  ·  
+4 | ·  ·  ♙  ·  ·  ·  ·  ·  
+3 | ·  ·  ·  ♙  ♝  ♙  ♙  ♙  
+2 | ·  ·  ·  ·  ·  ·  ♔  ·  
+1 | ♜  ♛  ·  ·  ·  ♗  ♘  ♖  
+  ------------------------
+    a  b  c  d  e  f  g  h
+FEN: 1nb1k1nr/1ppp1ppp/8/4p3/2P5/3PbPPP/6K1/rq3BNR w k - 2 1
+
+[timing] total_ms=47056
