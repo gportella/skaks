@@ -1,6 +1,7 @@
 #include "chess/attack_masks.hpp"
 #include "chess/board.hpp"
 #include "chess/casteling.hpp"
+#include "chess/defaults.hpp"
 #include "chess/engine.hpp"
 #include "chess/types_io.hpp"
 
@@ -41,8 +42,9 @@ chess::Board make_board(std::string_view fen) {
 } // namespace
 
 TEST(EngineTests, DefaultEvaluationIsZero) {
-  const chess::Engine engine;
-  EXPECT_EQ(engine.sample_evaluation(), 0);
+  chess::Engine engine;
+  auto board = make_board(chess::kStartFEN);
+  EXPECT_EQ(engine.evaluate(board), 0);
 }
 
 TEST(CastlingTests, AllowsBothSidesWhenPathClearAndSafe) {

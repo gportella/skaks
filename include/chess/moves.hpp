@@ -83,6 +83,16 @@ struct Move {
   uint8_t flags;
 };
 
+inline constexpr bool move_is_irreversible(const Move& move) {
+  const bool is_capture = move.captured_pc != OccupancyType::empty;
+  const bool is_pawn_move =
+      move.moving_pc == OccupancyType::wP || move.moving_pc == OccupancyType::bP;
+  const bool is_promotion = move.promo_pc != OccupancyType::empty;
+  const bool is_en_passant = flag_is_ep(move.flags);
+  const bool is_castle = flag_is_castle(move.flags) || flag_is_long_castle(move.flags);
+  return is_capture || is_pawn_move || is_promotion || is_en_passant || is_castle;
+}
+
 struct Undo {
   uint16_t from;
   uint16_t to;
@@ -107,11 +117,6 @@ struct Undo {
   bool was_castling;
 };
 
-struct SearchResult {
-  int score;
-  Move best_move;
-};
-
 struct ThreadState {
   Board board; // mutated in-place
   MoveHistory move_history;
@@ -131,7 +136,6 @@ inline constexpr Move decode_move(uint32_t encoded_move) {
 Undo make_move(Board& b, const Move& m);
 int update_castling_rights(Board& b, const Move&);
 void undo_move(Board& b, const Undo& u);
-SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm);
 std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, SideToMove stm,
                                                            uint16_t& move_count);
 std::array<uint32_t, kMaxMovementCount> generate_legal_moves(Board& board, SideToMove stm,

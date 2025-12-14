@@ -11,8 +11,8 @@ Apply: moves &= legal_target_mask for non-king pieces
 
 #include "chess/pins.hpp"
 
-#include "chess/attack_masks.hpp"
 #include "chess/board.hpp"
+#include "chess/board_arithmetic.hpp"
 #include "chess/types_io.hpp"
 
 namespace chess {

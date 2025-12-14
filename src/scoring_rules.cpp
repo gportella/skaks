@@ -6,6 +6,15 @@
 
 namespace chess {
 
+int evaluate_king_safety(const Board& board) {
+  // Placeholder for king safety evaluation
+  // In a real implementation, this would analyze pawn structure, enemy piece proximity, etc.
+  if (is_check(board, board.side_to_move)) {
+    return -50; // Penalty if the king is in check
+  }
+  return 0;
+}
+
 int evaluate_pawn_center_control(const Board& board) {
   // Placeholder for pawn center control evaluation
   for (auto sq :

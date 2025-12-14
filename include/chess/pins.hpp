@@ -1,10 +1,12 @@
 #pragma once
-#include "chess/attack_masks.hpp"
+#include "chess/ray_tables.hpp"
 #include "chess/types.hpp"
 
 #include <array>
 
 namespace chess {
+
+struct Board;
 
 enum class MoveDirection { None, File, Rank, NE, NW, SE, SW };
 struct PinnedBitBoardDirections {

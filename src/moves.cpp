@@ -40,47 +40,6 @@ std::array<uint32_t, kMaxMovementCount> generate_legal_moves(Board& board, SideT
   return legal_moves;
 }
 
-SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm) {
-  // Placeholder for minimax implementation
-  if (depth == 0 || board.is_terminal()) {
-    return {evaluate_board(board), Move{}};
-  }
-  uint16_t move_count = 0;
-  auto moves = generate_legal_moves(board, stm, move_count);
-  if (move_count == 0) {
-    return {evaluate_board(board), Move{}};
-  }
-
-  SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{}};
-
-  for (uint16_t i = 0; i < move_count; ++i) {
-    Move move = decode_move(moves[i]);
-    Undo undo = make_move(board, move);
-    int score = alphabeta_minimax(board, depth - 1, alpha, beta, flip_side(stm)).score;
-    undo_move(board, undo);
-
-    if (stm == SideToMove::White) {
-      if (score > alpha) {
-        alpha = score;
-        best = {score, move};
-      }
-      if (alpha >= beta) {
-        break;
-      }
-    } else {
-      if (score < beta) {
-        beta = score;
-        best = {score, move};
-      }
-      if (beta <= alpha) {
-        break;
-      }
-    }
-  }
-
-  return best;
-}
-
 inline Undo make_move(Board& b, const Move& m) {
   const bool white = (b.side_to_move == SideToMove::White);
   const Square king_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
