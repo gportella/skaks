@@ -10,9 +10,26 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdint>
 
 namespace chess {
+
+int popcount_bitboard(Bitboard bb) {
+#if defined(_MSC_VER)
+  return static_cast<int>(__popcnt64(bb));
+#else
+  return static_cast<int>(__builtin_popcountll(static_cast<unsigned long long>(bb)));
+#endif
+}
+
+int count_black_queens_in_pieces(const Board& b) {
+  int count = 0;
+  for (auto occ : b.pieces) {
+    if (occ == OccupancyType::bQ) {
+      ++count;
+    }
+  }
+  return count;
+}
 
 std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, SideToMove stm,
                                                            uint16_t& move_count) {
@@ -114,6 +131,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   }
   uint16_t move_count = 0;
   auto moves = generate_all_moves(board, stm, move_count);
+  if (move_count == 0) {
+    return {evaluate_board(board), Move{}};
+  }
+
   SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{}};
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -145,7 +166,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
 }
 
 inline Undo make_move(Board& b, const Move& m) {
-
   const bool white = (b.side_to_move == SideToMove::White);
   const Square king_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
   const Square queen_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_start;
@@ -194,7 +214,10 @@ inline Undo make_move(Board& b, const Move& m) {
   if (undo.was_en_passant) {
     b.pieces[captured_idx] = OccupancyType::empty;
   }
-  b.pieces[to_idx] = m.promo_pc != OccupancyType::empty ? m.promo_pc : m.moving_pc;
+  b.pieces[to_idx] = (m.promo_pc != OccupancyType::empty) &&
+                             (m.moving_pc == (white ? OccupancyType::wP : OccupancyType::bP))
+                         ? m.promo_pc
+                         : m.moving_pc;
 
   auto update_piece_square = [](PieceList& list, Square from, Square to) {
     for (std::uint8_t i = 0; i < list.count; ++i) {
@@ -274,8 +297,7 @@ inline Undo make_move(Board& b, const Move& m) {
 
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1],
             flag_is_castle(m.flags) ? king_target : queen_target);
-    set_bit(
-        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
+    set_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
         flag_is_castle(m.flags) ? (rook_kingside_target) : (rook_queenside_target));
 
     const Square rook_from = flag_is_castle(m.flags) ? king_rook : queen_rook;
@@ -283,9 +305,8 @@ inline Undo make_move(Board& b, const Move& m) {
     b.pieces[to_index(rook_from)] = OccupancyType::empty;
     b.pieces[to_index(rook_to)] = white ? OccupancyType::wR : OccupancyType::bR;
 
-    // update rook list to reflect new rook square
-    update_piece_square(b.rook_list[mover_index], king_rook, rook_kingside_target);
-    update_piece_square(b.rook_list[mover_index], queen_rook, rook_queenside_target);
+    // update rook list to reflect the single rook that moved
+    update_piece_square(b.rook_list[mover_index], rook_from, rook_to);
 
   }
   // promotion with no capture, 0 is the pawn, 1 is the promoted piece
@@ -354,6 +375,15 @@ inline Undo make_move(Board& b, const Move& m) {
   b.en_passant = -1; // Reset en passant square
   b.ep_square = 0;
   update_castling_rights(b, m);
+  
+  const Bitboard queen_bb_after =
+      b.pieces_bb[static_cast<std::size_t>(OccupancyType::bQ) - 1];
+
+  const int queen_bb_count = popcount_bitboard(queen_bb_after);
+  const int queen_piece_count = count_black_queens_in_pieces(b);
+  if (queen_bb_count != queen_piece_count) {
+    std::abort();
+  }
 
   // Switch side to move
   b.side_to_move = flip_side(b.side_to_move);
@@ -439,7 +469,9 @@ inline void undo_move(Board& b, const Undo& u) {
   b.pawn_list[1] = u.pawn_list_before[1];
   b.king_positions = u.king_positions_before;
   b.king_captured = u.king_captured_before;
-  b.pieces[u.from] = u.moving_pc;
+  if (u.moving_pc != OccupancyType::empty) {
+    b.pieces[u.from] = u.moving_pc;
+  }
 
   if (u.was_en_passant) {
     b.pieces[u.captured_sq] = u.captured_pc;
@@ -495,8 +527,8 @@ inline void undo_move(Board& b, const Undo& u) {
     b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1] = u.pieces_bb[1];
 
     // reset promoted piece back to a pawn
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.to);
-    set_bit(b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1], u.from);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1], u.to);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
 
   }
   // promotion with capture
@@ -525,5 +557,15 @@ inline void undo_move(Board& b, const Undo& u) {
   // Update position key and board state
   //   change to incremental update XOR later
   b.position_key = compute_position_key(b); // Recompute for simplicity
+  
+  const Bitboard queen_bb_after_undo =
+      b.pieces_bb[static_cast<std::size_t>(OccupancyType::bQ) - 1];
+
+
+  const int queen_bb_count_undo = popcount_bitboard(queen_bb_after_undo);
+  const int queen_piece_count_undo = count_black_queens_in_pieces(b);
+  if (queen_bb_count_undo != queen_piece_count_undo) {
+    std::abort();
+  }
 }
 } // namespace chess

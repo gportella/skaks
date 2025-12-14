@@ -132,4 +132,6 @@ Undo make_move(Board& b, const Move& m);
 int update_castling_rights(Board& b, const Move&);
 void undo_move(Board& b, const Undo& u);
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm);
+std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, SideToMove stm,
+                                                           uint16_t& move_count);
 } // namespace chess

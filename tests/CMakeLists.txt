@@ -12,7 +12,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 add_executable(chess_engine_tests
+  board_tests.cpp
   engine_tests.cpp
+  move_tests.cpp
   pin_tests.cpp
 )
 

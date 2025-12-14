@@ -21,12 +21,23 @@ int main() {
   // chess::dump_attacks(board, chess::flip_side(board.side_to_move));
   // std::cout << "Checking attacks for white side:\n";
   // chess::dump_attacks(board, board.side_to_move);
-  auto result = chess::alphabeta_minimax(board, 3, -10000, 10000, board.side_to_move);
-  std::cout << "Best move score: " << result.score << "\n";
-  std::cout << "Best move from " << chess::square_to_string(result.best_move.from) << " to "
-            << chess::square_to_string(result.best_move.to) << "\n";
-  chess::make_move(board, result.best_move);
-  chess::terminal_board_print(board);
+  int move_number = 1;
+  while (true) {
+    std::cout << "Move: " << (move_number / 2 + 1) << " Ply: " << move_number << ", "
+              << board.side_to_move << " to move.\n";
+    auto result = chess::alphabeta_minimax(board, 5, -10000, 10000, board.side_to_move);
+    std::cout << "Best move score: " << result.score << "\n";
+    std::cout << "Best move from " << chess::square_to_string(result.best_move.from) << " to "
+              << chess::square_to_string(result.best_move.to) << "\n";
+    chess::make_move(board, result.best_move);
+    chess::terminal_board_print(board);
+    std::cout << "FEN: " << chess::board_to_fen(board) << "\n\n";
+    // board.side_to_move = chess::flip_side(board.side_to_move);
+    move_number++;
+    if (move_number > 30 || board.is_terminal()) {
+      break;
+    }
+  }
 
   return 0;
 }

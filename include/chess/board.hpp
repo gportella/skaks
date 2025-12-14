@@ -101,5 +101,6 @@ void terminal_board_print(const Board& board);
 void terminal_mask_print(Bitboard mask, const Board& board);
 bool ep_capture_available(const Board& b);
 Bitboard calculate_occupancy(const Board& board, PieceColor color);
+std::string board_to_fen(const Board& board);
 
 } // namespace chess

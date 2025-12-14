@@ -14,6 +14,7 @@
 #include <iostream>
 #include <ranges>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -179,6 +180,91 @@ void terminal_mask_print(Bitboard mask, const Board& board) {
   }
   std::cout << "  ------------------------\n";
   std::cout << "    a  b  c  d  e  f  g  h\n";
+}
+
+namespace {
+
+char occupancy_to_char(OccupancyType occ) {
+  switch (occ) {
+  case OccupancyType::wP:
+    return 'P';
+  case OccupancyType::wN:
+    return 'N';
+  case OccupancyType::wB:
+    return 'B';
+  case OccupancyType::wR:
+    return 'R';
+  case OccupancyType::wQ:
+    return 'Q';
+  case OccupancyType::wK:
+    return 'K';
+  case OccupancyType::bP:
+    return 'p';
+  case OccupancyType::bN:
+    return 'n';
+  case OccupancyType::bB:
+    return 'b';
+  case OccupancyType::bR:
+    return 'r';
+  case OccupancyType::bQ:
+    return 'q';
+  case OccupancyType::bK:
+    return 'k';
+  default:
+    return '?';
+  }
+}
+
+} // namespace
+
+std::string board_to_fen(const Board& board) {
+  std::ostringstream fen;
+  for (int rank = 7; rank >= 0; --rank) {
+    int empty_count = 0;
+    for (int file = 0; file < 8; ++file) {
+      const std::size_t sq = static_cast<std::size_t>(rank * 8 + file);
+      const OccupancyType occ = board.pieces[sq];
+      if (occ == OccupancyType::empty) {
+        ++empty_count;
+      } else {
+        if (empty_count > 0) {
+          fen << empty_count;
+          empty_count = 0;
+        }
+        fen << occupancy_to_char(occ);
+      }
+    }
+    if (empty_count > 0) {
+      fen << empty_count;
+    }
+    if (rank > 0) {
+      fen << '/';
+    }
+  }
+
+  fen << ' ' << (board.side_to_move == SideToMove::White ? 'w' : 'b') << ' ';
+
+  const int rights_mask = to_mask(board.castling_rights);
+  std::string castling;
+  if (rights_mask & to_mask(CastlingRights::WhiteKingside))
+    castling.push_back('K');
+  if (rights_mask & to_mask(CastlingRights::WhiteQueenside))
+    castling.push_back('Q');
+  if (rights_mask & to_mask(CastlingRights::BlackKingside))
+    castling.push_back('k');
+  if (rights_mask & to_mask(CastlingRights::BlackQueenside))
+    castling.push_back('q');
+  fen << (castling.empty() ? std::string{"-"} : castling) << ' ';
+
+  if (board.en_passant >= 0) {
+    fen << square_to_string(board.en_passant);
+  } else {
+    fen << '-';
+  }
+
+  fen << ' ' << board.fifty_move_counter << ' ' << board.ply_count;
+
+  return fen.str();
 }
 
 // Set EP square after a legal double pawn push; clear otherwise.
