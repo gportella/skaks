@@ -3,6 +3,7 @@
 #include "chess/board.hpp"
 #include "chess/history.hpp"
 #include "chess/search.hpp"
+#include "chess/transposition_table.hpp"
 
 #include <array>
 #include <cstdint>
@@ -24,6 +25,7 @@ public:
 
   void reset_history(const Board& board);
   void clear_history();
+  void clear_transposition_table();
 
   [[nodiscard]] const MoveHistory& history() const {
     return history_;
@@ -33,6 +35,7 @@ public:
 private:
   EvaluationConfig eval_config_;
   MoveHistory history_;
+  TranspositionTable tt_;
 };
 
 } // namespace chess

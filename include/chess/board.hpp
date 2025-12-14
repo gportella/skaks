@@ -69,6 +69,7 @@ struct Board {
   PieceList rook_list[2];
   PieceList king_list[2];
   PieceList pawn_list[2];
+  std::array<bool, 2> has_castled = {false, false};
   bool is_terminal();
 };
 

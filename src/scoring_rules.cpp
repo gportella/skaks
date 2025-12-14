@@ -1,6 +1,8 @@
 #include "chess/scoring_rules.hpp"
 
+#include "chess/attack_masks.hpp"
 #include "chess/board.hpp"
+#include "chess/board_arithmetic.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 
@@ -9,10 +11,50 @@ namespace chess {
 int evaluate_king_safety(const Board& board) {
   // Placeholder for king safety evaluation
   // In a real implementation, this would analyze pawn structure, enemy piece proximity, etc.
-  if (is_check(board, board.side_to_move)) {
-    return -50; // Penalty if the king is in check
+  constexpr int kPawnShieldBonus = 5;
+  constexpr int kCastlingBonus = 15;
+
+  auto king_safety_for = [&](PieceColor color) {
+    int score = 0;
+    const auto color_index = to_index(color);
+    const int side_sign = (color == PieceColor::White) ? 1 : -1;
+    const int king_sq = board.king_positions[color_index];
+    if (king_sq == -1) {
+      return score;
+    }
+
+    // reward nearby pawn shield around the king
+    for (std::uint8_t i = 0; i < board.pawn_list[color_index].count; ++i) {
+      const auto pawn_sq = board.pawn_list[color_index].squares[i];
+      if (chebyshev_dist(to_index(pawn_sq), static_cast<std::size_t>(king_sq)) <= 2) {
+        score += side_sign * kPawnShieldBonus;
+      }
+    }
+
+    if (board.has_castled[color_index]) {
+      score += side_sign * kCastlingBonus; // modest bonus for successful castling
+    }
+
+    return score;
+  };
+
+  int safety_score = 0;
+  safety_score += king_safety_for(PieceColor::White);
+  safety_score += king_safety_for(PieceColor::Black);
+
+  for (const auto& occ : board.pieces) {
+    switch (occ) {
+    case OccupancyType::wP:
+      safety_score += 1;
+      break;
+    case OccupancyType::bP:
+      safety_score -= 1;
+      break;
+    default:
+      break;
+    }
   }
-  return 0;
+  return safety_score;
 }
 
 int evaluate_pawn_center_control(const Board& board) {
@@ -42,6 +84,24 @@ int evaluate_center_control(const Board& board) {
     }
   }
   return 0;
+}
+
+int evaluate_attacking_pieces(const Board& board) {
+  // Placeholder for attacking pieces evaluation
+  int attack_score = 0;
+  for (std::size_t sq = 0; sq < 64; ++sq) {
+    OccupancyType piece = board.pieces[sq];
+    if (piece != OccupancyType::empty) {
+      SideToMove stm =
+          (static_cast<std::size_t>(piece) < static_cast<std::size_t>(OccupancyType::bP))
+              ? SideToMove::White
+              : SideToMove::Black;
+      if (is_square_attacked(board, static_cast<u_int8_t>(sq), flip_side(stm))) {
+        attack_score += (stm == SideToMove::White) ? -20 : 20;
+      }
+    }
+  }
+  return attack_score;
 }
 
 int evaluate_material(const Board& board) {
@@ -92,6 +152,8 @@ int evaluate_board(const Board& board) {
   total_eval += evaluate_pawn_center_control(board);
   total_eval += evaluate_center_control(board);
   total_eval += evaluate_material(board);
+  total_eval += evaluate_attacking_pieces(board);
+  total_eval += evaluate_king_safety(board);
   if (board.side_to_move == SideToMove::White) {
     return total_eval; // Evaluation for White
   } else {

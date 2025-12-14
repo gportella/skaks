@@ -10,6 +10,8 @@ namespace chess {
 enum class Piece { wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK };
 constexpr std::size_t kPieceCount = static_cast<std::size_t>(Piece::bK) + 1;
 enum class OccupancyType { empty, wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK };
+static_assert(static_cast<int>(OccupancyType::wP) < static_cast<int>(OccupancyType::bP),
+              "OccupancyType must list white pieces before black pieces");
 enum class PieceColor { White, Black, Both, None };
 enum class SideToMove { White, Black };
 enum class CastlingRights {

@@ -75,6 +75,7 @@ inline Undo make_move(Board& b, const Move& m) {
   undo.king_list_before = {b.king_list[0], b.king_list[1]};
   undo.pawn_list_before = {b.pawn_list[0], b.pawn_list[1]};
   undo.king_positions_before = b.king_positions;
+  undo.castled_before = b.has_castled;
   undo.king_captured_before = b.king_captured;
 
   const auto mover_index = to_index(b.side_to_move);
@@ -184,6 +185,8 @@ inline Undo make_move(Board& b, const Move& m) {
 
     // update rook list to reflect the single rook that moved
     update_piece_square(b.rook_list[mover_index], rook_from, rook_to);
+
+    b.has_castled[mover_index] = true;
 
   }
   // promotion with no capture, 0 is the pawn, 1 is the promoted piece
@@ -329,6 +332,7 @@ inline void undo_move(Board& b, const Undo& u) {
   b.en_passant = u.en_passant_before;
   b.ep_square = u.ep_square_before;
   b.castling_rights = u.castling_rights_before;
+  b.has_castled = u.castled_before;
   std::copy(std::begin(u.occupancy), std::end(u.occupancy), std::begin(b.occupancy));
   b.rook_list[0] = u.rook_list_before[0];
   b.rook_list[1] = u.rook_list_before[1];

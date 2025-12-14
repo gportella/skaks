@@ -21,8 +21,8 @@ SearchResult Engine::search(Board& board, const SearchParameters& params) {
 
   const int base_ply = history_.ply_count;
   const int repetition_start = history_.repetition_start;
-  auto result =
-      search_position(board, board.side_to_move, params, evaluator, &history_, repetition_start);
+  auto result = search_position(board, board.side_to_move, params, evaluator, &history_, &tt_,
+                                repetition_start);
   history_.ply_count = base_ply;
   return result;
 }
@@ -37,6 +37,10 @@ void Engine::clear_history() {
   history_.key_history.fill(0);
   history_.ply_count = 0;
   history_.repetition_start = 0;
+}
+
+void Engine::clear_transposition_table() {
+  tt_.clear();
 }
 
 void Engine::reset_history(const Board& board) {

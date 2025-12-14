@@ -6,6 +6,18 @@
 
 namespace chess {
 
+inline int chebyshev_dist(std::size_t sq1_index, std::size_t sq2_index) {
+  int f1 = static_cast<int>(sq1_index) % 8;
+  int r1 = static_cast<int>(sq1_index) / 8;
+  int f2 = static_cast<int>(sq2_index) % 8;
+  int r2 = static_cast<int>(sq2_index) / 8;
+  int file_dist = abs(f1 - f2);
+  int rank_dist = abs(r1 - r2);
+
+  int distance = std::max(file_dist, rank_dist);
+  return distance;
+}
+
 constexpr int lsb_index(Bitboard b) noexcept {
   // Precondition: b != 0
   return std::countr_zero(b);

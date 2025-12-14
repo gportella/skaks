@@ -5,6 +5,7 @@
 #include "chess/history.hpp"
 #include "chess/moves.hpp"
 #include "chess/scoring_rules.hpp"
+#include "chess/transposition_table.hpp"
 #include "chess/types.hpp"
 
 #include <algorithm>
@@ -33,8 +34,8 @@ namespace detail {
 
 template <typename Evaluator>
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
-                               Evaluator& evaluator, MoveHistory* history, int ply,
-                               int repetition_start) {
+                               Evaluator& evaluator, MoveHistory* history, TranspositionTable* tt,
+                               int ply, int repetition_start) {
   if (history) {
     if (ply < MAX_PLY) {
       history->key_history[static_cast<std::size_t>(ply)] = board.position_key;
@@ -48,14 +49,75 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     }
   }
 
+  int alpha_base = alpha;
+  int beta_base = beta;
+
+  TranspositionEntry cached_entry;
+  bool has_cached_move = false;
+  Move cached_move{};
+  if (tt && tt->probe(board.position_key, cached_entry)) {
+    const int cached_score = TranspositionTable::decode_score(cached_entry.score, ply);
+    if (cached_entry.depth >= depth) {
+      switch (cached_entry.flag) {
+      case TranspositionFlag::Exact:
+        return {cached_score, cached_entry.best_move};
+      case TranspositionFlag::LowerBound:
+        alpha = std::max(alpha, cached_score);
+        break;
+      case TranspositionFlag::UpperBound:
+        beta = std::min(beta, cached_score);
+        break;
+      case TranspositionFlag::None:
+        break;
+      }
+      if (alpha >= beta) {
+        return {cached_score, cached_entry.best_move};
+      }
+    }
+    if (cached_entry.best_move.moving_pc != OccupancyType::empty) {
+      has_cached_move = true;
+      cached_move = cached_entry.best_move;
+    }
+  }
+
+  alpha_base = alpha;
+  beta_base = beta;
+
   if (depth == 0 || board.is_terminal()) {
-    return {evaluator(static_cast<const Board&>(board)), Move{}};
+    const int eval = evaluator(static_cast<const Board&>(board));
+    if (tt) {
+      tt->store(board.position_key, depth, eval, TranspositionFlag::Exact, Move{}, ply);
+    }
+    return {eval, Move{}};
   }
 
   uint16_t move_count = 0;
   auto moves = generate_legal_moves(board, stm, move_count);
   if (move_count == 0) {
-    return {evaluator(static_cast<const Board&>(board)), Move{}};
+    if (is_check(board, stm)) {
+      const int mate_score = (stm == SideToMove::White) ? (-INF + ply) : (INF - ply);
+      if (tt) {
+        tt->store(board.position_key, depth, mate_score, TranspositionFlag::Exact, Move{}, ply);
+      }
+      return {mate_score, Move{}};
+    }
+    constexpr int draw_score = 0;
+    if (tt) {
+      tt->store(board.position_key, depth, draw_score, TranspositionFlag::Exact, Move{}, ply);
+    }
+    return {draw_score, Move{}};
+  }
+
+  if (has_cached_move) {
+    const auto cached_code =
+        encode_move(cached_move.from, cached_move.to, cached_move.moving_pc,
+                    cached_move.captured_pc, cached_move.promo_pc, cached_move.flags);
+    for (uint16_t i = 0; i < move_count; ++i) {
+      if (moves[i] == cached_code) {
+        std::swap(moves[0], moves[i]);
+        break;
+      }
+    }
   }
 
   SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{}};
@@ -66,14 +128,21 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     const bool irreversible = move_is_irreversible(move);
     const int next_repetition_start = irreversible ? (ply + 1) : repetition_start;
     int score = alphabeta_minimax(board, depth - 1, alpha, beta, flip_side(stm), evaluator, history,
-                                  ply + 1, next_repetition_start)
+                                  tt, ply + 1, next_repetition_start)
                     .score;
     undo_move(board, undo);
+
+    const bool is_better = (best.best_move.moving_pc == OccupancyType::empty) ? true
+                           : (stm == SideToMove::White)                       ? (score > best.score)
+                                                        : (score < best.score);
+    if (is_better) {
+      best.score = score;
+      best.best_move = move;
+    }
 
     if (stm == SideToMove::White) {
       if (score > alpha) {
         alpha = score;
-        best = {score, move};
       }
       if (alpha >= beta) {
         break;
@@ -81,12 +150,21 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     } else {
       if (score < beta) {
         beta = score;
-        best = {score, move};
       }
       if (beta <= alpha) {
         break;
       }
     }
+  }
+
+  if (tt) {
+    TranspositionFlag flag = TranspositionFlag::Exact;
+    if (best.score <= alpha_base) {
+      flag = TranspositionFlag::UpperBound;
+    } else if (best.score >= beta_base) {
+      flag = TranspositionFlag::LowerBound;
+    }
+    tt->store(board.position_key, depth, best.score, flag, best.best_move, ply);
   }
 
   return best;
@@ -97,7 +175,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
 template <typename Evaluator>
 SearchResult search_position(Board& board, SideToMove stm, const SearchParameters& params,
                              Evaluator evaluator, MoveHistory* history = nullptr,
-                             int repetition_start = 0) {
+                             TranspositionTable* tt = nullptr, int repetition_start = 0) {
   int base_ply = 0;
   int start_ply = 0;
 
@@ -116,7 +194,7 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
   }
 
   auto result = detail::alphabeta_minimax(board, params.depth, params.alpha, params.beta, stm,
-                                          evaluator, history, start_ply, repetition_start);
+                                          evaluator, history, tt, start_ply, repetition_start);
 
   if (history) {
     history->ply_count = base_ply;
@@ -126,7 +204,7 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
 }
 
 inline SearchResult search_position(Board& board, SideToMove stm, const SearchParameters& params) {
-  return search_position(board, stm, params, DefaultEvaluator{});
+  return search_position(board, stm, params, DefaultEvaluator{}, nullptr, nullptr);
 }
 
 } // namespace chess

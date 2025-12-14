@@ -20,6 +20,7 @@ chess_set_default_warnings(chess_engine_core)
 chess_enable_sanitizers(chess_engine_core)
 
 add_executable(chess_engine
+  cli.cpp
   main.cpp
 )
 

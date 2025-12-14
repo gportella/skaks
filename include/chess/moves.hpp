@@ -108,6 +108,7 @@ struct Undo {
   std::array<PieceList, 2> king_list_before;
   std::array<PieceList, 2> pawn_list_before;
   std::array<int, 2> king_positions_before;
+  std::array<bool, 2> castled_before;
   PieceColor king_captured_before;
   OccupancyType captured_pc;
   OccupancyType moving_pc;

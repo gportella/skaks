@@ -108,13 +108,13 @@ Board parse_fen_string(std::string_view fen) {
 }
 
 Board initial_board(std::string_view fen) {
-  Board board{};
-
-  // Very minimal FEN parsing for initial position only
-  if (fen != kStartFEN) {
-    throw std::invalid_argument("Only starting FEN is supported in this minimal parser.");
+  if (fen.empty()) {
+    fen = kStartFEN;
   }
-  board = parse_fen_string(fen);
+
+  Board board = parse_fen_string(fen);
+
+  board.pieces_bb.fill(0);
   board.occupancy[static_cast<std::size_t>(PieceColor::White)] =
       calculate_occupancy(board, PieceColor::White);
   board.occupancy[static_cast<std::size_t>(PieceColor::Black)] =
@@ -130,10 +130,23 @@ Board initial_board(std::string_view fen) {
     board.pieces_bb[piece_idx] |= (Bitboard(1) << sq);
   }
 
+  // best-effort inference of castled state for king safety heuristics
+  board.has_castled = {false, false};
+  if (board.king_positions[0] == to_index(Square::G1) ||
+      board.king_positions[0] == to_index(Square::C1)) {
+    board.has_castled[0] = true;
+  }
+  if (board.king_positions[1] == to_index(Square::G8) ||
+      board.king_positions[1] == to_index(Square::C8)) {
+    board.has_castled[1] = true;
+  }
+
+  board.king_captured = PieceColor::None;
+
   init_zobrist(0xDEADBEEF); // example seed
   board.position_key = compute_position_key(board);
 
-  std::cout << "Set up initial board position from FEN: " << fen << "\n";
+  std::cout << "Set up board position from FEN: " << fen << "\n";
 
   return board;
 }
