@@ -63,15 +63,22 @@ struct Board {
   int fifty_move_counter = 0;
   uint64_t position_key = 0;
   PieceColor king_captured = PieceColor::None;
+  // TODO ==> fix this, don't like the type, I get it's to signal not defined,
+  // but unit8_t is better for checkiing later if king is under attack
   std::array<int, 2> king_positions = {-1, -1};
   PieceList rook_list[2];
   PieceList king_list[2];
   PieceList pawn_list[2];
-  bool is_terminal() const {
-    // todo: check for checkmate/stalemate properly
-    return king_captured != PieceColor::None;
-  }
+  bool is_terminal();
 };
+
+bool is_check(const Board& b, SideToMove stm);
+bool has_legal_moves(Board& b, SideToMove stm);
+
+inline bool Board::is_terminal() {
+  // todo: check for checkmate/stalemate properly
+  return is_check(*this, side_to_move) && !has_legal_moves(*this, side_to_move);
+}
 
 inline FenFields split_fen(std::string_view fen) {
   FenFields fields{};

@@ -4,6 +4,7 @@
 #include "chess/board.hpp"
 #include "chess/casteling.hpp"
 #include "chess/history.hpp"
+#include "chess/scoring_rules.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/zobrist.hpp"
@@ -13,24 +14,6 @@
 
 namespace chess {
 
-int popcount_bitboard(Bitboard bb) {
-#if defined(_MSC_VER)
-  return static_cast<int>(__popcnt64(bb));
-#else
-  return static_cast<int>(__builtin_popcountll(static_cast<unsigned long long>(bb)));
-#endif
-}
-
-int count_black_queens_in_pieces(const Board& b) {
-  int count = 0;
-  for (auto occ : b.pieces) {
-    if (occ == OccupancyType::bQ) {
-      ++count;
-    }
-  }
-  return count;
-}
-
 std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, SideToMove stm,
                                                            uint16_t& move_count) {
   std::array<uint32_t, kMaxMovementCount> moves{};
@@ -39,89 +22,22 @@ std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, S
   return moves;
 }
 
-int evaluate_pawn_center_control(const Board& board) {
-  // Placeholder for pawn center control evaluation
-  for (auto sq :
-       {to_index(Square::D4), to_index(Square::D5), to_index(Square::E4), to_index(Square::E5)}) {
-    OccupancyType piece = board.pieces[sq];
-    if (piece == OccupancyType::wP) {
-      return 10; // White controls center
-    } else if (piece == OccupancyType::bP) {
-      return -10; // Black controls center
-    }
-  }
-  return 0;
-}
+std::array<uint32_t, kMaxMovementCount> generate_legal_moves(Board& board, SideToMove stm,
+                                                             uint16_t& move_count) {
+  std::array<uint32_t, kMaxMovementCount> legal_moves{};
+  uint16_t legal_move_count = 0;
+  auto pseudo_moves = generate_all_moves(board, stm, move_count);
 
-int evaluate_center_control(const Board& board) {
-  // Placeholder for center control evaluation
-  for (auto sq :
-       {to_index(Square::D4), to_index(Square::D5), to_index(Square::E4), to_index(Square::E5)}) {
-    OccupancyType piece = board.pieces[sq];
-    if (piece != OccupancyType::empty) {
-      if (static_cast<std::size_t>(piece) < static_cast<std::size_t>(OccupancyType::bP)) {
-        return 5; // White piece controls center
-      } else {
-        return -5; // Black piece controls center
-      }
+  for (uint16_t i = 0; i < move_count; ++i) {
+    Move m = decode_move(pseudo_moves[i]);
+    Undo u = make_move(board, m);
+    if (!is_check(board, stm)) {
+      legal_moves[legal_move_count++] = pseudo_moves[i];
     }
+    undo_move(board, u);
   }
-  return 0;
-}
-
-int evaluate_material(const Board& board) {
-  // Placeholder for material evaluation
-  int material_score = 0;
-  for (const auto& occ : board.pieces) {
-    switch (occ) {
-    case OccupancyType::wP:
-      material_score += 100;
-      break;
-    case OccupancyType::wN:
-      material_score += 320;
-      break;
-    case OccupancyType::wB:
-      material_score += 330;
-      break;
-    case OccupancyType::wR:
-      material_score += 500;
-      break;
-    case OccupancyType::wQ:
-      material_score += 900;
-      break;
-    case OccupancyType::bP:
-      material_score -= 100;
-      break;
-    case OccupancyType::bN:
-      material_score -= 320;
-      break;
-    case OccupancyType::bB:
-      material_score -= 330;
-      break;
-    case OccupancyType::bR:
-      material_score -= 500;
-      break;
-    case OccupancyType::bQ:
-      material_score -= 900;
-      break;
-    default:
-      break;
-    }
-  }
-  return material_score;
-}
-
-int evaluate_board(const Board& board) {
-  // Placeholder for board evaluation function
-  int total_eval = 0;
-  total_eval += evaluate_pawn_center_control(board);
-  total_eval += evaluate_center_control(board);
-  total_eval += evaluate_material(board);
-  if (board.side_to_move == SideToMove::White) {
-    return total_eval; // Evaluation for White
-  } else {
-    return -total_eval; // Evaluation for Black
-  }
+  move_count = legal_move_count;
+  return legal_moves;
 }
 
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm) {
@@ -130,7 +46,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     return {evaluate_board(board), Move{}};
   }
   uint16_t move_count = 0;
-  auto moves = generate_all_moves(board, stm, move_count);
+  auto moves = generate_legal_moves(board, stm, move_count);
   if (move_count == 0) {
     return {evaluate_board(board), Move{}};
   }
@@ -272,6 +188,7 @@ inline Undo make_move(Board& b, const Move& m) {
     remove_piece_square(b.rook_list[enemy_index], static_cast<Square>(undo.captured_sq));
     remove_piece_square(b.pawn_list[enemy_index], static_cast<Square>(undo.captured_sq));
     remove_piece_square(b.king_list[enemy_index], static_cast<Square>(undo.captured_sq));
+
     if (undo.captured_pc == OccupancyType::wK || undo.captured_pc == OccupancyType::bK) {
       b.king_positions[enemy_index] = -1;
       b.king_captured =
@@ -297,7 +214,8 @@ inline Undo make_move(Board& b, const Move& m) {
 
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1],
             flag_is_castle(m.flags) ? king_target : queen_target);
-    set_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
+    set_bit(
+        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
         flag_is_castle(m.flags) ? (rook_kingside_target) : (rook_queenside_target));
 
     const Square rook_from = flag_is_castle(m.flags) ? king_rook : queen_rook;
@@ -368,6 +286,7 @@ inline Undo make_move(Board& b, const Move& m) {
   // Update position key and board state
   //   change to incremental update XOR later
   b.position_key = compute_position_key(b); // Recompute for simplicity
+
   b.fifty_move_counter = (m.moving_pc == OccupancyType::wP || m.moving_pc == OccupancyType::bP ||
                           m.captured_pc != OccupancyType::empty)
                              ? 0
@@ -375,15 +294,6 @@ inline Undo make_move(Board& b, const Move& m) {
   b.en_passant = -1; // Reset en passant square
   b.ep_square = 0;
   update_castling_rights(b, m);
-  
-  const Bitboard queen_bb_after =
-      b.pieces_bb[static_cast<std::size_t>(OccupancyType::bQ) - 1];
-
-  const int queen_bb_count = popcount_bitboard(queen_bb_after);
-  const int queen_piece_count = count_black_queens_in_pieces(b);
-  if (queen_bb_count != queen_piece_count) {
-    std::abort();
-  }
 
   // Switch side to move
   b.side_to_move = flip_side(b.side_to_move);
@@ -557,15 +467,5 @@ inline void undo_move(Board& b, const Undo& u) {
   // Update position key and board state
   //   change to incremental update XOR later
   b.position_key = compute_position_key(b); // Recompute for simplicity
-  
-  const Bitboard queen_bb_after_undo =
-      b.pieces_bb[static_cast<std::size_t>(OccupancyType::bQ) - 1];
-
-
-  const int queen_bb_count_undo = popcount_bitboard(queen_bb_after_undo);
-  const int queen_piece_count_undo = count_black_queens_in_pieces(b);
-  if (queen_bb_count_undo != queen_piece_count_undo) {
-    std::abort();
-  }
 }
 } // namespace chess

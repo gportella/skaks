@@ -47,4 +47,12 @@ inline constexpr void clear_bit(Bitboard& bb, Square sq) noexcept {
 inline constexpr void toggle_bit(Bitboard& bb, Square sq) noexcept {
   toggle_bit(bb, static_cast<int>(sq));
 }
+
+inline int popcount_bitboard(Bitboard bb) {
+#if defined(_MSC_VER)
+  return static_cast<int>(__popcnt64(bb));
+#else
+  return static_cast<int>(__builtin_popcountll(static_cast<unsigned long long>(bb)));
+#endif
+}
 } // namespace chess

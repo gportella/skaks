@@ -1,7 +1,9 @@
 
 #include "chess/board.hpp"
 
+#include "chess/attack_masks.hpp"
 #include "chess/defaults.hpp"
+#include "chess/moves.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/zobrist.hpp"
@@ -335,5 +337,17 @@ bool ep_capture_available(const Board& b) {
     }
     return false;
   }
+}
+
+bool is_check(const Board& b, SideToMove stm) {
+
+  const int king_sq = b.king_positions[static_cast<std::size_t>(stm == SideToMove::White ? 0 : 1)];
+  return is_square_attacked(b, static_cast<std::uint8_t>(king_sq), flip_side(stm));
+}
+
+bool has_legal_moves(Board& b, SideToMove stm) {
+  uint16_t move_count = 0;
+  auto _ = generate_legal_moves(b, stm, move_count);
+  return move_count > 0;
 }
 } // namespace chess

@@ -20,15 +20,7 @@ inline int poplsb(Bitboard& bb) {
   return idx;
 }
 
-namespace {
-
-inline void guard_black_queen_on_c2(const Board&, std::string_view) {}
-
-inline void guard_suspicious_move(const Board&, int, int, std::string_view) {}
-
-inline void trace_black_queen_to_f2_debug(const Board&, int, int, Bitboard) {}
-
-} // namespace
+namespace {} // namespace
 
 // First we get the attack bitboard for the piece on sq, then we mask out
 // friendly pieces
@@ -168,7 +160,6 @@ PawnMasks gen_pawn_masks(const Board& board, SideToMove stm) {
  */
 void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
                            std::array<uint32_t, kMaxMovementCount>& out, uint16_t& move_count) {
-  guard_black_queen_on_c2(b, "emit_white_pawn_moves");
   const Bitboard pawns = b.pieces_bb[static_cast<std::size_t>(Piece::wP)];
 
   // Single pushes (non-promo)
@@ -177,7 +168,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
       int from = to - 8;
-      guard_suspicious_move(b, from, to, "white pawn single push");
       uint32_t m = encode_move(from, to,
                                /*piece=*/OccupancyType::wP,
                                /*captured=*/OccupancyType::empty,
@@ -195,7 +185,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
       int from = to - 16;
-      guard_suspicious_move(b, from, to, "white pawn double push");
       uint32_t m = encode_move(from, to,
                                /*piece=*/OccupancyType::wP,
                                /*captured=*/OccupancyType::empty,
@@ -216,7 +205,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to - 7;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "white pawn capture");
           uint32_t m = encode_move(from, to,
                                    /*piece=*/OccupancyType::wP,
                                    /*captured=*/b.pieces[static_cast<std::size_t>(to)],
@@ -230,7 +218,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to - 9;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "white pawn capture");
           uint32_t m = encode_move(from, to,
                                    /*piece=*/OccupancyType::wP,
                                    /*captured=*/b.pieces[static_cast<std::size_t>(to)],
@@ -249,7 +236,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
       int from = to - 8;
-      guard_suspicious_move(b, from, to, "white pawn promotion push");
       assert(move_count + 4 < kMaxMovementCount);
       out[move_count++] = encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
                                       /*promo=*/OccupancyType::wQ, 0);
@@ -271,7 +257,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to - 7;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "white pawn promotion capture");
           OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
           assert(move_count + 4 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::wP, cap, OccupancyType::wQ, 0);
@@ -283,7 +268,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to - 9;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "white pawn promotion capture");
           OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
           assert(move_count + 4 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::wP, cap, OccupancyType::wQ, 0);
@@ -304,7 +288,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to - 7;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "white pawn en passant");
           assert(move_count + 1 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::wP,
                                           /*captured=*/OccupancyType::empty,
@@ -315,7 +298,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to - 9;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "white pawn en passant");
           assert(move_count + 1 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::wP,
                                           /*captured=*/OccupancyType::empty,
@@ -329,7 +311,6 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
 
 void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
                            std::array<uint32_t, kMaxMovementCount>& out, uint16_t& move_count) {
-  guard_black_queen_on_c2(b, "emit_black_pawn_moves");
   const Bitboard pawns = b.pieces_bb[static_cast<std::size_t>(Piece::bP)];
 
   // Single pushes (non-promo)
@@ -338,7 +319,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
       int from = to + 8;
-      guard_suspicious_move(b, from, to, "black pawn single push");
       uint32_t m = encode_move(from, to,
                                /*piece=*/OccupancyType::bP,
                                /*captured=*/OccupancyType::empty,
@@ -355,7 +335,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
       int from = to + 16;
-      guard_suspicious_move(b, from, to, "black pawn double push");
       uint32_t m = encode_move(from, to,
                                /*piece=*/OccupancyType::bP,
                                /*captured=*/OccupancyType::empty,
@@ -376,7 +355,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to + 9;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "black pawn capture");
           uint32_t m = encode_move(from, to,
                                    /*piece=*/OccupancyType::bP,
                                    /*captured=*/b.pieces[static_cast<std::size_t>(to)],
@@ -390,7 +368,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to + 7;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "black pawn capture");
           uint32_t m = encode_move(from, to,
                                    /*piece=*/OccupancyType::bP,
                                    /*captured=*/b.pieces[static_cast<std::size_t>(to)],
@@ -409,7 +386,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
       int from = to + 8;
-      guard_suspicious_move(b, from, to, "black pawn promotion push");
       assert(move_count + 4 < kMaxMovementCount);
       out[move_count++] = encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
                                       /*promo=*/OccupancyType::bQ, 0);
@@ -431,7 +407,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to + 9;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "black pawn promotion capture");
           OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
           assert(move_count + 4 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::bP, cap, OccupancyType::bQ, 0);
@@ -443,7 +418,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to + 7;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "black pawn promotion capture");
           OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
           assert(move_count + 4 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::bP, cap, OccupancyType::bQ, 0);
@@ -464,7 +438,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to + 9;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "black pawn en passant");
           assert(move_count + 1 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::bP,
                                           /*captured=*/OccupancyType::empty,
@@ -475,7 +448,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
       if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to + 7;
         if ((pawns >> from) & 1ULL) {
-          guard_suspicious_move(b, from, to, "black pawn en passant");
           assert(move_count + 1 < kMaxMovementCount);
           out[move_count++] = encode_move(from, to, OccupancyType::bP,
                                           /*captured=*/OccupancyType::empty,
@@ -496,7 +468,6 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
  */
 void emit_knight_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMovementCount>& out,
                        uint16_t& move_count) {
-  guard_black_queen_on_c2(b, "emit_knight_moves");
   const bool white = (stm == SideToMove::White);
   const Bitboard my_occ = b.occupancy[to_index(stm)];
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
@@ -513,7 +484,6 @@ void emit_knight_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
     Bitboard q = atk & empty;
     while (q) {
       int to = poplsb(q);
-      guard_suspicious_move(b, from, to, "knight quiet");
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wN : OccupancyType::bN,
@@ -526,7 +496,6 @@ void emit_knight_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
     Bitboard c = atk & their_occ;
     while (c) {
       int to = poplsb(c);
-      guard_suspicious_move(b, from, to, "knight capture");
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wN : OccupancyType::bN,
@@ -546,7 +515,6 @@ void emit_knight_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
  */
 void emit_bishop_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMovementCount>& out,
                        uint16_t& move_count) {
-  guard_black_queen_on_c2(b, "emit_bishop_moves");
   const bool white = (stm == SideToMove::White);
   const Bitboard my_occ = b.occupancy[to_index(stm)];
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
@@ -564,7 +532,6 @@ void emit_bishop_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
     Bitboard q = atk & ~their_occ;
     while (q) {
       int to = poplsb(q);
-      guard_suspicious_move(b, from, to, "bishop quiet");
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wB : OccupancyType::bB,
@@ -577,7 +544,6 @@ void emit_bishop_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
     Bitboard c = atk & their_occ;
     while (c) {
       int to = poplsb(c);
-      guard_suspicious_move(b, from, to, "bishop capture");
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wB : OccupancyType::bB,
@@ -593,7 +559,6 @@ void emit_bishop_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMax
  */
 void emit_rook_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMovementCount>& out,
                      uint16_t& move_count) {
-  guard_black_queen_on_c2(b, "emit_rook_moves");
   const bool white = (stm == SideToMove::White);
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
   const Bitboard occ = b.occupancy[to_index(PieceColor::Both)];
@@ -608,7 +573,6 @@ void emit_rook_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
     Bitboard quiet = atk & ~their_occ;
     while (quiet) {
       int to = poplsb(quiet);
-      guard_suspicious_move(b, from, to, "rook quiet");
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wR : OccupancyType::bR,
@@ -620,7 +584,6 @@ void emit_rook_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
     Bitboard captures = atk & their_occ;
     while (captures) {
       int to = poplsb(captures);
-      guard_suspicious_move(b, from, to, "rook capture");
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wR : OccupancyType::bR,
@@ -640,7 +603,6 @@ void emit_rook_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
  */
 void emit_queen_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMovementCount>& out,
                       uint16_t& move_count) {
-  guard_black_queen_on_c2(b, "emit_queen_moves");
   const bool white = (stm == SideToMove::White);
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
   const Bitboard occ = b.occupancy[to_index(PieceColor::Both)];
@@ -656,7 +618,6 @@ void emit_queen_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxM
     Bitboard q = atk & ~their_occ;
     while (q) {
       int to = poplsb(q);
-      guard_suspicious_move(b, from, to, "queen quiet");
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wQ : OccupancyType::bQ,
@@ -668,10 +629,6 @@ void emit_queen_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxM
     Bitboard c = atk & their_occ;
     while (c) {
       int to = poplsb(c);
-      guard_suspicious_move(b, from, to, "queen capture");
-      if (!white && to == 13) {
-        trace_black_queen_to_f2_debug(b, from, to, atk);
-      }
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wQ : OccupancyType::bQ,
@@ -687,7 +644,6 @@ void emit_queen_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxM
  */
 void emit_king_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMovementCount>& out,
                      uint16_t& move_count) {
-  guard_black_queen_on_c2(b, "emit_king_moves");
   const bool white = (stm == SideToMove::White);
   const Bitboard my_occ = b.occupancy[to_index(stm)];
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
@@ -701,7 +657,9 @@ void emit_king_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
     Bitboard quiet = atk & ~their_occ;
     while (quiet) {
       int to = poplsb(quiet);
-      guard_suspicious_move(b, from, to, "king quiet");
+      if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
+        continue; // cannot move into check
+      }
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
@@ -713,7 +671,9 @@ void emit_king_moves(const Board& b, SideToMove stm, std::array<uint32_t, kMaxMo
     Bitboard captures = atk & their_occ;
     while (captures) {
       int to = poplsb(captures);
-      guard_suspicious_move(b, from, to, "king capture");
+      if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
+        continue; // cannot move into check
+      }
       assert(move_count < kMaxMovementCount);
       out[move_count++] = encode_move(from, to,
                                       /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
@@ -885,7 +845,6 @@ void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_co
 
 void emit_all_moves(const Board& board, SideToMove stm,
                     std::array<uint32_t, kMaxMovementCount>& out, uint16_t& move_count) {
-  guard_black_queen_on_c2(board, "emit_all_moves START");
   PawnMasks pm = gen_pawn_masks(board, stm);
   if (stm == SideToMove::White) {
     emit_white_pawn_moves(board, pm, out, move_count);
@@ -898,7 +857,6 @@ void emit_all_moves(const Board& board, SideToMove stm,
   emit_queen_moves(board, stm, out, move_count);
   emit_king_moves(board, stm, out, move_count);
   sort_moves(out, move_count);
-  guard_black_queen_on_c2(board, "emit_all_moves END");
 }
 
 } // namespace chess

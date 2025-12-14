@@ -1,11 +1,12 @@
 add_library(chess_engine_core STATIC
-  board.cpp
-  pins.cpp
-  engine.cpp
-  zobrist.cpp
-  moves.cpp
-  demo_debug.cpp
   attack_masks.cpp
+  board.cpp
+  demo_debug.cpp
+  engine.cpp
+  moves.cpp
+  pins.cpp
+  scoring_rules.cpp
+  zobrist.cpp
 )
 
 target_include_directories(chess_engine_core

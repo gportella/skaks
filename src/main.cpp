@@ -38,6 +38,16 @@ int main() {
       break;
     }
   }
+  if (board.is_terminal()) {
+    std::cout << "Game over detected.\n";
+    if (board.king_captured == chess::PieceColor::White) {
+      std::cout << "Black wins!\n";
+    } else if (board.king_captured == chess::PieceColor::Black) {
+      std::cout << "White wins!\n";
+    } else {
+      std::cout << "Draw!\n";
+    }
+  }
 
   return 0;
 }
