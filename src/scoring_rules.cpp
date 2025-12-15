@@ -4,6 +4,7 @@
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
 #include "chess/defaults.hpp"
+#include "chess/pst_tables.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 
@@ -15,7 +16,6 @@ namespace chess {
 constexpr int CHECK_PENALTY = 100;   // penalty/bonus for king in check
 constexpr int PAWN_SHIELD_BONUS = 5; // small bonus per nearby pawn to own king
 constexpr int CASTLING_BONUS = 15;   // modest bonus if castled
-// constexpr int MOBILITY_SCALING = 2;  // scale for king mobility (keep small)
 
 // Helper: White-centric check queries
 inline bool white_in_check(const Board& board) {
@@ -198,6 +198,20 @@ int evaluate_attacking_pieces(const Board& board) {
   return attack_score;
 }
 
+int evaluate_pst(const Board& board) {
+  int score = 0;
+  for (int sq = 0; sq < 64; ++sq) {
+    const auto piece = board.pieces[to_index(sq)];
+    if (piece == OccupancyType::empty)
+      continue;
+
+    auto idx = static_cast<std::size_t>(piece) - 1;
+    int entry = PST[idx][is_white(piece) ? to_index(sq) : to_index(mirror_rank(sq))];
+    score += is_white(piece) ? entry : -entry;
+  }
+  return score;
+}
+
 // Final evaluation: strictly White-centric; do not flip by side_to_move
 int evaluate_board(const Board& board) {
   if (board.king_captured == PieceColor::White) {
@@ -213,6 +227,7 @@ int evaluate_board(const Board& board) {
   total_eval += evaluate_attacking_pieces(board);
   total_eval += evaluate_king_safety(board);
   total_eval += evaluate_king_mobility(board);
+  total_eval += evaluate_pst(board);
 
   return total_eval; // White-centric score
 }

@@ -23,7 +23,6 @@ inline std::uint64_t bb_of(int sq) {
   return 1ULL << sq;
 }
 
-// You must implement these tiny predicates based on your OccupancyType:
 inline bool is_white_pawn(OccupancyType o) {
   return o == OccupancyType::wP;
 }
