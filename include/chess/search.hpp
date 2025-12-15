@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 
 namespace chess {
 
@@ -22,9 +23,11 @@ struct SearchParameters {
 struct SearchResult {
   enum class Outcome { InProgress, Mate, DrawByStalemate, DrawByRepetition };
 
-  int score;
-  Move best_move;
+  int score = 0;
+  Move best_move{};
   Outcome outcome = Outcome::InProgress;
+  std::uint64_t nodes = 0;
+  std::uint64_t elapsed_ms = 0;
 };
 
 struct DefaultEvaluator {
@@ -38,7 +41,8 @@ namespace detail {
 template <typename Evaluator>
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
                                Evaluator& evaluator, MoveHistory* history, TranspositionTable* tt,
-                               int ply, int repetition_start) {
+                               int ply, int repetition_start, std::uint64_t& nodes) {
+  ++nodes;
   if (history) {
     if (ply < MAX_PLY) {
       history->key_history[static_cast<std::size_t>(ply)] = board.position_key;
@@ -93,7 +97,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   alpha_base = alpha;
   beta_base = beta;
 
-  if (depth == 0 || board.is_terminal()) {
+  if (depth == 0) {
     const int eval = evaluator(static_cast<const Board&>(board));
     if (tt) {
       tt->store(board.position_key, depth, eval, TranspositionFlag::Exact, Move{}, ply);
@@ -109,7 +113,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
       if (tt) {
         tt->store(board.position_key, depth, mate_score, TranspositionFlag::Exact, Move{}, ply);
       }
-      std::cout << "Mate detected at ply " << ply << " score=" << mate_score << "\n";
       return {mate_score, Move{}, SearchResult::Outcome::Mate};
     }
     constexpr int draw_score = 0;
@@ -135,12 +138,17 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
                        SearchResult::Outcome::InProgress};
 
   for (uint16_t i = 0; i < move_count; ++i) {
+    int check_extension = 0;
     Move move = decode_move(moves[i]);
     Undo undo = make_move(board, move);
     const bool irreversible = move_is_irreversible(move);
     const int next_repetition_start = irreversible ? (ply + 1) : repetition_start;
-    auto child = alphabeta_minimax(board, depth - 1, alpha, beta, flip_side(stm), evaluator,
-                                   history, tt, ply + 1, next_repetition_start);
+    if (is_check(board, flip_side(stm)) && depth > 0) {
+      // Optional: implement check extension if desired
+      check_extension = 1;
+    }
+    auto child = alphabeta_minimax(board, depth - 1 + check_extension, alpha, beta, flip_side(stm),
+                                   evaluator, history, tt, ply + 1, next_repetition_start, nodes);
     int score = child.score;
     undo_move(board, undo);
     if (ply + 1 < MAX_PLY && history) {
@@ -209,13 +217,16 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
     repetition_start = std::max(0, std::min(repetition_start, start_ply + 1));
   }
 
-  auto result = detail::alphabeta_minimax(board, params.depth, params.alpha, params.beta, stm,
-                                          evaluator, history, tt, start_ply, repetition_start);
+  std::uint64_t nodes = 0;
+  auto result =
+      detail::alphabeta_minimax(board, params.depth, params.alpha, params.beta, stm, evaluator,
+                                history, tt, start_ply, repetition_start, nodes);
 
   if (history) {
     history->ply_count = base_ply;
   }
 
+  result.nodes = nodes;
   return result;
 }
 

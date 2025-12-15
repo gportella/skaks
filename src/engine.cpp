@@ -3,6 +3,7 @@
 #include "chess/scoring_rules.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 
 namespace chess {
@@ -23,8 +24,12 @@ SearchResult Engine::search(Board& board, const SearchParameters& params) {
 
   const int base_ply = history_.ply_count;
   const int repetition_start = history_.repetition_start;
+  const auto start = std::chrono::steady_clock::now();
   auto result = search_position(board, board.side_to_move, params, evaluator, &history_, &tt_,
                                 repetition_start);
+  const auto end = std::chrono::steady_clock::now();
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  result.elapsed_ms = static_cast<std::uint64_t>(elapsed);
   history_.ply_count = base_ply;
   return result;
 }

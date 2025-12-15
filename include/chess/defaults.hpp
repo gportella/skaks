@@ -6,6 +6,8 @@
 
 namespace chess {
 inline constexpr int INF = 1000000;
+inline constexpr int MATE_SCORE = 90000;
+inline constexpr int MOBILITY_SCALING = 15;
 inline constexpr int REPETITION_PENALTY = 250;
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES = 3; // max 3 pieces change per move
                                                    // (castle+capture || capture promotion)

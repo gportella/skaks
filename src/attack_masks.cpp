@@ -744,6 +744,14 @@ bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_sid
                         attacker_side == SideToMove::White ? Piece::wQ : Piece::bQ)];
   if (rook_attackers)
     return true;
+
+  // Check for king adjacency
+  const Bitboard king_attackers = KING_ATTACKS[static_cast<std::size_t>(sq)] &
+                                  board.pieces_bb[static_cast<std::size_t>(
+                                      attacker_side == SideToMove::White ? Piece::wK : Piece::bK)];
+  if (king_attackers)
+    return true;
+
   return false;
 }
 

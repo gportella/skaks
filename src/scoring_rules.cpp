@@ -3,8 +3,11 @@
 #include "chess/attack_masks.hpp"
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
+#include "chess/defaults.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
+
+#include <array>
 
 namespace chess {
 
@@ -33,6 +36,10 @@ int evaluate_king_safety(const Board& board) {
 
     if (board.has_castled[color_index]) {
       score += side_sign * kCastlingBonus; // modest bonus for successful castling
+    }
+
+    if (is_check(board, board.side_to_move)) {
+      score -= side_sign * MATE_SCORE; // heavy penalty if king is in check
     }
 
     return score;
@@ -86,21 +93,51 @@ int evaluate_center_control(const Board& board) {
   return 0;
 }
 
+int evaluate_king_mobility(const Board& board) {
+  // Placeholder for king mobility evaluation
+  if (board.side_to_move == SideToMove::White) {
+    return MOBILITY_SCALING *
+           popcount_bitboard(king_attack_bm(board, static_cast<u_int8_t>(board.king_positions[0]),
+                                            SideToMove::White));
+
+  } else {
+    return -MOBILITY_SCALING *
+           popcount_bitboard(king_attack_bm(board, static_cast<u_int8_t>(board.king_positions[1]),
+                                            SideToMove::Black));
+  }
+}
+
 int evaluate_attacking_pieces(const Board& board) {
-  // Placeholder for attacking pieces evaluation
+  constexpr std::array<int, static_cast<std::size_t>(OccupancyType::bK) + 1> kThreatBase = {
+      0, 12, 30, 30, 45, 80, 540, 12, 30, 30, 45, 80, 540};
+
   int attack_score = 0;
   for (std::size_t sq = 0; sq < 64; ++sq) {
-    OccupancyType piece = board.pieces[sq];
-    if (piece != OccupancyType::empty) {
-      SideToMove stm =
-          (static_cast<std::size_t>(piece) < static_cast<std::size_t>(OccupancyType::bP))
-              ? SideToMove::White
-              : SideToMove::Black;
-      if (is_square_attacked(board, static_cast<u_int8_t>(sq), flip_side(stm))) {
-        attack_score += (stm == SideToMove::White) ? -20 : 20;
-      }
+    const OccupancyType piece = board.pieces[sq];
+    if (piece == OccupancyType::empty) {
+      continue;
     }
+
+    const bool is_white_piece =
+        static_cast<std::size_t>(piece) < static_cast<std::size_t>(OccupancyType::bP);
+    const SideToMove defender = is_white_piece ? SideToMove::White : SideToMove::Black;
+    if (!is_square_attacked(board, static_cast<u_int8_t>(sq), flip_side(defender))) {
+      continue;
+    }
+
+    const int base_weight = kThreatBase[static_cast<std::size_t>(piece)];
+    if (base_weight == 0) {
+      continue;
+    }
+
+    const int rank = rank_of(static_cast<int>(sq));
+    const int distance_from_home = is_white_piece ? rank : (7 - rank);
+    const int positional_scale = 1 + distance_from_home / 2;
+    const int threat_value = base_weight * positional_scale;
+
+    attack_score += (defender == SideToMove::White) ? -threat_value : threat_value;
   }
+
   return attack_score;
 }
 
@@ -150,7 +187,6 @@ int evaluate_board(const Board& board) {
   // Placeholder for board evaluation function
   int total_eval = 0;
   if (board.king_captured == PieceColor::White) {
-    std::cout << "White king captured!\n";
     return -100000; // Black wins
   } else if (board.king_captured == PieceColor::Black) {
     return 100000; // White wins
@@ -160,6 +196,7 @@ int evaluate_board(const Board& board) {
   total_eval += evaluate_material(board);
   total_eval += evaluate_attacking_pieces(board);
   total_eval += evaluate_king_safety(board);
+  total_eval += evaluate_king_mobility(board);
   if (board.side_to_move == SideToMove::White) {
     return total_eval; // Evaluation for White
   } else {
