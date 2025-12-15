@@ -88,35 +88,32 @@ int main(int argc, char** argv) {
 
     const bool has_move = result.best_move.moving_pc != chess::OccupancyType::empty;
     const auto outcome = result.outcome;
-    if (!has_move || outcome != chess::SearchResult::Outcome::InProgress) {
+    if (!has_move) {
       if (!cli.options.only_fen) {
-        switch (outcome) {
-        case chess::SearchResult::Outcome::Mate: {
+        const bool side_in_check = chess::is_check(board, board.side_to_move);
+        if (side_in_check) {
           const auto winner = chess::flip_side(board.side_to_move);
           std::cout << "Checkmate! " << chess::to_string(winner) << " wins.\n";
-          break;
-        }
-        case chess::SearchResult::Outcome::DrawByRepetition:
-          std::cout << "Draw by repetition.\n";
-          break;
-        case chess::SearchResult::Outcome::DrawByStalemate:
+        } else {
           std::cout << "Stalemate.\n";
-          break;
-        case chess::SearchResult::Outcome::InProgress:
-          if (!has_move) {
-            const bool side_in_check = chess::is_check(board, board.side_to_move);
-            if (side_in_check) {
-              const auto winner = chess::flip_side(board.side_to_move);
-              std::cout << "Checkmate decide inProgress! " << chess::to_string(winner)
-                        << " wins.\n";
-            } else {
-              std::cout << "Stalemate.\n";
-            }
-          }
-          break;
         }
       }
       break;
+    }
+    if (!cli.options.only_fen && outcome != chess::SearchResult::Outcome::InProgress) {
+      switch (outcome) {
+      case chess::SearchResult::Outcome::Mate:
+        std::cout << "(search) Mate sequence detected.\n";
+        break;
+      case chess::SearchResult::Outcome::DrawByRepetition:
+        std::cout << "(search) Draw by repetition forecast.\n";
+        break;
+      case chess::SearchResult::Outcome::DrawByStalemate:
+        std::cout << "(search) Stalemate forecast.\n";
+        break;
+      case chess::SearchResult::Outcome::InProgress:
+        break;
+      }
     }
 
     if (!cli.options.only_fen) {
