@@ -53,6 +53,9 @@ inline Undo make_move(Board& b, const Move& m) {
   const Square rook_queenside_target =
       kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_target;
   Undo undo;
+  if (b.side_to_move == SideToMove::Black) {
+    ++b.ply_count;
+  }
   undo.position_key_before = b.position_key;
   undo.fifty_move_counter_before = b.fifty_move_counter;
   undo.en_passant_before = b.en_passant;
@@ -314,6 +317,9 @@ inline void undo_move(Board& b, const Undo& u) {
 
   // Switch side to move back
   b.side_to_move = flip_side(b.side_to_move);
+  if (b.side_to_move == SideToMove::Black) {
+    --b.ply_count;
+  }
   const bool white = (b.side_to_move == SideToMove::White);
   const Square king_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
   const Square queen_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_start;

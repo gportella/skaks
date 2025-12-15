@@ -6,6 +6,7 @@
 
 namespace chess {
 inline constexpr int INF = 1000000;
+inline constexpr int REPETITION_PENALTY = 250;
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES = 3; // max 3 pieces change per move
                                                    // (castle+capture || capture promotion)
 inline constexpr std::array<int, 8> kRanks{0, 1, 2, 3, 4, 5, 6, 7};

@@ -2,6 +2,7 @@
 
 #include "chess/scoring_rules.hpp"
 
+#include <algorithm>
 #include <cstddef>
 
 namespace chess {
@@ -11,10 +12,11 @@ Engine::Engine() : eval_config_{}, history_{} {
 }
 
 SearchResult Engine::search(Board& board, const SearchParameters& params) {
-  if (history_.ply_count == 0 ||
-      history_.key_history[static_cast<std::size_t>(history_.ply_count - 1)] !=
-          board.position_key) {
+  if (history_.ply_count == 0) {
     reset_history(board);
+  } else {
+    const auto idx = static_cast<std::size_t>(history_.ply_count - 1);
+    history_.key_history[idx] = board.position_key;
   }
 
   auto evaluator = [this](const Board& state) { return evaluate(state); };
@@ -35,6 +37,7 @@ int Engine::evaluate(const Board& board) const {
 
 void Engine::clear_history() {
   history_.key_history.fill(0);
+  history_.repetition_counts.fill(0);
   history_.ply_count = 0;
   history_.repetition_start = 0;
 }
@@ -45,6 +48,7 @@ void Engine::clear_transposition_table() {
 
 void Engine::reset_history(const Board& board) {
   history_.key_history.fill(0);
+  history_.repetition_counts.fill(0);
   history_.key_history[0] = board.position_key;
   history_.ply_count = 1;
   history_.repetition_start = 0;
@@ -52,10 +56,12 @@ void Engine::reset_history(const Board& board) {
 
 void Engine::record_position(std::uint64_t key, bool irreversible) {
   if (history_.ply_count < static_cast<int>(history_.key_history.size())) {
-    history_.key_history[static_cast<std::size_t>(history_.ply_count++)] = key;
+    const auto idx = static_cast<std::size_t>(history_.ply_count);
+    history_.key_history[idx] = key;
+    ++history_.ply_count;
   }
   if (irreversible) {
-    history_.repetition_start = history_.ply_count;
+    history_.repetition_start = std::max(history_.ply_count - 1, 0);
   }
 }
 

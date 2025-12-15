@@ -280,8 +280,8 @@ void run_uci_loop(Engine& engine, int default_depth) {
       const auto result = engine.search(board, params);
       const auto search_end = std::chrono::steady_clock::now();
       const auto elapsed_ms = std::max<std::int64_t>(
-          1, std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start)
-                 .count());
+          1,
+          std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start).count());
       const bool has_move = result.best_move.moving_pc != OccupancyType::empty;
       const std::string bestmove = has_move ? move_to_uci(result.best_move) : "0000";
       const int nodes = std::max(1, depth * depth * 100);

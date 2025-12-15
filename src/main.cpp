@@ -41,7 +41,6 @@ int main(int argc, char** argv) {
     total_start = std::chrono::steady_clock::now();
   }
 
-  std::cout << "Position key: 0x" << std::hex << board.position_key << std::dec << "\n";
   std::cout << "Board of color to move: " << board.side_to_move << "\n";
   chess::terminal_board_print(board);
   int move_number = 1;
@@ -72,13 +71,31 @@ int main(int argc, char** argv) {
     std::cout << "Best move score: " << result.score << "\n";
 
     const bool has_move = result.best_move.moving_pc != chess::OccupancyType::empty;
-    if (!has_move) {
-      const bool side_in_check = chess::is_check(board, board.side_to_move);
-      if (side_in_check) {
+    const auto outcome = result.outcome;
+    if (!has_move || outcome != chess::SearchResult::Outcome::InProgress) {
+      switch (outcome) {
+      case chess::SearchResult::Outcome::Mate: {
         const auto winner = chess::flip_side(board.side_to_move);
         std::cout << "Checkmate! " << chess::to_string(winner) << " wins.\n";
-      } else {
+        break;
+      }
+      case chess::SearchResult::Outcome::DrawByRepetition:
+        std::cout << "Draw by repetition.\n";
+        break;
+      case chess::SearchResult::Outcome::DrawByStalemate:
         std::cout << "Stalemate.\n";
+        break;
+      case chess::SearchResult::Outcome::InProgress:
+        if (!has_move) {
+          const bool side_in_check = chess::is_check(board, board.side_to_move);
+          if (side_in_check) {
+            const auto winner = chess::flip_side(board.side_to_move);
+            std::cout << "Checkmate! " << chess::to_string(winner) << " wins.\n";
+          } else {
+            std::cout << "Stalemate.\n";
+          }
+        }
+        break;
       }
       break;
     }

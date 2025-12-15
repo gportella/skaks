@@ -10,5 +10,6 @@ struct MoveHistory {
   std::array<std::uint64_t, MAX_PLY> key_history;
   int repetition_start = 0;
   int ply_count = 0;
+  std::array<uint8_t, MAX_PLY> repetition_counts;
 };
 } // namespace chess
