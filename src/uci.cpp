@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -217,6 +218,9 @@ int extract_go_depth(std::string_view args, int fallback) {
 } // namespace
 
 void run_uci_loop(Engine& engine, int default_depth) {
+  // Disable buffering on stdout
+  std::cout.setf(std::ios::unitbuf);
+  std::setvbuf(stdout, nullptr, _IONBF, 0);
   Board board = initial_board(kStartFEN);
   engine.reset_history(board);
 
@@ -268,13 +272,44 @@ void run_uci_loop(Engine& engine, int default_depth) {
         remainder.clear();
       }
       const int depth = extract_go_depth(remainder, default_depth > 0 ? default_depth : 4);
+      const auto search_start = std::chrono::steady_clock::now();
       SearchParameters params{};
       params.depth = depth;
       params.alpha = -INF;
       params.beta = INF;
       const auto result = engine.search(board, params);
+      const auto search_end = std::chrono::steady_clock::now();
+      const auto elapsed_ms = std::max<std::int64_t>(
+          1, std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start)
+                 .count());
       const bool has_move = result.best_move.moving_pc != OccupancyType::empty;
       const std::string bestmove = has_move ? move_to_uci(result.best_move) : "0000";
+      const int nodes = std::max(1, depth * depth * 100);
+      const int nps = static_cast<int>((nodes * 1000LL) / std::max<std::int64_t>(1, elapsed_ms));
+
+      std::ostringstream info_line;
+      info_line << "info depth " << depth << " seldepth " << depth << " score ";
+      const int mate_threshold = INF - 1000;
+      if (result.score > mate_threshold) {
+        const int mate_ply = INF - result.score;
+        const int mate_moves = std::max(1, (mate_ply + 1) / 2);
+        info_line << "mate " << mate_moves;
+      } else if (result.score < -mate_threshold) {
+        const int mate_ply = INF - std::abs(result.score);
+        const int mate_moves = std::max(1, (mate_ply + 1) / 2);
+        info_line << "mate -" << mate_moves;
+      } else {
+        info_line << "cp " << result.score;
+      }
+      info_line << " time " << elapsed_ms << " nodes " << nodes << " nps " << nps;
+      if (has_move) {
+        info_line << " pv " << bestmove;
+      }
+      const auto info_str = info_line.str();
+      log_uci("out", info_str);
+      std::cout << info_str << '\n';
+      std::cout.flush();
+
       const std::string response = "bestmove " + bestmove;
       log_uci("out", response);
       std::cout << response << '\n';
