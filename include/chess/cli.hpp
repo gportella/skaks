@@ -14,6 +14,7 @@ struct CliOptions {
   bool enable_profile = false;
   bool use_uci = true;
   bool self_play = false;
+  bool only_fen = false;
 };
 
 struct CliParseResult {

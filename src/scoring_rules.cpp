@@ -109,7 +109,7 @@ int evaluate_king_mobility(const Board& board) {
 
 int evaluate_attacking_pieces(const Board& board) {
   constexpr std::array<int, static_cast<std::size_t>(OccupancyType::bK) + 1> kThreatBase = {
-      0, 12, 30, 30, 45, 80, 540, 12, 30, 30, 45, 80, 540};
+      0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540};
 
   int attack_score = 0;
   for (std::size_t sq = 0; sq < 64; ++sq) {
@@ -197,11 +197,12 @@ int evaluate_board(const Board& board) {
   total_eval += evaluate_attacking_pieces(board);
   total_eval += evaluate_king_safety(board);
   total_eval += evaluate_king_mobility(board);
-  if (board.side_to_move == SideToMove::White) {
-    return total_eval; // Evaluation for White
-  } else {
-    return -total_eval; // Evaluation for Black
-  }
+  return total_eval;
+  // if (board.side_to_move == SideToMove::White) {
+  //   return total_eval; // Evaluation for White
+  // } else {
+  //   return -total_eval; // Evaluation for Black
+  // }
 }
 
 } // namespace chess

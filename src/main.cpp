@@ -48,8 +48,13 @@ int main(int argc, char** argv) {
     total_start = std::chrono::steady_clock::now();
   }
 
-  std::cout << "Board of color to move: " << board.side_to_move << "\n";
-  chess::terminal_board_print(board);
+  if (cli.options.only_fen) {
+    std::cout << chess::board_to_fen(board) << "\n";
+    std::cout.flush();
+  } else {
+    std::cout << "Board of color to move: " << board.side_to_move << "\n";
+    chess::terminal_board_print(board);
+  }
   int move_number = 1;
   const int max_full_moves = cli.options.max_full_moves;
 
@@ -59,8 +64,10 @@ int main(int argc, char** argv) {
       move_start = std::chrono::steady_clock::now();
     }
     const int current_full_move = (move_number / 2) + 1;
-    std::cout << "Move: " << current_full_move << " Ply: " << move_number << ", "
-              << board.side_to_move << " to move.\n";
+    if (!cli.options.only_fen) {
+      std::cout << "Move: " << current_full_move << " Ply: " << move_number << ", "
+                << board.side_to_move << " to move.\n";
+    }
     chess::SearchParameters params{};
     params.depth = cli.options.search_depth;
     params.alpha = -10000;
@@ -68,52 +75,64 @@ int main(int argc, char** argv) {
 
     auto result = engine.search(board, params);
 
-    if (profile) {
+    if (profile && !cli.options.only_fen) {
       const auto move_end = std::chrono::steady_clock::now();
       const auto elapsed =
           std::chrono::duration_cast<std::chrono::milliseconds>(move_end - move_start);
       std::cout << "[timing] search_ms=" << elapsed.count() << "\n";
     }
 
-    std::cout << "Best move score: " << result.score << "\n";
+    if (!cli.options.only_fen) {
+      std::cout << "Best move score: " << result.score << "\n";
+    }
 
     const bool has_move = result.best_move.moving_pc != chess::OccupancyType::empty;
     const auto outcome = result.outcome;
     if (!has_move || outcome != chess::SearchResult::Outcome::InProgress) {
-      switch (outcome) {
-      case chess::SearchResult::Outcome::Mate: {
-        const auto winner = chess::flip_side(board.side_to_move);
-        std::cout << "Checkmate! " << chess::to_string(winner) << " wins.\n";
-        break;
-      }
-      case chess::SearchResult::Outcome::DrawByRepetition:
-        std::cout << "Draw by repetition.\n";
-        break;
-      case chess::SearchResult::Outcome::DrawByStalemate:
-        std::cout << "Stalemate.\n";
-        break;
-      case chess::SearchResult::Outcome::InProgress:
-        if (!has_move) {
-          const bool side_in_check = chess::is_check(board, board.side_to_move);
-          if (side_in_check) {
-            const auto winner = chess::flip_side(board.side_to_move);
-            std::cout << "Checkmate! " << chess::to_string(winner) << " wins.\n";
-          } else {
-            std::cout << "Stalemate.\n";
-          }
+      if (!cli.options.only_fen) {
+        switch (outcome) {
+        case chess::SearchResult::Outcome::Mate: {
+          const auto winner = chess::flip_side(board.side_to_move);
+          std::cout << "Checkmate! " << chess::to_string(winner) << " wins.\n";
+          break;
         }
-        break;
+        case chess::SearchResult::Outcome::DrawByRepetition:
+          std::cout << "Draw by repetition.\n";
+          break;
+        case chess::SearchResult::Outcome::DrawByStalemate:
+          std::cout << "Stalemate.\n";
+          break;
+        case chess::SearchResult::Outcome::InProgress:
+          if (!has_move) {
+            const bool side_in_check = chess::is_check(board, board.side_to_move);
+            if (side_in_check) {
+              const auto winner = chess::flip_side(board.side_to_move);
+              std::cout << "Checkmate decide inProgress! " << chess::to_string(winner)
+                        << " wins.\n";
+            } else {
+              std::cout << "Stalemate.\n";
+            }
+          }
+          break;
+        }
       }
       break;
     }
 
-    std::cout << "Best move from " << chess::square_to_string(result.best_move.from) << " to "
-              << chess::square_to_string(result.best_move.to) << "\n";
+    if (!cli.options.only_fen) {
+      std::cout << "Best move from " << chess::square_to_string(result.best_move.from) << " to "
+                << chess::square_to_string(result.best_move.to) << "\n";
+    }
     const bool irreversible = chess::move_is_irreversible(result.best_move);
     chess::make_move(board, result.best_move);
     engine.record_position(board.position_key, irreversible);
-    chess::terminal_board_print(board);
-    std::cout << "FEN: " << chess::board_to_fen(board) << "\n\n";
+    if (cli.options.only_fen) {
+      std::cout << chess::board_to_fen(board) << "\n";
+      std::cout.flush();
+    } else {
+      chess::terminal_board_print(board);
+      std::cout << "FEN: " << chess::board_to_fen(board) << "\n\n";
+    }
     // board.side_to_move = chess::flip_side(board.side_to_move);
     move_number++;
 
@@ -121,7 +140,7 @@ int main(int argc, char** argv) {
       break;
     }
   }
-  if (board.is_terminal()) {
+  if (!cli.options.only_fen && board.is_terminal()) {
     std::cout << "Game over detected.\n";
     if (board.king_captured == chess::PieceColor::White) {
       std::cout << "Black wins!\n";
@@ -132,7 +151,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (profile) {
+  if (profile && !cli.options.only_fen) {
     const auto total_end = std::chrono::steady_clock::now();
     const auto elapsed =
         std::chrono::duration_cast<std::chrono::milliseconds>(total_end - total_start);

@@ -31,6 +31,22 @@ cmake --preset dev-release
 cmake --build --preset dev-release
 ```
 
+## Installing
+
+After building, install the `skaks` executable to your chosen prefix:
+
+```sh
+cmake --install build/debug
+```
+
+To place the binary directly in `~/bin`, configure with a custom install directory and override the prefix during install:
+
+```sh
+cmake --preset dev-debug -DSKAKS_INSTALL_BINDIR=.
+cmake --build --preset dev-debug
+cmake --install build/debug --prefix "$HOME/bin"
+```
+
 ## Testing
 
 ```sh

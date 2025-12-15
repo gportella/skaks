@@ -13,8 +13,9 @@ CliParseResult parse_cli(int argc, char** argv) {
                         cxxopts::value<int>()->default_value("4"))(
       "m,max-moves", "Maximum number of full moves to play",
       cxxopts::value<int>()->default_value(std::to_string(kMaxMovementCount)))(
-      "f,fen", "Start position in FEN notation", cxxopts::value<std::string>())(
-      "p,profile", "Enable profiling output")("u,uci", "Force UCI protocol mode")(
+      "f,fen", "Start position in FEN notation",
+      cxxopts::value<std::string>())("p,profile", "Enable profiling output")(
+      "u,uci", "Force UCI protocol mode")("o,onlyfen", "Print FEN only in self-play mode")(
       "s,self", "Run self-play CLI loop")("h,help", "Show this help message");
 
   try {
@@ -35,6 +36,7 @@ CliParseResult parse_cli(int argc, char** argv) {
     }
 
     result.options.enable_profile = parsed.count("profile") > 0;
+    result.options.only_fen = parsed.count("onlyfen") > 0;
 
     const bool want_uci = parsed.count("uci") > 0;
     const bool want_self = parsed.count("self") > 0;
@@ -46,6 +48,15 @@ CliParseResult parse_cli(int argc, char** argv) {
 
     result.options.self_play = want_self;
     result.options.use_uci = want_uci || !want_self;
+
+    if (!want_uci && !want_self) {
+      // No explicit mode requested: default to UCI when no extra args were provided.
+      const bool user_supplied_args = argc > 1;
+      if (user_supplied_args) {
+        result.options.self_play = true;
+        result.options.use_uci = false;
+      }
+    }
 
     if (result.options.search_depth < 0) {
       result.parse_error = true;

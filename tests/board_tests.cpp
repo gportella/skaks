@@ -27,3 +27,9 @@ TEST(BoardFen, RoundTripWithEnPassantAndNoCastling) {
   const auto board = parse_board(fen);
   EXPECT_EQ(chess::board_to_fen(board), fen);
 }
+
+TEST(BoardCheck, BlackKingNotInCheckInSamplePosition) {
+  const std::string fen = "Bk3r2/n6p/b5p1/p7/3P4/4R1P1/Pq3PQP/RN4K1 b - - 1 28";
+  auto board = chess::initial_board(fen);
+  EXPECT_FALSE(chess::is_check(board, chess::SideToMove::Black));
+}

@@ -16,6 +16,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(CompilerWarnings)
 include(Sanitizers)
+include(GNUInstallDirs)
+
+set(SKAKS_INSTALL_BINDIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH "Install directory for the skaks executable")
 
 add_subdirectory(src)
 

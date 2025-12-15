@@ -34,3 +34,7 @@ target_compile_features(skaks PUBLIC cxx_std_23)
 
 chess_set_default_warnings(skaks)
 chess_enable_sanitizers(skaks)
+
+install(TARGETS skaks
+  RUNTIME DESTINATION "${SKAKS_INSTALL_BINDIR}"
+)
