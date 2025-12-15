@@ -32,7 +32,14 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
   }
 
-  chess::Board board = chess::initial_board(cli.options.fen);
+  chess::Board board{};
+  try {
+    board = chess::initial_board(cli.options.fen);
+  } catch (const std::exception& ex) {
+    std::cerr << "Failed to load FEN: " << ex.what()
+              << "\nHint: pass custom positions with --fen \"<fen>\" or -f \"<fen>\"." << std::endl;
+    return EXIT_FAILURE;
+  }
   engine.reset_history(board);
 
   const bool profile = (std::getenv("SKAKS_PROFILE") != nullptr) || cli.options.enable_profile;

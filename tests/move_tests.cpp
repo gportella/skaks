@@ -383,6 +383,32 @@ TEST(MoveApplication, QueenCaptureAndUndoRestoresState) {
   EXPECT_EQ(queen_bb, expected);
 }
 
+TEST(MoveApplication, CapturingKingMarksStateAndUndoesCleanly) {
+  auto board = make_board("4k3/8/8/8/4Q3/8/8/4K3 w - - 0 1");
+  const auto original_black_king = board.king_positions[to_index(chess::PieceColor::Black)];
+
+  const chess::Move qxe8{static_cast<std::uint16_t>(to_index(chess::Square::E4)),
+                         static_cast<std::uint16_t>(to_index(chess::Square::E8)),
+                         chess::OccupancyType::wQ,
+                         chess::OccupancyType::bK,
+                         chess::OccupancyType::empty,
+                         0};
+
+  const auto undo = chess::make_move(board, qxe8);
+
+  EXPECT_EQ(board.pieces[to_index(chess::Square::E4)], chess::OccupancyType::empty);
+  EXPECT_EQ(board.pieces[to_index(chess::Square::E8)], chess::OccupancyType::wQ);
+  EXPECT_EQ(board.king_captured, chess::PieceColor::Black);
+  EXPECT_EQ(board.king_positions[to_index(chess::PieceColor::Black)], -1);
+
+  chess::undo_move(board, undo);
+
+  EXPECT_EQ(board.pieces[to_index(chess::Square::E4)], chess::OccupancyType::wQ);
+  EXPECT_EQ(board.pieces[to_index(chess::Square::E8)], chess::OccupancyType::bK);
+  EXPECT_EQ(board.king_captured, chess::PieceColor::None);
+  EXPECT_EQ(board.king_positions[to_index(chess::PieceColor::Black)], original_black_king);
+}
+
 TEST(MoveApplication, QuietPromotionUndoRestoresState) {
   auto board = make_board("k7/8/8/8/8/8/p7/1K6 b - - 0 1");
   const auto original = board;

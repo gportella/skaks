@@ -149,6 +149,12 @@ int evaluate_material(const Board& board) {
 int evaluate_board(const Board& board) {
   // Placeholder for board evaluation function
   int total_eval = 0;
+  if (board.king_captured == PieceColor::White) {
+    std::cout << "White king captured!\n";
+    return -100000; // Black wins
+  } else if (board.king_captured == PieceColor::Black) {
+    return 100000; // White wins
+  }
   total_eval += evaluate_pawn_center_control(board);
   total_eval += evaluate_center_control(board);
   total_eval += evaluate_material(board);
