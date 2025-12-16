@@ -8,6 +8,7 @@
 #include "chess/transposition_table.hpp"
 #include "chess/types.hpp"
 
+#include <array>
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,9 @@ struct SearchParameters {
   int depth = 0;
   int alpha = -INF;
   int beta = INF;
+  int pv_count = 1;
+  const uint32_t* root_excluded_moves = nullptr;
+  std::size_t root_excluded_count = 0;
 };
 
 struct SearchResult {
@@ -41,8 +45,35 @@ namespace detail {
 template <typename Evaluator>
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
                                Evaluator& evaluator, MoveHistory* history, TranspositionTable* tt,
-                               int ply, int repetition_start, bool is_pv, std::uint64_t& nodes) {
+                               int ply, int repetition_start, int ply_from_root, bool is_pv,
+                               std::uint64_t& nodes,
+                               const uint32_t* excluded_root_moves = nullptr,
+                               std::size_t excluded_root_count = 0) {
   ++nodes;
+
+  const bool apply_root_exclusions = excluded_root_moves != nullptr && excluded_root_count > 0 &&
+                                      ply_from_root == 0;
+
+  auto is_excluded_code = [&](uint32_t encoded) -> bool {
+    if (!apply_root_exclusions) {
+      return false;
+    }
+    for (std::size_t idx = 0; idx < excluded_root_count; ++idx) {
+      if (excluded_root_moves[idx] == encoded) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto is_excluded_move = [&](const Move& move) -> bool {
+    if (!apply_root_exclusions || move.moving_pc == OccupancyType::empty) {
+      return false;
+    }
+    const uint32_t encoded = encode_move(move.from, move.to, move.moving_pc, move.captured_pc,
+                                         move.promo_pc, move.flags);
+    return is_excluded_code(encoded);
+  };
 
   // Try to avoid repetitions
   if (history) {
@@ -73,29 +104,31 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   bool has_cached_move = false;
   Move cached_move{};
   if (tt && tt->probe(board.position_key, cached_entry)) {
-    const int cached_score = TranspositionTable::decode_score(cached_entry.score, ply);
-    if (cached_entry.depth >= depth) {
-      switch (cached_entry.flag) {
-      case TranspositionFlag::Exact:
-        return {cached_score, cached_entry.best_move, SearchResult::Outcome::InProgress};
-      case TranspositionFlag::LowerBound:
-        alpha = std::max(alpha, cached_score);
-        break;
-      case TranspositionFlag::UpperBound:
-        beta = std::min(beta, cached_score);
-        break;
-      case TranspositionFlag::None:
-        break;
+    if (!is_excluded_move(cached_entry.best_move)) {
+      const int cached_score = TranspositionTable::decode_score(cached_entry.score, ply);
+      if (cached_entry.depth >= depth) {
+        switch (cached_entry.flag) {
+        case TranspositionFlag::Exact:
+          return {cached_score, cached_entry.best_move, SearchResult::Outcome::InProgress};
+        case TranspositionFlag::LowerBound:
+          alpha = std::max(alpha, cached_score);
+          break;
+        case TranspositionFlag::UpperBound:
+          beta = std::min(beta, cached_score);
+          break;
+        case TranspositionFlag::None:
+          break;
+        }
+        // return if we can cutoff
+        if (alpha >= beta) {
+          return {cached_score, cached_entry.best_move, SearchResult::Outcome::InProgress};
+        }
       }
-      // return if we can cutoff
-      if (alpha >= beta) {
-        return {cached_score, cached_entry.best_move, SearchResult::Outcome::InProgress};
+      // use cached best move for move ordering
+      if (cached_entry.best_move.moving_pc != OccupancyType::empty) {
+        has_cached_move = true;
+        cached_move = cached_entry.best_move;
       }
-    }
-    // use cached best move for move ordering
-    if (cached_entry.best_move.moving_pc != OccupancyType::empty) {
-      has_cached_move = true;
-      cached_move = cached_entry.best_move;
     }
   }
 
@@ -116,6 +149,18 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   uint16_t move_count = 0;
   auto moves = generate_legal_moves(board, stm, move_count);
 
+  if (apply_root_exclusions) {
+    uint16_t write_idx = 0;
+    for (uint16_t i = 0; i < move_count; ++i) {
+      const uint32_t code = moves[i];
+      if (is_excluded_code(code)) {
+        continue;
+      }
+      moves[write_idx++] = code;
+    }
+    move_count = write_idx;
+  }
+
   // No legal moves: checkmate or stalemate, store in TT and return
   if (move_count == 0) {
     if (is_check(board, stm)) {
@@ -134,8 +179,12 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
 
   uint32_t tt_code = 0;
   if (has_cached_move) {
-    tt_code = encode_move(cached_move.from, cached_move.to, cached_move.moving_pc,
-                          cached_move.captured_pc, cached_move.promo_pc, cached_move.flags);
+    if (is_excluded_move(cached_move)) {
+      has_cached_move = false;
+    } else {
+      tt_code = encode_move(cached_move.from, cached_move.to, cached_move.moving_pc,
+                            cached_move.captured_pc, cached_move.promo_pc, cached_move.flags);
+    }
   }
   sort_moves(moves, move_count, tt_code);
 
@@ -178,7 +227,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
                                flip_side(stm), // or stm if you don’t want to flip
                                evaluator, history, tt,
                                ply + 1, // e.g., advance ply
-                               next_repetition_start, is_pv, nodes);
+                               next_repetition_start, ply_from_root + 1, is_pv, nodes,
+                               nullptr, 0);
     };
 
     bool need_full_search = true;
@@ -292,18 +342,116 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
     repetition_start = std::max(0, std::min(repetition_start, start_ply + 1));
   }
 
+  int max_root_moves = 0;
+  uint16_t move_count = 0;
+  generate_legal_moves(board, stm, move_count);
+  if (move_count == 0) {
+    return SearchResult{0, Move{}, SearchResult::Outcome::InProgress, 0, 0};
+  }
+  max_root_moves = move_count;
+  auto excluded_moves = std::array<uint32_t, kMaxMovementCount>{};
+  size_t excluded_count = 0;
+  if (params.root_excluded_moves && params.root_excluded_count > 0) {
+    const std::size_t copy_count =
+        std::min<std::size_t>(params.root_excluded_count, excluded_moves.size());
+    std::copy_n(params.root_excluded_moves, copy_count, excluded_moves.begin());
+    excluded_count = copy_count;
+  }
+  const std::size_t static_excluded_count = excluded_count;
+  const bool multi_pv = params.pv_count > 1;
   std::uint64_t nodes = 0;
-  bool is_pv = true;
-  auto result =
-      detail::alphabeta_minimax(board, params.depth, params.alpha, params.beta, stm, evaluator,
-                                history, tt, start_ply, repetition_start, is_pv, nodes);
+  int aspiration_window = ASPIRATION_WINDOW_INITIAL;
+  SearchResult best_result{};
+  SearchResult result{};
 
+  int best_score = 0;
+  for (int current_depth = 1; current_depth <= params.depth; ++current_depth) {
+    excluded_count = static_excluded_count;
+    int pv_generated = 0;
+    while (true) {
+      int alpha = -INF;
+      int beta = INF;
+      if (current_depth == 1 || best_result.best_move.moving_pc == OccupancyType::empty) {
+        alpha = -INF;
+        beta = INF;
+      } else {
+        alpha = std::max(best_score - aspiration_window, -MATE_BOUND);
+        beta = std::min(best_score + aspiration_window, MATE_BOUND);
+      }
+
+      int window = aspiration_window;
+      while (true) {
+        bool is_pv = true;
+        result = detail::alphabeta_minimax(board, current_depth, alpha, beta, stm, evaluator,
+                   history, tt, start_ply, repetition_start, 0, is_pv,
+                   nodes, excluded_count ? excluded_moves.data() : nullptr,
+                   excluded_count);
+        if (result.score <= alpha) {
+          if (alpha <= -MATE_BOUND) {
+            alpha = -INF;
+            beta = INF;
+          } else {
+            window = std::min(window * 2, ASPIRATION_WINDOW_MAX);
+            alpha = std::max(result.score - window, -MATE_BOUND);
+            beta = std::min(result.score + window, MATE_BOUND);
+            continue;
+          }
+        }
+        if (result.score >= beta) {
+          if (beta >= MATE_BOUND) {
+            alpha = -INF;
+            beta = INF;
+          } else {
+            window = std::min(window * 2, ASPIRATION_WINDOW_MAX);
+            alpha = std::max(result.score - window, -MATE_BOUND);
+            beta = std::min(result.score + window, MATE_BOUND);
+            continue;
+          }
+        }
+        break;
+      }
+
+      if (result.best_move.moving_pc == OccupancyType::empty || !max_root_moves) {
+        if (best_result.best_move.moving_pc == OccupancyType::empty) {
+          best_result = result;
+          best_score = result.score;
+        }
+        aspiration_window = window;
+        break;
+      }
+
+      ++pv_generated;
+      const bool improving =
+          best_result.best_move.moving_pc == OccupancyType::empty
+              ? true
+              : (stm == SideToMove::White) ? (result.score > best_score)
+                                           : (result.score < best_score);
+      if (improving) {
+        best_result = result;
+        best_score = result.score;
+      }
+
+      const bool can_extend = multi_pv && pv_generated < params.pv_count;
+      if (can_extend && excluded_count < excluded_moves.size()) {
+        excluded_moves[excluded_count++] = encode_move(
+            result.best_move.from, result.best_move.to, result.best_move.moving_pc,
+            result.best_move.captured_pc, result.best_move.promo_pc, result.best_move.flags);
+        aspiration_window = ASPIRATION_WINDOW_INITIAL;
+        continue;
+      }
+
+      aspiration_window = window;
+      break;
+    }
+  }
   if (history) {
     history->ply_count = base_ply;
   }
 
-  result.nodes = nodes;
-  return result;
+  SearchResult final_result =
+      best_result.best_move.moving_pc != OccupancyType::empty ? best_result : result;
+  final_result.nodes = nodes;
+  return final_result;
 }
 
 inline SearchResult search_position(Board& board, SideToMove stm, const SearchParameters& params) {
