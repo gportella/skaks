@@ -8,6 +8,8 @@ namespace chess {
 inline constexpr int INF = 1000000;
 inline constexpr int MATE_SCORE = 90000;
 inline constexpr int MATE_BOUND = MATE_SCORE + 1024;
+inline constexpr int ASPIRATION_WINDOW_INITIAL = 800;
+inline constexpr int ASPIRATION_WINDOW_MAX = 6400;
 inline constexpr int MOBILITY_SCALING = 15;
 inline constexpr int REPETITION_PENALTY = 250;
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES = 3; // max 3 pieces change per move
