@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Evaluate skaks tactical performance on a CSV puzzle suite."""
 
 import argparse
@@ -10,6 +10,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
+
+try:
+    import chess
+except ImportError:  # pragma: no cover
+    chess = None
+    print("chess library not available, cannot parse EPD files.", file=sys.stderr)
 
 DEFAULT_PUZZLE_FILE = Path(__file__).resolve().with_name("puzzles.csv")
 DEFAULT_ENGINE = "skaks"
@@ -107,6 +113,13 @@ class UciEngine:
 
 
 def load_puzzles(path: Path, limit: Optional[int]) -> List[Puzzle]:
+    suffix = path.suffix.lower()
+    if suffix == ".epd":
+        return load_puzzles_epd(path, limit)
+    return load_puzzles_csv(path, limit)
+
+
+def load_puzzles_csv(path: Path, limit: Optional[int]) -> List[Puzzle]:
     with path.open("r", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         puzzles: List[Puzzle] = []
@@ -114,6 +127,58 @@ def load_puzzles(path: Path, limit: Optional[int]) -> List[Puzzle]:
             if limit is not None and len(puzzles) >= limit:
                 break
             puzzles.append(Puzzle.from_row(row))
+    return puzzles
+
+
+def parse_epd_line(line: str) -> Optional[Puzzle]:
+    stripped = line.split("#", 1)[0].strip()
+    if not stripped or chess is None:
+        return None
+
+    segments = [segment.strip() for segment in stripped.split(";") if segment.strip()]
+    if not segments:
+        return None
+
+    epd_fragment = segments[0]
+
+    board = chess.Board()
+    try:
+        operations = board.set_epd(epd_fragment)
+    except ValueError:
+        return None
+
+    best_moves = operations.get("bm")
+    move_list = [move.uci().lower() for move in (best_moves or []) if move is not None]
+    if not move_list:
+        return None
+
+    identifier = epd_fragment
+    for segment in segments[1:]:
+        if segment.lower().startswith("id "):
+            candidate = segment[3:].strip()
+            if (
+                candidate.startswith('"')
+                and candidate.endswith('"')
+                and len(candidate) >= 2
+            ):
+                candidate = candidate[1:-1]
+            identifier = candidate or identifier
+            break
+
+    fen = board.fen()
+    return Puzzle(identifier=identifier, fen=fen, moves=move_list)
+
+
+def load_puzzles_epd(path: Path, limit: Optional[int]) -> List[Puzzle]:
+    puzzles: List[Puzzle] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            parsed = parse_epd_line(line)
+            if parsed is None:
+                continue
+            puzzles.append(parsed)
+            if limit is not None and len(puzzles) >= limit:
+                break
     return puzzles
 
 
@@ -154,7 +219,7 @@ def run_suite(
                 failures.append(
                     (
                         puzzle,
-                        f"expected {expected_move} at ply {ply_idx}, got {display}",
+                        f"{expected_move} at ply {ply_idx}, computed {display}",
                     )
                 )
                 puzzle_solved = False
@@ -185,7 +250,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         "--puzzles",
         type=Path,
         default=DEFAULT_PUZZLE_FILE,
-        help="CSV file with puzzle data (default: puzzles.csv next to this script)",
+        help="CSV or EPD file with puzzle data (default: puzzles.csv next to this script)",
     )
     parser.add_argument(
         "--engine",
@@ -216,7 +281,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         "--progress-interval",
         type=int,
         default=10,
-        help="Report progress every N puzzles (default: 50)",
+        help="Report progress every N puzzles (default: 10)",
     )
     parser.add_argument(
         "--show-failures", action="store_true", help="Print details for failed puzzles"
@@ -255,7 +320,7 @@ def main(argv: List[str]) -> int:
         print("Failures:")
         for puzzle, predicted in failures:
             expected = puzzle.moves[0] if puzzle.moves else ""
-            print(f"  {puzzle.identifier}: expected {expected}, got {predicted}")
+            print(f"  {puzzle.identifier}: {expected} ==> {predicted}")
 
     return 0
 
