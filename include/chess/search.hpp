@@ -41,7 +41,7 @@ namespace detail {
 template <typename Evaluator>
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
                                Evaluator& evaluator, MoveHistory* history, TranspositionTable* tt,
-                               int ply, int repetition_start, std::uint64_t& nodes) {
+                               int ply, int repetition_start, bool is_pv, std::uint64_t& nodes) {
   ++nodes;
 
   // Try to avoid repetitions
@@ -142,20 +142,91 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{},
                        SearchResult::Outcome::InProgress};
 
+  int moves_tried = 0;
+
   for (uint16_t i = 0; i < move_count; ++i) {
-    int check_extension = 0;
+    int child_depth = depth - 1;
+    moves_tried += 1;
+    bool is_first_move = (moves_tried == 1);
+
+    //  The main move
     Move move = decode_move(moves[i]);
     Undo undo = make_move(board, move);
+    //
+
     const bool irreversible = move_is_irreversible(move);
     const int next_repetition_start = irreversible ? (ply + 1) : repetition_start;
-    if (is_check(board, flip_side(stm)) && depth > 0) {
-      // Optional: implement check extension if desired
-      check_extension = 1;
+
+    bool in_check_after_move = child_depth > 0 ? is_check(board, stm) : false;
+    if (in_check_after_move) {
+      child_depth += CHECK_EXTENSION;
     }
-    auto child = alphabeta_minimax(board, depth - 1 + check_extension, alpha, beta, flip_side(stm),
-                                   evaluator, history, tt, ply + 1, next_repetition_start, nodes);
+
+    // quit early ??
+    int reduction = 0;
+    bool is_capture = undo.captured_pc != OccupancyType::empty;
+    if (child_depth > 2 && depth >= 0 && moves_tried > 3 && !is_capture && !in_check_after_move &&
+        !is_check(board, flip_side(stm))) {
+      reduction = 1;
+    }
+
+    int search_depth = std::max(0, child_depth);
+
+    // Lambda to run search with given depth/alpha/beta easy reuse
+    auto run_search = [&](int depth_to_use, int a_val, int b_val, bool is_pv) -> SearchResult {
+      // Reuse fixed params; only vary depth/alpha/beta here.
+      return alphabeta_minimax(board, depth_to_use, a_val, b_val,
+                               flip_side(stm), // or stm if you don’t want to flip
+                               evaluator, history, tt,
+                               ply + 1, // e.g., advance ply
+                               next_repetition_start, is_pv, nodes);
+    };
+
+    bool need_full_search = true;
+    SearchResult child = {};
+    if (reduction > 0) {
+      // First do a null-window search at reduced depth
+      int reduced_depth = std::max(0, search_depth - reduction);
+      child = run_search(reduced_depth, alpha, beta, false /*pv_flag*/);
+      if (stm == SideToMove::White) {
+        need_full_search = child.score > alpha;
+      } else {
+        need_full_search = child.score < beta;
+      }
+    }
+
+    bool use_pvs = false;
+    int narrow_alpha = alpha;
+    int narrow_beta = beta;
+
+    if (need_full_search) {
+      use_pvs = is_pv && !is_first_move && (search_depth >= 0) && (alpha > -MATE_BOUND) &&
+                beta < MATE_BOUND && (beta - alpha) > 1;
+      if (stm == SideToMove::White) {
+        narrow_beta = std::min(beta, alpha + 1);
+        use_pvs = narrow_alpha >= narrow_beta;
+      } else {
+        narrow_alpha = std::max(alpha, beta - 1);
+        use_pvs = narrow_beta <= narrow_alpha;
+      }
+      if (use_pvs) {
+        child = run_search(search_depth, narrow_alpha, narrow_beta, true /*pv_flag*/);
+        if (child.score >= narrow_beta) {
+          // more search
+          child = run_search(search_depth, alpha, beta, is_pv);
+        }
+      } else {
+        // Full window search
+        child = run_search(search_depth, alpha, beta, is_pv && is_first_move);
+      }
+    }
+
     int score = child.score;
+
+    // UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO
     undo_move(board, undo);
+    // UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO UNDO
+
     if (ply + 1 < MAX_PLY && history) {
       history->repetition_counts[static_cast<std::size_t>(ply + 1)] = 0;
     }
@@ -223,9 +294,10 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
   }
 
   std::uint64_t nodes = 0;
+  bool is_pv = false;
   auto result =
       detail::alphabeta_minimax(board, params.depth, params.alpha, params.beta, stm, evaluator,
-                                history, tt, start_ply, repetition_start, nodes);
+                                history, tt, start_ply, repetition_start, is_pv, nodes);
 
   if (history) {
     history->ply_count = base_ply;
