@@ -299,8 +299,13 @@ inline Undo make_move(Board& b, const Move& m) {
                           m.captured_pc != OccupancyType::empty)
                              ? 0
                              : b.fifty_move_counter + 1;
-  b.en_passant = -1; // Reset en passant square
+  b.en_passant = -1;
   b.ep_square = 0;
+  if (flag_is_double_push(m.flags)) {
+    const int mid = (m.from + m.to) / 2;
+    b.en_passant = mid;
+    b.ep_square = bb_of(mid);
+  }
   update_castling_rights(b, m);
 
   // Switch side to move

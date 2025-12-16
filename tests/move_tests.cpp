@@ -383,6 +383,35 @@ TEST(MoveApplication, QueenCaptureAndUndoRestoresState) {
   EXPECT_EQ(queen_bb, expected);
 }
 
+TEST(MoveApplication, DoublePushCreatesEnPassantTargetForOpponent) {
+  auto board = make_board("4k3/3p4/8/4P3/8/8/8/4K3 b - - 0 1");
+
+  const chess::Move d5{static_cast<std::uint16_t>(to_index(chess::Square::D7)),
+                       static_cast<std::uint16_t>(to_index(chess::Square::D5)),
+                       chess::OccupancyType::bP,
+                       chess::OccupancyType::empty,
+                       chess::OccupancyType::empty,
+                       chess::kFlagDoublePush};
+
+  const auto undo = chess::make_move(board, d5);
+
+  EXPECT_EQ(board.side_to_move, chess::SideToMove::White);
+  EXPECT_EQ(board.en_passant, to_index(chess::Square::D6));
+  EXPECT_EQ(board.ep_square, chess::bb_of(to_index(chess::Square::D6)));
+
+  std::uint16_t move_count = 0;
+  auto legal = chess::generate_legal_moves(board, chess::SideToMove::White, move_count);
+  const auto ep_move =
+      encode_move(chess::Square::E5, chess::Square::D6, chess::OccupancyType::wP,
+                  chess::OccupancyType::empty, chess::OccupancyType::empty, chess::kFlagEnPassant);
+  const auto it = std::find(legal.begin(), legal.begin() + move_count, ep_move);
+  EXPECT_NE(it, legal.begin() + move_count);
+
+  chess::undo_move(board, undo);
+  EXPECT_EQ(board.en_passant, -1);
+  EXPECT_EQ(board.ep_square, 0);
+}
+
 TEST(MoveApplication, CapturingKingMarksStateAndUndoesCleanly) {
   auto board = make_board("4k3/8/8/8/4Q3/8/8/4K3 w - - 0 1");
   const auto original_black_king = board.king_positions[to_index(chess::PieceColor::Black)];
