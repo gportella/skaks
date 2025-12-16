@@ -24,7 +24,7 @@ FEN_CASES = [
 ]
 
 PERF_ITERS = 3
-SEARCH_DEPTH = 4
+SEARCH_DEPTH = 8
 OUTPUT_FILE = Path("perf_runs.log")
 
 

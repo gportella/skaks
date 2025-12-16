@@ -43,7 +43,9 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
     history.key_history[idx] = board.position_key;
   }
 
-  auto evaluator = [eng_ptr = &engine](const Board& state) { return eng_ptr->evaluate(state); };
+  EvaluatorFn evaluator = [eng_ptr = &engine](const Board& state) {
+    return eng_ptr->evaluate(state);
+  };
 
   const int base_ply = history.ply_count;
   const int repetition_start = history.repetition_start;

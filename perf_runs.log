@@ -27,3 +27,65 @@ Optimizations:
 [perf] iter=2/3 nodes=1126 elapsed_ms=0 nps=0
 [perf] iter=3/3 nodes=1126 elapsed_ms=0 nps=0
 [perf] total_nodes=3378 total_ms=0 total_nps=0 avg_nodes=1126 avg_ms=0
+=== perf snapshot 2025-12-16T22:43:24 ===
+binary: /usr/local/bin/skaks
+--- version ---
+skaks version 0.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+--- perf ---
+[case] startpos
+[perf] depth=4 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=6950 elapsed_ms=8 nps=868750
+[perf] iter=2/3 nodes=6950 elapsed_ms=9 nps=772222
+[perf] iter=3/3 nodes=6950 elapsed_ms=9 nps=772222
+[perf] total_nodes=20850 total_ms=26 total_nps=801923 avg_nodes=6950 avg_ms=8
+[case] balanced_midgame
+[perf] depth=4 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=14267 elapsed_ms=25 nps=570680
+[perf] iter=2/3 nodes=14267 elapsed_ms=25 nps=570680
+[perf] iter=3/3 nodes=14267 elapsed_ms=25 nps=570680
+[perf] total_nodes=42801 total_ms=75 total_nps=570680 avg_nodes=14267 avg_ms=25
+[case] simplified_endgame
+[perf] depth=4 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=611 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=611 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=611 elapsed_ms=0 nps=0
+[perf] total_nodes=1833 total_ms=0 total_nps=0 avg_nodes=611 avg_ms=0
+=== perf snapshot 2025-12-16T22:49:52 ===
+binary: /usr/local/bin/skaks
+--- version ---
+skaks version 0.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+--- perf ---
+[case] startpos
+[perf] depth=8 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=4494098 elapsed_ms=6678 nps=672970
+[perf] iter=2/3 nodes=4494098 elapsed_ms=6503 nps=691080
+[perf] iter=3/3 nodes=4494098 elapsed_ms=6482 nps=693319
+[perf] total_nodes=13482294 total_ms=19663 total_nps=685668 avg_nodes=4494098 avg_ms=6554
+[case] balanced_midgame
+[perf] depth=8 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=7160648 elapsed_ms=14014 nps=510963
+[perf] iter=2/3 nodes=7160648 elapsed_ms=14156 nps=505838
+[perf] iter=3/3 nodes=7160648 elapsed_ms=14084 nps=508424
+[perf] total_nodes=21481944 total_ms=42254 total_nps=508400 avg_nodes=7160648 avg_ms=14084
+[case] simplified_endgame
+[perf] depth=8 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=31799 elapsed_ms=21 nps=1514238
+[perf] iter=2/3 nodes=31799 elapsed_ms=20 nps=1589950
+[perf] iter=3/3 nodes=31799 elapsed_ms=20 nps=1589950
+[perf] total_nodes=95397 total_ms=61 total_nps=1563885 avg_nodes=31799 avg_ms=20
