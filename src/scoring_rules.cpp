@@ -4,6 +4,7 @@
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
 #include "chess/defaults.hpp"
+#include "chess/pins.hpp"
 #include "chess/pst_tables.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
@@ -211,6 +212,66 @@ int evaluate_pst(const Board& board) {
   return score;
 }
 
+int evaluate_pins(const Board& board) {
+  int score = 0;
+  auto pin_white = build_pinned_map(board, SideToMove::White);
+  auto pin_black = build_pinned_map(board, SideToMove::Black);
+  auto apply_penalty = [&](const PinnedBitBoardDirections& entry, int base_penalty,
+                           int mobility_penalty, int side_sign) {
+    if (entry.mask == 0) {
+      return;
+    }
+    const int mobility = popcount_bitboard(entry.mask);
+    score += side_sign * (base_penalty + mobility_penalty * mobility);
+  };
+  for (std::size_t sq = 0; sq < 64; ++sq) {
+    const auto piece = board.pieces[sq];
+    if (piece == OccupancyType::empty) {
+      continue;
+    }
+    const bool is_white_piece = is_white(piece);
+    const auto& pin_map = is_white_piece ? pin_white : pin_black;
+    const int side_sign = is_white_piece ? -1 : 1;
+
+    switch (piece) {
+    case OccupancyType::wB:
+    case OccupancyType::bB: {
+      const auto entry = pin_map.bishop_pins[sq];
+      apply_penalty(entry, 12, 2, side_sign);
+      break;
+    }
+    case OccupancyType::wR:
+    case OccupancyType::bR: {
+      const auto entry = pin_map.rook_pins[sq];
+      apply_penalty(entry, 6, 1, side_sign);
+      break;
+    }
+    case OccupancyType::wQ:
+    case OccupancyType::bQ:
+      break;
+    case OccupancyType::wN:
+    case OccupancyType::bN: {
+      const auto entry = pin_map.knight_pins[sq];
+      apply_penalty(entry, 15, 0, side_sign);
+      break;
+    }
+    case OccupancyType::wP:
+    case OccupancyType::bP: {
+      const auto entry = pin_map.pawn_pins[sq];
+      const bool is_diagonal_pin =
+          entry.direction == MoveDirection::NE || entry.direction == MoveDirection::NW ||
+          entry.direction == MoveDirection::SE || entry.direction == MoveDirection::SW;
+      const int base = is_diagonal_pin ? 10 : 6;
+      apply_penalty(entry, base, 2, side_sign);
+      break;
+    }
+    default:
+      break;
+    }
+  }
+  return score;
+}
+
 // Final evaluation: strictly White-centric; do not flip by side_to_move
 int evaluate_board(const Board& board) {
   if (board.king_captured == PieceColor::White) {
@@ -226,6 +287,7 @@ int evaluate_board(const Board& board) {
   total_eval += evaluate_attacking_pieces(board);
   total_eval += evaluate_king_safety(board);
   total_eval += evaluate_king_mobility(board);
+  total_eval += evaluate_pins(board);
   total_eval += evaluate_pst(board);
 
   return total_eval; // White-centric score

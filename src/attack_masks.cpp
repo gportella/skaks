@@ -202,8 +202,8 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
 
-      // Capture from file-right (origin to-7), guard destination not on file A
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
+      // Capture from file-right (origin to-7), guard destination not on file H
+      if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to - 7;
         if ((pawns >> from) & 1ULL) {
           uint32_t m = encode_move(from, to,
@@ -215,8 +215,8 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
           out[move_count++] = m;
         }
       }
-      // Capture from file-left (origin to-9), guard destination not on file H
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
+      // Capture from file-left (origin to-9), guard destination not on file A
+      if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to - 9;
         if ((pawns >> from) & 1ULL) {
           uint32_t m = encode_move(from, to,
@@ -255,7 +255,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
 
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
+      if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to - 7;
         if ((pawns >> from) & 1ULL) {
           OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
@@ -266,7 +266,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
           out[move_count++] = encode_move(from, to, OccupancyType::wP, cap, OccupancyType::wN, 0);
         }
       }
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
+      if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to - 9;
         if ((pawns >> from) & 1ULL) {
           OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
@@ -286,7 +286,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
     while (dst) {
       int to = poplsb(dst);
 
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
+      if ((Bitboard(1) << to) & NOT_FILE_H) {
         int from = to - 7;
         if ((pawns >> from) & 1ULL) {
           assert(move_count + 1 < kMaxMovementCount);
@@ -296,7 +296,7 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
                                           /*flags=*/kFlagEnPassant); // EP flag
         }
       }
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
+      if ((Bitboard(1) << to) & NOT_FILE_A) {
         int from = to - 9;
         if ((pawns >> from) & 1ULL) {
           assert(move_count + 1 < kMaxMovementCount);

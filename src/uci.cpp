@@ -144,6 +144,8 @@ bool apply_uci_move(Board& board, Engine& engine, std::string_view token) {
     engine.record_position(board.position_key, move_is_irreversible(move));
     return true;
   }
+  const char stm = board.side_to_move == SideToMove::White ? 'w' : 'b';
+  log_uci("warn", std::string("failed to apply move (") + stm + ") " + std::string(token));
   return false;
 }
 
