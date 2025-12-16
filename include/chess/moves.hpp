@@ -141,4 +141,6 @@ std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, S
                                                            uint16_t& move_count);
 std::array<uint32_t, kMaxMovementCount> generate_legal_moves(Board& board, SideToMove stm,
                                                              uint16_t& move_count);
+void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count,
+                uint32_t tt_code = 0);
 } // namespace chess

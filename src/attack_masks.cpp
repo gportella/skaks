@@ -6,6 +6,7 @@
 #include "chess/defaults.hpp"
 #include "chess/types.hpp"
 
+#include <algorithm>
 #include <assert.h>
 #include <string>
 #include <string_view>
@@ -821,35 +822,36 @@ CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
   return rights;
 }
 
-int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
-  static const int scores[13] = {
-      0,   100, 320, 330, 500, 900,  20000, // empty, P, N, B, R, Q, K
-      100, 320, 330, 500, 900, 20000        // empty, p, n, b, r, q, k
-  };
-  return scores[static_cast<std::size_t>(captured)] * 10 - scores[static_cast<std::size_t>(piece)];
-}
+// int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
+//   static const int scores[13] = {
+//       0,   100, 320, 330, 500, 900,  20000, // empty, P, N, B, R, Q, K
+//       100, 320, 330, 500, 900, 20000        // empty, p, n, b, r, q, k
+//   };
+//   return scores[static_cast<std::size_t>(captured)] * 10 -
+//   scores[static_cast<std::size_t>(piece)];
+// }
 
-void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count) {
-  // Simple bubble sort based on MVV-LVA heuristic
-  for (uint16_t i = 0; i < move_count; ++i) {
-    for (uint16_t j = 0; j < move_count - i - 1; ++j) {
-      uint32_t m1 = moves[j];
-      uint32_t m2 = moves[j + 1];
+// void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count) {
+//   // Simple bubble sort based on MVV-LVA heuristic
+//   for (uint16_t i = 0; i < move_count; ++i) {
+//     for (uint16_t j = 0; j < move_count - i - 1; ++j) {
+//       uint32_t m1 = moves[j];
+//       uint32_t m2 = moves[j + 1];
 
-      OccupancyType cap1 = static_cast<OccupancyType>(move_captured(m1));
-      OccupancyType cap2 = static_cast<OccupancyType>(move_captured(m2));
-      OccupancyType piece1 = static_cast<OccupancyType>(move_piece(m1));
-      OccupancyType piece2 = static_cast<OccupancyType>(move_piece(m2));
+//       OccupancyType cap1 = static_cast<OccupancyType>(move_captured(m1));
+//       OccupancyType cap2 = static_cast<OccupancyType>(move_captured(m2));
+//       OccupancyType piece1 = static_cast<OccupancyType>(move_piece(m1));
+//       OccupancyType piece2 = static_cast<OccupancyType>(move_piece(m2));
 
-      int score1 = mvv_lva_score(cap1, piece1);
-      int score2 = mvv_lva_score(cap2, piece2);
+//       int score1 = mvv_lva_score(cap1, piece1);
+//       int score2 = mvv_lva_score(cap2, piece2);
 
-      if (score1 < score2) {
-        std::swap(moves[j], moves[j + 1]);
-      }
-    }
-  }
-}
+//       if (score1 < score2) {
+//         std::swap(moves[j], moves[j + 1]);
+//       }
+//     }
+//   }
+// }
 
 void emit_all_moves(const Board& board, SideToMove stm,
                     std::array<uint32_t, kMaxMovementCount>& out, uint16_t& move_count) {
@@ -864,7 +866,6 @@ void emit_all_moves(const Board& board, SideToMove stm,
   emit_rook_moves(board, stm, out, move_count);
   emit_queen_moves(board, stm, out, move_count);
   emit_king_moves(board, stm, out, move_count);
-  sort_moves(out, move_count);
 }
 
 } // namespace chess

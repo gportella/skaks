@@ -14,6 +14,49 @@
 
 namespace chess {
 
+struct MoveKey {
+  uint32_t code;
+  int key; // higher is better
+};
+
+inline int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
+  static const int scores[13] = {0, 100, 320, 330, 500, 900, 20000, 100, 320, 330, 500, 900, 20000};
+  return scores[static_cast<size_t>(captured)] * 10 - scores[static_cast<size_t>(piece)];
+}
+
+// Order: ttMove first, then captures by MVV-LVA, then quiets
+void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count,
+                uint32_t tt_code) {
+  std::array<MoveKey, kMaxMovementCount> keys;
+
+  for (uint16_t i = 0; i < move_count; ++i) {
+    uint32_t m = moves[i];
+    int key = 0;
+
+    if (tt_code != 0 && m == tt_code) {
+      key = 2'000'000; // force first
+    } else {
+      const uint16_t cap_raw = move_captured(m);
+      const bool is_capture = cap_raw != static_cast<uint8_t>(OccupancyType::empty);
+      if (is_capture) {
+        auto cap = static_cast<OccupancyType>(cap_raw);
+        auto pc = static_cast<OccupancyType>(move_piece(m));
+        key = 1'000'000 + mvv_lva_score(cap, pc);
+      } else {
+        key = 100'000; // quiets after captures
+      }
+    }
+
+    keys[i] = {m, key};
+  }
+
+  std::stable_sort(keys.begin(), keys.begin() + move_count,
+                   [](const MoveKey& a, const MoveKey& b) { return a.key > b.key; });
+
+  for (uint16_t i = 0; i < move_count; ++i)
+    moves[i] = keys[i].code;
+}
+
 std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, SideToMove stm,
                                                            uint16_t& move_count) {
   std::array<uint32_t, kMaxMovementCount> moves{};

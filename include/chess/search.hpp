@@ -43,6 +43,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
                                Evaluator& evaluator, MoveHistory* history, TranspositionTable* tt,
                                int ply, int repetition_start, std::uint64_t& nodes) {
   ++nodes;
+
+  // Try to avoid repetitions
   if (history) {
     if (ply < MAX_PLY) {
       history->key_history[static_cast<std::size_t>(ply)] = board.position_key;
@@ -66,6 +68,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   int alpha_base = alpha;
   int beta_base = beta;
 
+  // Transposition Table Lookup
   TranspositionEntry cached_entry;
   bool has_cached_move = false;
   Move cached_move{};
@@ -84,10 +87,12 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
       case TranspositionFlag::None:
         break;
       }
+      // return if we can cutoff
       if (alpha >= beta) {
         return {cached_score, cached_entry.best_move, SearchResult::Outcome::InProgress};
       }
     }
+    // use cached best move for move ordering
     if (cached_entry.best_move.moving_pc != OccupancyType::empty) {
       has_cached_move = true;
       cached_move = cached_entry.best_move;
@@ -97,16 +102,21 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   alpha_base = alpha;
   beta_base = beta;
 
+  // Leaf node: evaluate
   if (depth == 0) {
     const int eval = evaluator(static_cast<const Board&>(board));
+    // Store in TT
     if (tt) {
       tt->store(board.position_key, depth, eval, TranspositionFlag::Exact, Move{}, ply);
     }
     return {eval, Move{}, SearchResult::Outcome::InProgress};
   }
 
+  // Generate legal moves
   uint16_t move_count = 0;
   auto moves = generate_legal_moves(board, stm, move_count);
+
+  // No legal moves: checkmate or stalemate, store in TT and return
   if (move_count == 0) {
     if (is_check(board, stm)) {
       const int mate_score = (stm == SideToMove::White) ? (-INF + ply) : (INF - ply);
@@ -122,17 +132,12 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     return {draw_score, Move{}, SearchResult::Outcome::DrawByStalemate};
   }
 
+  uint32_t tt_code = 0;
   if (has_cached_move) {
-    const auto cached_code =
-        encode_move(cached_move.from, cached_move.to, cached_move.moving_pc,
-                    cached_move.captured_pc, cached_move.promo_pc, cached_move.flags);
-    for (uint16_t i = 0; i < move_count; ++i) {
-      if (moves[i] == cached_code) {
-        std::swap(moves[0], moves[i]);
-        break;
-      }
-    }
+    tt_code = encode_move(cached_move.from, cached_move.to, cached_move.moving_pc,
+                          cached_move.captured_pc, cached_move.promo_pc, cached_move.flags);
   }
+  sort_moves(moves, move_count, tt_code);
 
   SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{},
                        SearchResult::Outcome::InProgress};

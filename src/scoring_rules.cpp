@@ -12,7 +12,6 @@
 
 namespace chess {
 
-// Constants (adjust as needed)
 constexpr int CHECK_PENALTY = 100;   // penalty/bonus for king in check
 constexpr int PAWN_SHIELD_BONUS = 5; // small bonus per nearby pawn to own king
 constexpr int CASTLING_BONUS = 15;   // modest bonus if castled
