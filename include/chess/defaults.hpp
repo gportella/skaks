@@ -10,7 +10,6 @@ inline constexpr int MATE_SCORE = 90000;
 inline constexpr int MATE_BOUND = MATE_SCORE + 1024;
 inline constexpr int MOBILITY_SCALING = 15;
 inline constexpr int REPETITION_PENALTY = 250;
-inline constexpr int CHECK_EXTENSION = 2;
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES = 3; // max 3 pieces change per move
                                                    // (castle+capture || capture promotion)
 inline constexpr std::array<int, 8> kRanks{0, 1, 2, 3, 4, 5, 6, 7};

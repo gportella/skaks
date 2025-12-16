@@ -151,10 +151,12 @@ def run_suite(
 
             if predicted != expected_move:
                 display = predicted if predicted is not None else "no-move"
-                failures.append((
-                    puzzle,
-                    f"expected {expected_move} at ply {ply_idx}, got {display}",
-                ))
+                failures.append(
+                    (
+                        puzzle,
+                        f"expected {expected_move} at ply {ply_idx}, got {display}",
+                    )
+                )
                 puzzle_solved = False
                 break
 
@@ -213,7 +215,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--progress-interval",
         type=int,
-        default=50,
+        default=10,
         help="Report progress every N puzzles (default: 50)",
     )
     parser.add_argument(

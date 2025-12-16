@@ -157,16 +157,15 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     const bool irreversible = move_is_irreversible(move);
     const int next_repetition_start = irreversible ? (ply + 1) : repetition_start;
 
-    bool in_check_after_move = child_depth > 0 ? is_check(board, stm) : false;
-    if (in_check_after_move) {
-      child_depth += CHECK_EXTENSION;
+    const bool in_check_after_move = is_check(board, flip_side(stm));
+    if (child_depth == 0 && in_check_after_move && ply < static_cast<int>(MAX_PLY) - 1) {
+      child_depth = 1;
     }
 
     // quit early ??
     int reduction = 0;
-    bool is_capture = undo.captured_pc != OccupancyType::empty;
-    if (child_depth > 2 && depth >= 0 && moves_tried > 3 && !is_capture && !in_check_after_move &&
-        !is_check(board, flip_side(stm))) {
+    const bool is_capture = undo.captured_pc != OccupancyType::empty;
+    if (child_depth > 2 && depth >= 0 && moves_tried > 3 && !is_capture && !in_check_after_move) {
       reduction = 1;
     }
 
@@ -204,10 +203,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
                 beta < MATE_BOUND && (beta - alpha) > 1;
       if (stm == SideToMove::White) {
         narrow_beta = std::min(beta, alpha + 1);
-        use_pvs = narrow_alpha >= narrow_beta;
+        use_pvs = use_pvs && narrow_alpha <= narrow_beta;
       } else {
         narrow_alpha = std::max(alpha, beta - 1);
-        use_pvs = narrow_beta <= narrow_alpha;
+        use_pvs = use_pvs && narrow_beta >= narrow_alpha;
       }
       if (use_pvs) {
         child = run_search(search_depth, narrow_alpha, narrow_beta, true /*pv_flag*/);
@@ -294,7 +293,7 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
   }
 
   std::uint64_t nodes = 0;
-  bool is_pv = false;
+  bool is_pv = true;
   auto result =
       detail::alphabeta_minimax(board, params.depth, params.alpha, params.beta, stm, evaluator,
                                 history, tt, start_ply, repetition_start, is_pv, nodes);
