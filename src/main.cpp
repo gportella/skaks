@@ -9,10 +9,65 @@
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/uci.hpp"
+#include "chess/version.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
+
+namespace {
+
+// Runs a simple benchmark loop to gauge search throughput.
+int run_perf_mode(chess::Engine& engine, const chess::CliOptions& options) {
+  chess::Board board{};
+  try {
+    board = chess::initial_board(options.fen);
+  } catch (const std::exception& ex) {
+    std::cerr << "Failed to load FEN: " << ex.what()
+              << "\nHint: pass custom positions with --fen \"<fen>\" or -f \"<fen>\"." << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  chess::SearchParameters params{};
+  params.depth = options.search_depth;
+
+  std::cout << "[perf] depth=" << params.depth << " iterations=" << options.perf_iterations
+            << " fen=\"" << options.fen << "\"\n";
+
+  std::uint64_t total_nodes = 0;
+  std::uint64_t total_ms = 0;
+
+  for (int i = 0; i < options.perf_iterations; ++i) {
+    engine.reset_history(board);
+    engine.clear_transposition_table();
+
+    auto session = engine.create_session(board);
+    auto result = session.run(params);
+
+    total_nodes += result.nodes;
+    total_ms += result.elapsed_ms;
+
+    const auto iter_ms = result.elapsed_ms;
+    const auto iter_nps = (iter_ms == 0) ? 0 : (result.nodes * 1000ULL) / iter_ms;
+    std::cout << "[perf] iter=" << (i + 1) << "/" << options.perf_iterations
+              << " nodes=" << result.nodes << " elapsed_ms=" << iter_ms << " nps=" << iter_nps
+              << "\n";
+  }
+
+  const auto clamped_ms = (total_ms == 0) ? 1 : total_ms;
+  const auto total_nps = (total_ms == 0) ? 0 : (total_nodes * 1000ULL) / clamped_ms;
+  const auto avg_nodes = total_nodes / static_cast<std::uint64_t>(options.perf_iterations);
+  const auto avg_ms = clamped_ms / static_cast<std::uint64_t>(options.perf_iterations);
+
+  std::cout << "[perf] total_nodes=" << total_nodes << " total_ms=" << total_ms
+            << " total_nps=" << total_nps << " avg_nodes=" << avg_nodes << " avg_ms=" << avg_ms
+            << "\n";
+
+  return EXIT_SUCCESS;
+}
+
+} // namespace
 
 int main(int argc, char** argv) {
   const auto cli = chess::parse_cli(argc, argv);
@@ -25,7 +80,24 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
   }
 
+  if (cli.options.show_version) {
+    std::cout << chess::kEngineName << " version " << chess::kEngineVersion << "\n";
+    if (cli.options.show_extended_version) {
+      std::cout << "Optimizations:\n";
+      for (const auto feature : chess::kOptimizationFeatures) {
+        std::cout << " - " << feature << "\n";
+      }
+    } else {
+      std::cout << "Use -vv for details.\n";
+    }
+    return EXIT_SUCCESS;
+  }
+
   chess::Engine engine;
+
+  if (cli.options.perf_mode) {
+    return run_perf_mode(engine, cli.options);
+  }
 
   if (cli.options.use_uci) {
     chess::run_uci_loop(engine, cli.options.search_depth);
