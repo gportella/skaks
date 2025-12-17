@@ -2,6 +2,7 @@
 
 #include "chess/defaults.hpp"
 #include "chess/moves.hpp"
+#include "chess/score.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -60,29 +61,18 @@ public:
     }
     slot.key = key;
     slot.depth = depth;
-    slot.score = encode_score(score, ply);
+    const int normalized = normalize_mate_score(score, ply);
+    slot.score = encode_score(normalized, ply);
     slot.flag = flag;
     slot.best_move = move;
   }
 
   static int decode_score(int stored_score, int ply) {
-    if (stored_score > INF / 2) {
-      return stored_score - ply;
-    }
-    if (stored_score < -INF / 2) {
-      return stored_score + ply;
-    }
-    return stored_score;
+    return decode_mate_score(stored_score, ply);
   }
 
   static int encode_score(int score, int ply) {
-    if (score > INF / 2) {
-      return score + ply;
-    }
-    if (score < -INF / 2) {
-      return score - ply;
-    }
-    return score;
+    return encode_mate_score(score, ply);
   }
 
 private:

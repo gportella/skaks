@@ -21,6 +21,8 @@ inline constexpr std::string_view kFiles = "abcdefgh";
 inline constexpr std::uint8_t kBoardSize = 64;
 inline constexpr std::uint16_t kMaxMovementCount = 256;
 inline constexpr std::uint16_t MAX_PLY = 1024;
+inline constexpr int MATE_VALUE = INF;
+inline constexpr int MATE_THRESHOLD = MATE_VALUE - static_cast<int>(MAX_PLY);
 inline constexpr std::string_view kStartFEN{
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"};
 // "rnbqkbnr/ppp1ppp1/7p/3p4/1P2P4/8/2P1PPPP/RNBQKBNR w KQkq - 0 1"};

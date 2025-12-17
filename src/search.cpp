@@ -2,6 +2,7 @@
 
 #include "chess/moves.hpp"
 #include "chess/quiescence.hpp"
+#include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
 
 #include <algorithm>
@@ -71,7 +72,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   Move cached_move{};
   if (tt && tt->probe(board.position_key, cached_entry)) {
     if (!is_excluded_move(cached_entry.best_move)) {
-      const int cached_score = TranspositionTable::decode_score(cached_entry.score, ply);
+      const int cached_score =
+          normalize_mate_score(TranspositionTable::decode_score(cached_entry.score, ply), ply);
       if (cached_entry.depth >= depth) {
         switch (cached_entry.flag) {
         case TranspositionFlag::Exact:
@@ -100,7 +102,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   beta_base = beta;
 
   if (depth == 0) {
-    const int qs = quiescence(board, alpha, beta, stm, evaluator, nodes, tt, ply);
+    const int qs_raw = quiescence(board, alpha, beta, stm, evaluator, nodes, tt, ply);
+    const int qs = normalize_mate_score(qs_raw, ply);
     if (tt) {
       TranspositionEntry entry;
       if (tt->probe(board.position_key, entry)) {
@@ -131,7 +134,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
 
   if (move_count == 0) {
     if (is_check(board, stm)) {
-      const int mate_score = (stm == SideToMove::White) ? (-INF + ply) : (INF - ply);
+      const int mate_score =
+          normalize_mate_score((stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE, ply);
       if (tt) {
         tt->store(board.position_key, depth, mate_score, TranspositionFlag::Exact, Move{}, ply);
       }
@@ -185,9 +189,11 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     int search_depth = std::max(0, child_depth);
 
     auto run_search = [&](int depth_to_use, int a_val, int b_val, bool pv_flag) -> SearchResult {
-      return alphabeta_minimax(board, depth_to_use, a_val, b_val, flip_side(stm), evaluator,
-                               history, tt, ply + 1, next_repetition_start, ply_from_root + 1,
-                               pv_flag, nodes, nullptr, 0);
+      SearchResult res = alphabeta_minimax(board, depth_to_use, a_val, b_val, flip_side(stm),
+                                           evaluator, history, tt, ply + 1, next_repetition_start,
+                                           ply_from_root + 1, pv_flag, nodes, nullptr, 0);
+      res.score = normalize_mate_score(res.score, ply);
+      return res;
     };
 
     bool need_full_search = true;
@@ -261,13 +267,16 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   }
 
   if (tt) {
+    const int normalized_best = normalize_mate_score(best.score, ply);
+    best.score = normalized_best;
+
     TranspositionFlag flag = TranspositionFlag::Exact;
-    if (best.score <= alpha_base) {
+    if (normalized_best <= alpha_base) {
       flag = TranspositionFlag::UpperBound;
-    } else if (best.score >= beta_base) {
+    } else if (normalized_best >= beta_base) {
       flag = TranspositionFlag::LowerBound;
     }
-    tt->store(board.position_key, depth, best.score, flag, best.best_move, ply);
+    tt->store(board.position_key, depth, normalized_best, flag, best.best_move, ply);
   }
   // TODO: clean up transposition table after lots of searches?
 
@@ -402,6 +411,7 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
 
   SearchResult final_result =
       best_result.best_move.moving_pc != OccupancyType::empty ? best_result : result;
+  final_result.score = normalize_mate_score(final_result.score, start_ply);
   final_result.nodes = nodes;
   return final_result;
 }

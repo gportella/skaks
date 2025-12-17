@@ -2,6 +2,7 @@
 
 #include "chess/moves.hpp"
 #include "chess/piece_values.hpp"
+#include "chess/score.hpp"
 
 #include <algorithm>
 
@@ -16,7 +17,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
   if (tt) {
     TranspositionEntry cached_entry;
     if (tt->probe(board.position_key, cached_entry)) {
-      const int cached_score = TranspositionTable::decode_score(cached_entry.score, ply);
+      const int cached_score =
+          normalize_mate_score(TranspositionTable::decode_score(cached_entry.score, ply), ply);
       switch (cached_entry.flag) {
       case TranspositionFlag::Exact:
         return cached_score;
@@ -47,12 +49,13 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
   if (!in_check) {
     if (stand_pat >= beta) {
       if (tt) {
-        tt->store(board.position_key, 0, stand_pat, TranspositionFlag::LowerBound, Move{}, ply);
+        const int normalized = normalize_mate_score(stand_pat, ply);
+        tt->store(board.position_key, 0, normalized, TranspositionFlag::LowerBound, Move{}, ply);
       }
-      return stand_pat;
+      return normalize_mate_score(stand_pat, ply);
     }
     if (stand_pat > alpha) {
-      alpha = stand_pat;
+      alpha = normalize_mate_score(stand_pat, ply);
     }
   }
 
@@ -77,7 +80,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
   if (move_count == 0) {
     int terminal_score = stand_pat;
     if (in_check) {
-      terminal_score = (stm == SideToMove::White) ? (-INF + ply) : (INF - ply);
+      terminal_score =
+          normalize_mate_score((stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE, ply);
     }
     if (tt) {
       tt->store(board.position_key, 0, terminal_score, TranspositionFlag::Exact, Move{}, ply);
@@ -117,8 +121,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
 
     Undo undo = make_move(board, move);
 
-    const int score =
-        -quiescence(board, -beta, -alpha, flip_side(stm), evaluator, nodes, tt, ply + 1);
+    int score = -quiescence(board, -beta, -alpha, flip_side(stm), evaluator, nodes, tt, ply + 1);
+    score = normalize_mate_score(score, ply);
 
     undo_move(board, undo);
 
@@ -136,12 +140,14 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
   }
 
   if (tt) {
-    TranspositionFlag flag =
-        (alpha > alpha_origin) ? TranspositionFlag::Exact : TranspositionFlag::UpperBound;
-    tt->store(board.position_key, 0, alpha, flag, has_best ? best_move : Move{}, ply);
+    const int normalized_alpha = normalize_mate_score(alpha, ply);
+    TranspositionFlag flag = (normalized_alpha > alpha_origin) ? TranspositionFlag::Exact
+                                                               : TranspositionFlag::UpperBound;
+    tt->store(board.position_key, 0, normalized_alpha, flag, has_best ? best_move : Move{}, ply);
+    return normalized_alpha;
   }
 
-  return alpha;
+  return normalize_mate_score(alpha, ply);
 }
 
 } // namespace chess

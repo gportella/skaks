@@ -3,6 +3,7 @@
 #include "chess/board.hpp"
 #include "chess/defaults.hpp"
 #include "chess/moves.hpp"
+#include "chess/score.hpp"
 #include "chess/types_io.hpp"
 
 #include <algorithm>
@@ -197,7 +198,8 @@ void handle_position(Board& board, Engine& engine, std::string_view args) {
 
   while (stream >> token) {
     if (!apply_uci_move(board, engine, token)) {
-      break;
+      exit(1);
+      // break;
     }
   }
 }
@@ -288,15 +290,13 @@ void run_uci_loop(Engine& engine, int default_depth) {
 
       std::ostringstream info_line;
       info_line << "info depth " << depth << " seldepth " << depth << " score ";
-      const int mate_threshold = INF - 1000;
-      if (result.score > mate_threshold) {
-        const int mate_ply = INF - result.score;
-        const int mate_moves = std::max(1, (mate_ply + 1) / 2);
-        info_line << "mate " << mate_moves;
-      } else if (result.score < -mate_threshold) {
-        const int mate_ply = INF - std::abs(result.score);
-        const int mate_moves = std::max(1, (mate_ply + 1) / 2);
-        info_line << "mate -" << mate_moves;
+      if (is_mate_score(result.score)) {
+        const int mate_moves = mate_moves_from_score(result.score);
+        info_line << "mate ";
+        if (result.score < 0) {
+          info_line << '-';
+        }
+        info_line << mate_moves;
       } else {
         info_line << "cp " << result.score;
       }
