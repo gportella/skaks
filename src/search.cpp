@@ -1,6 +1,7 @@
 #include "chess/search.hpp"
 
 #include "chess/moves.hpp"
+#include "chess/quiescence.hpp"
 #include "chess/scoring_rules.hpp"
 
 #include <algorithm>
@@ -99,11 +100,18 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   beta_base = beta;
 
   if (depth == 0) {
-    const int eval = evaluator(static_cast<const Board&>(board));
+    const int qs = quiescence(board, alpha, beta, stm, evaluator, nodes, tt, ply);
     if (tt) {
-      tt->store(board.position_key, depth, eval, TranspositionFlag::Exact, Move{}, ply);
+      TranspositionEntry entry;
+      if (tt->probe(board.position_key, entry)) {
+        if (entry.depth <= 0) {
+          tt->store(board.position_key, 0, qs, entry.flag, entry.best_move, ply);
+        }
+      } else {
+        tt->store(board.position_key, 0, qs, TranspositionFlag::Exact, Move{}, ply);
+      }
     }
-    return {eval, Move{}, SearchResult::Outcome::InProgress};
+    return {qs, Move{}, SearchResult::Outcome::InProgress};
   }
 
   uint16_t move_count = 0;
@@ -165,7 +173,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
 
     const bool in_check_after_move = is_check(board, flip_side(stm));
     if (child_depth == 0 && in_check_after_move && ply < static_cast<int>(MAX_PLY) - 1) {
-      child_depth = 1;
+      child_depth += CHECK_EXTENSION;
     }
 
     int reduction = 0;

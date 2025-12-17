@@ -6,6 +6,7 @@ add_library(chess_engine_core STATIC
   moves.cpp
   pins.cpp
   perf.cpp
+  quiescence.cpp
   scoring_rules.cpp
   search.cpp
   zobrist.cpp

@@ -4,6 +4,7 @@
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
 #include "chess/defaults.hpp"
+#include "chess/piece_values.hpp"
 #include "chess/pins.hpp"
 #include "chess/pst_tables.hpp"
 #include "chess/types.hpp"
@@ -29,40 +30,7 @@ inline bool black_in_check(const Board& board) {
 int evaluate_material(const Board& board) {
   int material_score = 0;
   for (const auto& occ : board.pieces) {
-    switch (occ) {
-    case OccupancyType::wP:
-      material_score += 100;
-      break;
-    case OccupancyType::wN:
-      material_score += 320;
-      break;
-    case OccupancyType::wB:
-      material_score += 330;
-      break;
-    case OccupancyType::wR:
-      material_score += 500;
-      break;
-    case OccupancyType::wQ:
-      material_score += 900;
-      break;
-    case OccupancyType::bP:
-      material_score -= 100;
-      break;
-    case OccupancyType::bN:
-      material_score -= 320;
-      break;
-    case OccupancyType::bB:
-      material_score -= 330;
-      break;
-    case OccupancyType::bR:
-      material_score -= 500;
-      break;
-    case OccupancyType::bQ:
-      material_score -= 900;
-      break;
-    default:
-      break;
-    }
+    material_score += piece_material_value(occ);
   }
   return material_score;
 }
