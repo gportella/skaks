@@ -14,6 +14,9 @@ inline constexpr int ASPIRATION_WINDOW_MAX = 6400;
 inline constexpr int MOBILITY_SCALING = 15;
 inline constexpr int REPETITION_PENALTY = 250;
 inline constexpr int QUIESCENCE_DELTA_MARGIN = 50;
+inline constexpr int QUIESCENCE_MAX_PLY = 32;
+inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 32;
+inline constexpr int QUIESCENCE_ZERO_GAIN_SKIP_INDEX = 12;
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES = 3; // max 3 pieces change per move
                                                    // (castle+capture || capture promotion)
 inline constexpr std::array<int, 8> kRanks{0, 1, 2, 3, 4, 5, 6, 7};

@@ -177,7 +177,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
 
     const bool in_check_after_move = is_check(board, flip_side(stm));
     if (child_depth == 0 && in_check_after_move && ply < static_cast<int>(MAX_PLY) - 1) {
-      child_depth += CHECK_EXTENSION;
+      child_depth = 1;
     }
 
     int reduction = 0;
