@@ -12,13 +12,101 @@ namespace chess {
 
 namespace {
 
+struct KillerTable {
+  std::array<uint32_t, MAX_PLY> primary{};
+  std::array<uint32_t, MAX_PLY> secondary{};
+};
+
+struct SearchScratch {
+  MoveHistory* history = nullptr;
+  KillerTable* killers = nullptr;
+  TranspositionTable* tt = nullptr;
+};
+
+inline bool is_quiet_move(const Move& move, const Undo& undo) {
+  return undo.captured_pc == OccupancyType::empty && move.promo_pc == OccupancyType::empty;
+}
+
+inline void store_killer_move(SearchScratch& scratch, int ply, const Move& move, const Undo& undo) {
+  if (scratch.killers == nullptr || ply < 0 || ply >= MAX_PLY) {
+    return;
+  }
+  if (!is_quiet_move(move, undo)) {
+    return;
+  }
+
+  const uint32_t code =
+      encode_move(move.from, move.to, move.moving_pc, move.captured_pc, move.promo_pc, move.flags);
+
+  auto& primary = scratch.killers->primary[static_cast<std::size_t>(ply)];
+  auto& secondary = scratch.killers->secondary[static_cast<std::size_t>(ply)];
+
+  if (primary == code) {
+    return;
+  }
+  if (secondary == code) {
+    std::swap(primary, secondary);
+    return;
+  }
+  secondary = primary;
+  primary = code;
+}
+
+inline void promote_killer_moves(KillerTable* table, int ply,
+                                 std::array<uint32_t, kMaxMovementCount>& moves,
+                                 uint16_t move_count) {
+  if (table == nullptr || ply < 0 || ply >= MAX_PLY) {
+    return;
+  }
+
+  auto promote = [&](uint32_t killer_code) {
+    if (killer_code == 0) {
+      return;
+    }
+
+    int quiet_start = -1;
+    for (uint16_t idx = 0; idx < move_count; ++idx) {
+      const Move move = decode_move(moves[idx]);
+      const bool quiet =
+          (move.captured_pc == OccupancyType::empty) && (move.promo_pc == OccupancyType::empty);
+      if (quiet_start == -1 && quiet) {
+        quiet_start = static_cast<int>(idx);
+      }
+
+      if (moves[idx] != killer_code) {
+        continue;
+      }
+
+      if (!quiet || quiet_start == -1) {
+        return;
+      }
+
+      if (static_cast<int>(idx) <= quiet_start) {
+        return;
+      }
+
+      const uint32_t killer = moves[idx];
+      for (uint16_t pos = idx; pos > static_cast<uint16_t>(quiet_start); --pos) {
+        moves[pos] = moves[pos - 1];
+      }
+      moves[static_cast<std::size_t>(quiet_start)] = killer;
+      return;
+    }
+  };
+
+  promote(table->primary[static_cast<std::size_t>(ply)]);
+  promote(table->secondary[static_cast<std::size_t>(ply)]);
+}
+
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
-                               const EvaluatorFn& evaluator, MoveHistory* history,
-                               TranspositionTable* tt, int ply, int repetition_start,
-                               int ply_from_root, bool is_pv, std::uint64_t& nodes,
-                               const uint32_t* excluded_root_moves,
+                               const EvaluatorFn& evaluator, SearchScratch& scratch, int ply,
+                               int repetition_start, int ply_from_root, bool is_pv,
+                               std::uint64_t& nodes, const uint32_t* excluded_root_moves,
                                std::size_t excluded_root_count) {
   ++nodes;
+
+  MoveHistory* history = scratch.history;
+  TranspositionTable* tt = scratch.tt;
 
   const bool apply_root_exclusions =
       excluded_root_moves != nullptr && excluded_root_count > 0 && ply_from_root == 0;
@@ -166,6 +254,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     }
   }
   sort_moves(moves, move_count, tt_code);
+  promote_killer_moves(scratch.killers, ply, moves, move_count);
 
   SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{},
                        SearchResult::Outcome::InProgress};
@@ -198,7 +287,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
 
     auto run_search = [&](int depth_to_use, int a_val, int b_val, bool pv_flag) -> SearchResult {
       SearchResult res = alphabeta_minimax(board, depth_to_use, a_val, b_val, flip_side(stm),
-                                           evaluator, history, tt, ply + 1, next_repetition_start,
+                                           evaluator, scratch, ply + 1, next_repetition_start,
                                            ply_from_root + 1, pv_flag, nodes, nullptr, 0);
       res.score = normalize_mate_score(res.score, ply);
       return res;
@@ -262,6 +351,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
         alpha = score;
       }
       if (alpha >= beta) {
+        store_killer_move(scratch, ply, move, undo);
         break;
       }
     } else {
@@ -269,6 +359,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
         beta = score;
       }
       if (beta <= alpha) {
+        store_killer_move(scratch, ply, move, undo);
         break;
       }
     }
@@ -312,6 +403,9 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
     start_ply = std::max(history->ply_count - 1, 0);
     repetition_start = std::max(0, std::min(repetition_start, start_ply + 1));
   }
+
+  KillerTable killers{};
+  SearchScratch scratch{history, &killers, tt};
 
   int max_root_moves = 0;
   uint16_t move_count = 0;
@@ -387,10 +481,9 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
       int window = aspiration_window;
       while (true) {
         const bool is_pv = true;
-        result =
-            alphabeta_minimax(board, current_depth, alpha, beta, stm, evaluator, history, tt,
-                              start_ply, repetition_start, 0, is_pv, nodes,
-                              excluded_count ? excluded_moves.data() : nullptr, excluded_count);
+        result = alphabeta_minimax(
+            board, current_depth, alpha, beta, stm, evaluator, scratch, start_ply, repetition_start,
+            0, is_pv, nodes, excluded_count ? excluded_moves.data() : nullptr, excluded_count);
         if (result.score <= alpha) {
           if (alpha <= -MATE_BOUND) {
             alpha = -INF;
