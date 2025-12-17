@@ -101,8 +101,16 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
   alpha_base = alpha;
   beta_base = beta;
 
+  bool do_quiescence = true;
   if (depth == 0) {
-    const int qs_raw = quiescence(board, alpha, beta, stm, evaluator, nodes, tt, ply);
+
+    int qs_raw = 0;
+    if (do_quiescence) {
+      qs_raw = quiescence(board, alpha, beta, stm, evaluator, nodes, tt, ply);
+    } else {
+      int eval = evaluator(static_cast<const Board&>(board));
+      qs_raw = eval;
+    }
     const int qs = normalize_mate_score(qs_raw, ply);
     if (tt) {
       TranspositionEntry entry;
@@ -307,9 +315,43 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
 
   int max_root_moves = 0;
   uint16_t move_count = 0;
+
+  if (history) {
+    const int repeat_begin = std::max(0, std::min(repetition_start, start_ply));
+    int repeats = 0;
+    for (int idx = repeat_begin; idx < start_ply; ++idx) {
+      if (history->key_history[static_cast<std::size_t>(idx)] == board.position_key) {
+        ++repeats;
+      }
+    }
+    if (repeats >= 2) {
+      SearchResult draw{};
+      draw.score = 0;
+      draw.best_move = Move{};
+      draw.outcome = SearchResult::Outcome::DrawByRepetition;
+      draw.nodes = 0;
+      draw.elapsed_ms = 0;
+      return draw;
+    }
+  }
+
   generate_legal_moves(board, stm, move_count);
   if (move_count == 0) {
-    return SearchResult{0, Move{}, SearchResult::Outcome::InProgress, 0, 0};
+    const bool side_in_check = is_check(board, stm);
+    SearchResult terminal{};
+    terminal.best_move = Move{};
+    terminal.nodes = 0;
+    terminal.elapsed_ms = 0;
+    if (side_in_check) {
+      const int mate_score =
+          normalize_mate_score((stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE, start_ply);
+      terminal.score = mate_score;
+      terminal.outcome = SearchResult::Outcome::Mate;
+    } else {
+      terminal.score = 0;
+      terminal.outcome = SearchResult::Outcome::DrawByStalemate;
+    }
+    return terminal;
   }
   max_root_moves = move_count;
   auto excluded_moves = std::array<uint32_t, kMaxMovementCount>{};

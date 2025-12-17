@@ -53,17 +53,32 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     }
   }
 
+  const int alpha_origin = alpha;
+  const int beta_origin = beta;
   const bool in_check = is_check(board, stm);
-  const int stand_pat = evaluator(static_cast<const Board&>(board));
+  const int stand_eval = evaluator(static_cast<const Board&>(board));
+  const int stand_pat = stand_eval;
+  const bool maximizing = (stm == SideToMove::White);
 
   if (!in_check) {
-    if (stand_pat >= beta) {
-      if (tt)
-        tt->store(board.position_key, 0, stand_pat, TranspositionFlag::LowerBound, Move{}, ply);
-      return stand_pat;
-    }
-    if (stand_pat > alpha) {
-      alpha = stand_pat;
+    if (maximizing) {
+      if (stand_pat >= beta) {
+        if (tt)
+          tt->store(board.position_key, 0, stand_pat, TranspositionFlag::LowerBound, Move{}, ply);
+        return stand_pat;
+      }
+      if (stand_pat > alpha) {
+        alpha = stand_pat;
+      }
+    } else {
+      if (stand_pat <= alpha) {
+        if (tt)
+          tt->store(board.position_key, 0, stand_pat, TranspositionFlag::UpperBound, Move{}, ply);
+        return stand_pat;
+      }
+      if (stand_pat < beta) {
+        beta = stand_pat;
+      }
     }
   }
 
@@ -106,6 +121,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
 
   Move best_move{};
   bool has_best = false;
+  int best_score = in_check ? (maximizing ? -INF : INF) : stand_pat;
 
   for (uint16_t i = 0; i < move_count; ++i) {
     Move move = decode_move(moves[i]);
@@ -117,37 +133,75 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
         continue;
       }
 
-      const int futility_limit =
-          (stm == SideToMove::White) ? (alpha - stand_pat - QUIESCENCE_DELTA_MARGIN)
-                                     : (stand_pat - beta - QUIESCENCE_DELTA_MARGIN);
+      const bool non_promo_pawn_capture =
+          (move.moving_pc == OccupancyType::wP || move.moving_pc == OccupancyType::bP) &&
+          move.promo_pc == OccupancyType::empty;
+      if (non_promo_pawn_capture) {
+        const int pawn_value = piece_material_magnitude(move.moving_pc);
+        if (delta_gain + QUIESCENCE_DELTA_MARGIN < pawn_value) {
+          continue;
+        }
+      }
 
-      if (futility_limit >= 0 && delta_gain <= futility_limit) {
-        continue;
+      if (maximizing) {
+        if (stand_pat + delta_gain + QUIESCENCE_DELTA_MARGIN <= alpha) {
+          continue;
+        }
+      } else {
+        if (stand_pat - delta_gain - QUIESCENCE_DELTA_MARGIN >= beta) {
+          continue;
+        }
       }
     }
 
     Undo undo = make_move(board, move);
-    const int score =
-        -quiescence(board, -beta, -alpha, flip_side(stm), evaluator, nodes, tt, ply + 1);
+    const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator, nodes, tt, ply + 1);
     undo_move(board, undo);
 
-    if (score >= beta) {
-      if (tt)
-        tt->store(board.position_key, 0, score, TranspositionFlag::LowerBound, move, ply);
-      return score;
-    }
-    if (score > alpha) {
-      alpha = score;
-      best_move = move;
-      has_best = true;
+    if (maximizing) {
+      if (score >= beta) {
+        if (tt)
+          tt->store(board.position_key, 0, score, TranspositionFlag::LowerBound, move, ply);
+        return score;
+      }
+      if (!has_best || score > best_score) {
+        best_score = score;
+        best_move = move;
+        has_best = true;
+      }
+      if (score > alpha) {
+        alpha = score;
+      }
+    } else {
+      if (score <= alpha) {
+        if (tt)
+          tt->store(board.position_key, 0, score, TranspositionFlag::UpperBound, move, ply);
+        return score;
+      }
+      if (!has_best || score < best_score) {
+        best_score = score;
+        best_move = move;
+        has_best = true;
+      }
+      if (score < beta) {
+        beta = score;
+      }
     }
   }
 
-  TranspositionFlag flag =
-      (!in_check && has_best) ? TranspositionFlag::Exact : TranspositionFlag::UpperBound;
-  if (tt)
-    tt->store(board.position_key, 0, alpha, flag, has_best ? best_move : Move{}, ply);
-  return alpha;
+  if (tt) {
+    const int normalized_best = normalize_mate_score(best_score, ply);
+    TranspositionFlag flag = TranspositionFlag::Exact;
+    if (normalized_best <= alpha_origin) {
+      flag = TranspositionFlag::UpperBound;
+    } else if (normalized_best >= beta_origin) {
+      flag = TranspositionFlag::LowerBound;
+    }
+    tt->store(board.position_key, 0, normalized_best, flag, has_best ? best_move : Move{}, ply);
+    return normalized_best;
+  }
+
+  return best_score;
 }
 
 } // namespace chess

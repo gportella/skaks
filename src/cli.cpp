@@ -9,17 +9,20 @@ CliParseResult parse_cli(int argc, char** argv) {
   CliParseResult result{};
   cxxopts::Options options("skaks", "Skaks chess engine options");
 
+  //clang-format off
   options.add_options()("d,depth", "Search depth in plies",
                         cxxopts::value<int>()->default_value("4"))(
       "m,max-moves", "Maximum number of full moves to play",
       cxxopts::value<int>()->default_value(std::to_string(kMaxMovementCount)))(
       "f,fen", "Start position in FEN notation", cxxopts::value<std::string>())(
-      "p,profile", "Enable profiling output")("u,uci", "Force UCI protocol mode")(
-      "o,onlyfen", "Print FEN only in self-play mode")("s,self", "Run self-play CLI loop")(
-      "v,version", "Show version information (repeat for extended details)")(
+      "p,profile", "Enable profiling output")("qs,quiescence", "Enable quiescence search")(
+      "u,uci", "Force UCI protocol mode")("o,onlyfen", "Print FEN only in self-play mode")(
+      "s,self", "Run self-play CLI loop")("v,version",
+                                          "Show version information (repeat for extended details)")(
       "perf", "Run built-in performance benchmark")("perf-iters", "Number of benchmark iterations",
                                                     cxxopts::value<int>()->default_value("3"))(
       "h,help", "Show this help message");
+  //clang-format on
 
   try {
     const auto parsed = options.parse(argc, argv);
@@ -39,6 +42,7 @@ CliParseResult parse_cli(int argc, char** argv) {
     }
 
     result.options.enable_profile = parsed.count("profile") > 0;
+    result.options.quiescence_search = parsed.count("quiescence") > 0;
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.perf_mode = parsed.count("perf") > 0;
     result.options.perf_iterations = parsed["perf-iters"].as<int>();

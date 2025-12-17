@@ -16,6 +16,7 @@ struct CliOptions {
   bool self_play = false;
   bool only_fen = false;
   bool perf_mode = false;
+  bool quiescence_search = false;
   int perf_iterations = 3;
   int version_requests = 0;
   bool show_version = false;
