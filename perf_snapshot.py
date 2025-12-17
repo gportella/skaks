@@ -73,20 +73,21 @@ def main():
     lines.extend(version_output.splitlines())
 
     lines.append("--- perf ---")
-    for name, fen in FEN_CASES:
-        cmd = [
-            binary,
-            "--perf",
-            "--perf-iters",
-            str(PERF_ITERS),
-            "--depth",
-            str(SEARCH_DEPTH),
-            "--fen",
-            fen,
-        ]
-        result = run_command(cmd)
-        lines.append(f"[case] {name}")
-        lines.extend(result.stdout.strip().splitlines())
+    for depth in sorted({1, 2, 3, SEARCH_DEPTH}):
+        for name, fen in FEN_CASES:
+            cmd = [
+                binary,
+                "--perf",
+                "--perf-iters",
+                str(PERF_ITERS),
+                "--depth",
+                str(depth),
+                "--fen",
+                fen,
+            ]
+            result = run_command(cmd)
+            lines.append(f"[case] {name}")
+            lines.extend(result.stdout.strip().splitlines())
 
     lines.append("")
 

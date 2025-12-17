@@ -4,9 +4,10 @@ add_library(chess_engine_core STATIC
   demo_debug.cpp
   engine.cpp
   moves.cpp
-  search.cpp
   pins.cpp
+  perf.cpp
   scoring_rules.cpp
+  search.cpp
   zobrist.cpp
 )
 

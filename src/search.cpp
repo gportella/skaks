@@ -261,6 +261,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
     }
     tt->store(board.position_key, depth, best.score, flag, best.best_move, ply);
   }
+  // TODO: clean up transposition table after lots of searches?
 
   return best;
 }
