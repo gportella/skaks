@@ -7,10 +7,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
+#include <iostream>
 
 namespace chess {
 
 namespace {
+
+constexpr int kMaxAspirationAttempts = 24;
 
 struct SearchScratch {
   MoveHistory* history = nullptr;
@@ -443,17 +447,33 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
       }
 
       int window = aspiration_window;
+      int attempts = 0;
+      bool forced_full_window = false;
       while (true) {
+        ++attempts;
         const bool is_pv = true;
         result = alphabeta_minimax(
             board, current_depth, alpha, beta, stm, evaluator, scratch, start_ply, repetition_start,
             0, is_pv, nodes, excluded_count ? excluded_moves.data() : nullptr, excluded_count);
         if (result.score <= alpha) {
-          if (is_mate_score(result.score)) {
+          if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
             alpha = -INF;
             beta = INF;
             window = ASPIRATION_WINDOW_INITIAL;
+            forced_full_window = true;
+            attempts = 0;
             continue;
+          }
+          if (is_mate_score(result.score)) {
+            if (!forced_full_window) {
+              alpha = -INF;
+              beta = INF;
+              window = ASPIRATION_WINDOW_INITIAL;
+              forced_full_window = true;
+              attempts = 0;
+              continue;
+            }
+            break;
           }
           if (alpha <= -MATE_BOUND) {
             alpha = -INF;
@@ -466,11 +486,24 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
           }
         }
         if (result.score >= beta) {
-          if (is_mate_score(result.score)) {
+          if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
             alpha = -INF;
             beta = INF;
             window = ASPIRATION_WINDOW_INITIAL;
+            forced_full_window = true;
+            attempts = 0;
             continue;
+          }
+          if (is_mate_score(result.score)) {
+            if (!forced_full_window) {
+              alpha = -INF;
+              beta = INF;
+              window = ASPIRATION_WINDOW_INITIAL;
+              forced_full_window = true;
+              attempts = 0;
+              continue;
+            }
+            break;
           }
           if (beta >= MATE_BOUND) {
             alpha = -INF;

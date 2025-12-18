@@ -71,8 +71,8 @@ void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_co
     keys[i] = {m, key};
   }
 
-  std::stable_sort(keys.begin(), keys.begin() + move_count,
-                   [](const MoveKey& a, const MoveKey& b) { return a.key > b.key; });
+  std::sort(keys.begin(), keys.begin() + move_count,
+            [](const MoveKey& a, const MoveKey& b) { return a.key > b.key; });
 
   for (uint16_t i = 0; i < move_count; ++i)
     moves[i] = keys[i].code;

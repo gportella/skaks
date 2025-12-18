@@ -66,6 +66,22 @@
                 "CHESS_ENABLE_IPO": "ON",
                 "CHESS_ENABLE_SANITIZERS": "OFF"
             }
+        },
+        {
+            "name": "dev-release-pi",
+            "displayName": "Release (Raspberry Pi, Clang 19)",
+            "description": "Native build on Raspberry Pi using clang-19.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/dev-release-pi",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-19",
+                "CMAKE_CXX_COMPILER": "clang++-19",
+                "CMAKE_BUILD_TYPE": "Release",
+                "CHESS_ENABLE_IPO": "ON",
+                "CMAKE_BUILD_WITH_INSTALL_RPATH": "ON",
+                "CMAKE_INSTALL_PREFIX": "$ENV{HOME}/.local",
+                "CMAKE_INSTALL_RPATH": "$ORIGIN;$ORIGIN/../lib"
+            }
         }
     ],
     "buildPresets": [
@@ -88,6 +104,10 @@
         {
             "name": "linux-cross-arm64",
             "configurePreset": "linux-cross-arm64"
+        },
+        {
+            "name": "dev-release-pi",
+            "configurePreset": "dev-release-pi"
         }
     ],
     "testPresets": [
@@ -108,6 +128,13 @@
         {
             "name": "asan-debug",
             "configurePreset": "asan-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "dev-release-pi",
+            "configurePreset": "dev-release-pi",
             "output": {
                 "outputOnFailure": true
             }
