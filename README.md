@@ -18,7 +18,7 @@ and "quality" in puzzle solving -- not awesome, about 12% if lucky for *tricky* 
 ## Current version 
 
 ```test
-> skaks --v
+> skaks -vv
 
 skaks version 0.5
 Optimizations:
