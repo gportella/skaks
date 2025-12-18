@@ -6,7 +6,7 @@
 I read that the new `<bit>` is better for bitwise opps and bitcouting. Will need to make sure to check it out.
 
 > TODO: incremental Zobrist key, got lazy
-> Tapering position tables as game progresses, got tangled up in search.
+> Add time control
 
 
 ## Suggested Build Plan
@@ -41,6 +41,11 @@ I read that the new `<bit>` is better for bitwise opps and bitcouting. Will need
 - **Debug vs release:** run tests under both `dev-debug` and `dev-release`; performance-only issues (like uninitialized data) often appear only at `-O3`.
 - **Benchmark drift:** regression-test move generation with `perft` counts at each milestone so later optimizations do not silently break correctness.
 
+## Todo performance 
+
+- LMR and null move, and that's probably it, won't be super complicating matters.
+
+
 ## Design Hints for Future Parallelism
 
 - Favor value semantics: pass `Board` and `SearchLimits` by value or `const&`, return lightweight structs (principal variation, score) so callers are not coupled to shared pointers.
@@ -53,6 +58,16 @@ I read that the new `<bit>` is better for bitwise opps and bitcouting. Will need
 - Maintain regression suites (perft tables, fuzz tests) and run them before and after structural changes; catching race-induced bugs is easier with a strong baseline.
 
 
+
+## Low hanging fruit evals
+
+- Introduce a tempo/initiative term based on side to move and threat density to know when to favor aggression.
+- Some simple opening book // end game would be nice
+- Extend mobility similar move-count bonuses/penalties to knights, bishops, and rooks to reward activity.
+- Work on pawn structure, currently only center squares; add doubled/isolated/backward pawn penalties plus passed-pawn bonuses with rank scaling for sharper endings.
+- King safety stops at pawn shield and check state, I need to  incorporate open-file/diagonal pressure near the king, opposing pawn storms, and penalties when castling rights are lost but king stays in center. Ideally.
+- The material ignores bishop pair and rook-on-seventh obviius themes; Maybe I can add small static bonuses to increase tactical play.
+- Detect rooks on open/semi-open files and outposted knights/bishops anchored by pawns; simple square-and-neighbor checks based on existing PST indexing.
 
 ## Make sure to follow the rules 
 
