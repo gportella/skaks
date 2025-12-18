@@ -2,15 +2,42 @@
 
 > WIP: I don't know if I'll finish this, a lot of work.
 
-Simple toy chess engine, for learning and fun.
+Simple toy chess engine, for learning and fun. 
 
+It does `UCI` default (just run `skaks`, or `skaks --uci`). It can self-play `skaks -s` from canonical start or from `--fen` position. 
+Default depth I think it's 4 right now, as I improve it we can allow ourselves better depth. No time limits yet. 
+
+There's a `--perf` option, useful for regressions. I leave here a couple of scripts to track the performance, both in therms of nodes/ms and 
+and "quality" in puzzle solving -- not awesome, about 12% if lucky for *tricky* (?) ones.
+
+> Careful: I beliebe I could have missed some cases of move generation I did not consider legal, at times when I play
+> against it the turns swap and it's because I validate the opponents move in UCI. If it can't find the move
+> that I would call legal, it gets ingnored and then the turns get messed up. I will keep stress testing against 
+> `stockfish` to see what potential moves I might still miss. So far so good.
+
+## Current version 
+
+```bash
+skaks version 0.5
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+```
 
 ## Prerequisites
 
 - CMake 3.24+
 - Ninja (recommended generator)
 - clang/clang++ (Apple Clang 15+ or LLVM clang)
-- Python 3.11+ if you plan to use additional tooling scripts (not included yet)
+- Python 3.11+ if you plan to use additional tooling for perf benchamarking and puzzles.
+- `stockfish` or any other engine to challange.
 
 Optional:
 
@@ -23,6 +50,8 @@ Optional:
 cmake --preset dev-debug
 cmake --build --preset dev-debug
 ```
+
+The binary is called `skaks`, there's some help in `skaks -h`.
 
 Release build with interprocedural optimization:
 
@@ -77,98 +106,3 @@ The presets assume a clang-based cross toolchain (`clang --target=<triple>`). Ad
 - `CMakePresets.json` centralizes configuration for development, release, sanitizers, and cross targets.
 - Compiler warnings are elevated to errors by default; disable by setting `-DCHESS_ENABLE_WARNINGS_AS_ERRORS=OFF`.
 - Sanitizers can be toggled with `-DCHESS_ENABLE_SANITIZERS=ON` (enabled automatically in `dev-debug`).
-
-## Next Steps
-
-- Flesh out the chess engine logic in `include/chess/` and `src/`.
-- Add more unit and integration tests under `tests/`.
-- Customize toolchain files for your deployment targets.
-- Integrate continuous integration (GitHub Actions, etc.) if desired.
-
-## Suggested Build Plan
-
-
-
-- [x]  **Represent the board:**
-	- Implement a `Board` struct holding piece bitboards, side to move, castling, en-passant, and Zobrist hash.
-	- Add FEN parsing and perft-style smoke tests to verify bitboard correctness.
-- [ ] **Move generation:**
-	- Start with simple pseudo-legal generators for each piece; reuse precomputed masks (files, ranks, knight moves).
-	- Upgrade to sliding attacks (rook/bishop/queen) using lookup tables or a magic-bitboard helper when the basics feel solid.
-	- Gate complex optimizations behind unit tests that lock in move counts for known positions.
-- [ ]  **Make/unmake mechanics:**
-	- Implement a stack-based make/unmake (or do/undo) layer that updates bitboards, occupancy, and incremental hash.
-	- Add assertions for illegal states and fuzz tests that play random move sequences to ensure consistency.
-- [ ]  **Evaluation scaffolding:**
-	- Begin with material count plus simple piece-square tables, keeping calculations branch-light.
-	- Design the API so evaluation can read only from `Board` and reusable tables; avoid dynamic allocations.
-- [ ] **Search framework:**
-	- Implement iterative deepening with alpha-beta, quiescence, and basic move ordering (captures first, killers later).
-	- Introduce a transposition table (fixed-size array of aligned buckets). Start single-threaded to keep reasoning simple.
-- [ ] **Parallel search (optional later):**
-	- When ready, layer a thread pool on top of the single-threaded search.
-	- Prefer work-stealing or per-thread stacks to minimize locking. Guard shared structures (TT, endgame tablebases) with atomics or fine-grained locks only where measurements prove contention.
-	- Use Google Benchmark or integration tests to detect regressions introduced by synchronization bugs.
-
-## Gotchas & Safety Nets
-
-- **Threading:** stick to single-threaded search until all core logic is fuzz- and perft-tested. When adding threads, keep shared state minimal, and run ThreadSanitizer builds (`asan-debug` preset with `-fsanitize=thread` swapped in) to expose data races.
-- **Undefined behavior:** prefer unsigned bitboards and explicit masks; sanitize shifts (`1ULL << square`) by ensuring `square < 64`.
-- **Debug vs release:** run tests under both `dev-debug` and `dev-release`; performance-only issues (like uninitialized data) often appear only at `-O3`.
-- **Benchmark drift:** regression-test move generation with `perft` counts at each milestone so later optimizations do not silently break correctness.
-- **Tooling discipline:** keep `.clang-tidy` warnings actionable—disable checks only with justification to avoid masking future mistakes.
-
-## Design Hints for Future Parallelism
-
-- Favor value semantics: pass `Board` and `SearchLimits` by value or `const&`, return lightweight structs (principal variation, score) so callers are not coupled to shared pointers.
-- Build modules around pure functions (move generation, evaluation, hashing) and keep orchestration separate; it keeps threading a thin wrapper over existing logic.
-- Introduce a `SearchContext` (per-thread scratch buffers, killer/history tables) even while single-threaded; later you can hand one to each worker without rewiring APIs.
-- Wrap shared structures such as the transposition table behind small accessors so you can swap in atomics or fine-grained locks without touching call sites.
-- Prefer Plain Old Data (POD) types for hot structs: contiguous, trivially copyable layouts keep caches happy and make per-thread copies cheap.
-- Keep memory predictable: use `std::array` for fixed data, `std::vector::reserve` for growing lists, and central allocators (arena or object pool) for transient nodes. Avoid sprinkling `new`/`delete` inside the search loop.
-- Document invariants (e.g., "move generator returns only pseudo-legal moves") right where they are enforced so future parallel work has clear contracts.
-- Maintain regression suites (perft tables, fuzz tests) and run them before and after structural changes; catching race-induced bugs is easier with a strong baseline.
-
-
-
-## Make sure to follow the rules 
-
-Often-overlooked rules and edge cases to handle in an engine beyond the basics:
-
-### En passant timing: 
-
-EP is only legal immediately after a double pawn push, and only to the single passed-over square. EP must also be legal with respect to king safety (capturing EP can open lines).
-
-### Insufficient material (automatic draws):
-
-- King vs king
-- King + bishop vs king
-- King + knight vs king
-- King + bishop vs king + bishop with both bishops on same color (no mating material)
-
-### Dead position: 
-
-No legal sequence can lead to checkmate (e.g., lone kings, kings+same-color bishops) → draw immediately (even if 50-move rule not reached).
-
-### Fivefold repetition & seventy-five-move rule (FIDE automatic draws):
-
-Fivefold repetition is an automatic draw (no claim needed).
-
-Seventy-five moves without pawn move or capture is an automatic draw, superseding the claim-based 50-move rule. Many engines still implement claim-based 50 and optionally recognize 75 as auto-draw.
-
-Threefold repetition (claim): Requires identical position including side to move, castling rights, EP availability (but not the 50-move clock). The player must claim; engines typically detect and treat as draw in search.
-
-### Castling edge cases:
-
-King must not be in check, and cannot pass through or land on checked squares.
-Squares between king and rook must be empty (rook’s path must be clear); for queen-side, b1/b8 can be occupied, but d1/d8 and c1/c8 must be empty.
-Castling rights must be intact; rights are lost if the king moves, the rook moves, or the rook is captured on its original square.
-Checkmate vs stalemate detection:
-
-### Legal move requirement for EP and castling with pins:
-
-EP or castling must not expose your king to check; legality is with respect to the resulting position.
-
-### Move repetition vs repetition of moves:
-
-Repetition is position-based, not move-string-based; castling rights and EP square must match.
