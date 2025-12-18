@@ -17,7 +17,9 @@ and "quality" in puzzle solving -- not awesome, about 12% if lucky for *tricky* 
 
 ## Current version 
 
-```bash
+```test
+> skaks --v
+
 skaks version 0.5
 Optimizations:
  - Bitboard move generation with precomputed attack masks
