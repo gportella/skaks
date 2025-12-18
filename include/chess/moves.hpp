@@ -93,6 +93,11 @@ inline constexpr bool move_is_irreversible(const Move& move) {
   return is_capture || is_pawn_move || is_promotion || is_en_passant || is_castle;
 }
 
+struct KillerTable {
+  std::array<uint32_t, MAX_PLY> primary;
+  std::array<uint32_t, MAX_PLY> secondary;
+};
+
 struct Undo {
   uint16_t from;
   uint16_t to;
@@ -142,5 +147,5 @@ std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, S
 std::array<uint32_t, kMaxMovementCount> generate_legal_moves(Board& board, SideToMove stm,
                                                              uint16_t& move_count);
 void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count,
-                uint32_t tt_code = 0);
+                uint32_t tt_code = 0, const KillerTable* killers = nullptr, int ply = -1);
 } // namespace chess

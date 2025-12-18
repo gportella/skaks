@@ -77,6 +77,8 @@ int main(int argc, char** argv) {
   }
   int move_number = 1;
   const int max_full_moves = cli.options.max_full_moves;
+  bool move_limit_reached = false;
+  bool result_announced = false;
 
   while (true) {
     std::chrono::steady_clock::time_point move_start{};
@@ -118,6 +120,7 @@ int main(int argc, char** argv) {
           std::cout << "Stalemate.\n";
         }
       }
+      result_announced = true;
       break;
     }
     if (!cli.options.only_fen && outcome != chess::SearchResult::Outcome::InProgress) {
@@ -153,18 +156,35 @@ int main(int argc, char** argv) {
     // board.side_to_move = chess::flip_side(board.side_to_move);
     move_number++;
 
-    if (((move_number / 2) + 1 > max_full_moves) || board.is_terminal()) {
+    const bool limit_hit = ((move_number / 2) + 1 > max_full_moves);
+    if (limit_hit || board.is_terminal()) {
+      move_limit_reached = limit_hit;
       break;
     }
   }
-  if (!cli.options.only_fen && board.is_terminal()) {
-    std::cout << "Game over detected.\n";
-    if (board.king_captured == chess::PieceColor::White) {
-      std::cout << "Black wins!\n";
-    } else if (board.king_captured == chess::PieceColor::Black) {
-      std::cout << "White wins!\n";
-    } else {
-      std::cout << "Draw!\n";
+  if (!cli.options.only_fen && !result_announced) {
+    const bool king_was_captured = board.king_captured != chess::PieceColor::None;
+    const bool has_moves = chess::has_legal_moves(board, board.side_to_move);
+    const bool terminal_position = king_was_captured || !has_moves || board.is_terminal();
+
+    if (terminal_position) {
+      std::cout << "Game over detected.\n";
+      if (king_was_captured) {
+        if (board.king_captured == chess::PieceColor::White) {
+          std::cout << "Black wins!\n";
+        } else {
+          std::cout << "White wins!\n";
+        }
+      } else if (!has_moves && chess::is_check(board, board.side_to_move)) {
+        const auto winner = chess::flip_side(board.side_to_move);
+        std::cout << "Checkmate! " << chess::to_string(winner) << " wins.\n";
+      } else {
+        std::cout << "Stalemate.\n";
+      }
+      result_announced = true;
+    } else if (move_limit_reached) {
+      std::cout << "Move limit reached. Draw!\n";
+      result_announced = true;
     }
   }
 

@@ -19,14 +19,34 @@ struct MoveKey {
   int key; // higher is better
 };
 
+namespace {
+
+inline int killer_priority(uint32_t code, const KillerTable* killers, int ply) {
+  if (killers == nullptr || ply < 0 || ply >= MAX_PLY) {
+    return 0;
+  }
+
+  const uint32_t primary = killers->primary[static_cast<std::size_t>(ply)];
+  if (code == primary) {
+    return 40'000;
+  }
+  const uint32_t secondary = killers->secondary[static_cast<std::size_t>(ply)];
+  if (code == secondary) {
+    return 20'000;
+  }
+  return 0;
+}
+
+} // namespace
+
 inline int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
   static const int scores[13] = {0, 100, 320, 330, 500, 900, 20000, 100, 320, 330, 500, 900, 20000};
   return scores[static_cast<size_t>(captured)] * 10 - scores[static_cast<size_t>(piece)];
 }
 
-// Order: ttMove first, then captures by MVV-LVA, then quiets
+// Order: ttMove first, then captures by MVV-LVA, then quiets (killer quiets boosted)
 void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count,
-                uint32_t tt_code) {
+                uint32_t tt_code, const KillerTable* killers, int ply) {
   std::array<MoveKey, kMaxMovementCount> keys;
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -43,7 +63,8 @@ void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_co
         auto pc = static_cast<OccupancyType>(move_piece(m));
         key = 1'000'000 + mvv_lva_score(cap, pc);
       } else {
-        key = 100'000; // quiets after captures
+        key = 100'000;
+        key += killer_priority(m, killers, ply); // quiet killers ahead of other quiets
       }
     }
 

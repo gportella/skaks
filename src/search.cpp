@@ -12,26 +12,19 @@ namespace chess {
 
 namespace {
 
-struct KillerTable {
-  std::array<uint32_t, MAX_PLY> primary{};
-  std::array<uint32_t, MAX_PLY> secondary{};
-};
-
 struct SearchScratch {
   MoveHistory* history = nullptr;
   KillerTable* killers = nullptr;
   TranspositionTable* tt = nullptr;
 };
 
-inline bool is_quiet_move(const Move& move, const Undo& undo) {
-  return undo.captured_pc == OccupancyType::empty && move.promo_pc == OccupancyType::empty;
-}
-
 inline void store_killer_move(SearchScratch& scratch, int ply, const Move& move, const Undo& undo) {
   if (scratch.killers == nullptr || ply < 0 || ply >= MAX_PLY) {
     return;
   }
-  if (!is_quiet_move(move, undo)) {
+  const bool quiet =
+      (undo.captured_pc == OccupancyType::empty) && (move.promo_pc == OccupancyType::empty);
+  if (!quiet) {
     return;
   }
 
@@ -50,52 +43,6 @@ inline void store_killer_move(SearchScratch& scratch, int ply, const Move& move,
   }
   secondary = primary;
   primary = code;
-}
-
-inline void promote_killer_moves(KillerTable* table, int ply,
-                                 std::array<uint32_t, kMaxMovementCount>& moves,
-                                 uint16_t move_count) {
-  if (table == nullptr || ply < 0 || ply >= MAX_PLY) {
-    return;
-  }
-
-  auto promote = [&](uint32_t killer_code) {
-    if (killer_code == 0) {
-      return;
-    }
-
-    int quiet_start = -1;
-    for (uint16_t idx = 0; idx < move_count; ++idx) {
-      const Move move = decode_move(moves[idx]);
-      const bool quiet =
-          (move.captured_pc == OccupancyType::empty) && (move.promo_pc == OccupancyType::empty);
-      if (quiet_start == -1 && quiet) {
-        quiet_start = static_cast<int>(idx);
-      }
-
-      if (moves[idx] != killer_code) {
-        continue;
-      }
-
-      if (!quiet || quiet_start == -1) {
-        return;
-      }
-
-      if (static_cast<int>(idx) <= quiet_start) {
-        return;
-      }
-
-      const uint32_t killer = moves[idx];
-      for (uint16_t pos = idx; pos > static_cast<uint16_t>(quiet_start); --pos) {
-        moves[pos] = moves[pos - 1];
-      }
-      moves[static_cast<std::size_t>(quiet_start)] = killer;
-      return;
-    }
-  };
-
-  promote(table->primary[static_cast<std::size_t>(ply)]);
-  promote(table->secondary[static_cast<std::size_t>(ply)]);
 }
 
 SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
@@ -253,8 +200,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta, Sid
                             cached_move.captured_pc, cached_move.promo_pc, cached_move.flags);
     }
   }
-  sort_moves(moves, move_count, tt_code);
-  promote_killer_moves(scratch.killers, ply, moves, move_count);
+  sort_moves(moves, move_count, tt_code, scratch.killers, ply);
 
   SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{},
                        SearchResult::Outcome::InProgress};
@@ -474,8 +420,26 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
         alpha = -INF;
         beta = INF;
       } else {
-        alpha = std::max(best_score - aspiration_window, -MATE_BOUND);
-        beta = std::min(best_score + aspiration_window, MATE_BOUND);
+        if (is_mate_score(best_score)) {
+          alpha = -INF;
+          beta = INF;
+          aspiration_window = ASPIRATION_WINDOW_INITIAL;
+        } else {
+          const int window_low = best_score - aspiration_window;
+          const int window_high = best_score + aspiration_window;
+          alpha = std::max(window_low, -MATE_BOUND);
+          alpha = std::min(alpha, MATE_BOUND);
+          beta = std::min(window_high, MATE_BOUND);
+          beta = std::max(beta, -MATE_BOUND);
+          if (alpha >= beta) {
+            alpha = window_low;
+            beta = window_high;
+            if (alpha >= beta) {
+              alpha = -INF;
+              beta = INF;
+            }
+          }
+        }
       }
 
       int window = aspiration_window;
@@ -485,6 +449,12 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
             board, current_depth, alpha, beta, stm, evaluator, scratch, start_ply, repetition_start,
             0, is_pv, nodes, excluded_count ? excluded_moves.data() : nullptr, excluded_count);
         if (result.score <= alpha) {
+          if (is_mate_score(result.score)) {
+            alpha = -INF;
+            beta = INF;
+            window = ASPIRATION_WINDOW_INITIAL;
+            continue;
+          }
           if (alpha <= -MATE_BOUND) {
             alpha = -INF;
             beta = INF;
@@ -496,6 +466,12 @@ SearchResult search_position(Board& board, SideToMove stm, const SearchParameter
           }
         }
         if (result.score >= beta) {
+          if (is_mate_score(result.score)) {
+            alpha = -INF;
+            beta = INF;
+            window = ASPIRATION_WINDOW_INITIAL;
+            continue;
+          }
           if (beta >= MATE_BOUND) {
             alpha = -INF;
             beta = INF;
