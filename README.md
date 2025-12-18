@@ -4,13 +4,13 @@
 
 Simple toy chess engine, for learning and fun. 
 
-It does `UCI` default (just run `skaks`, or `skaks --uci`). It can self-play `skaks -s` from canonical start or from `--fen` position. 
+When executed, it does `UCI` by default (just run `skaks`, or `skaks --uci`). It can self-play `skaks -s` from canonical start or from `--fen` position. 
 Default depth I think it's 4 right now, as I improve it we can allow ourselves better depth. No time limits yet. 
 
 There's a `--perf` option, useful for regressions. I leave here a couple of scripts to track the performance, both in therms of nodes/ms and 
 and "quality" in puzzle solving -- not awesome, about 12% if lucky for *tricky* (?) ones.
 
-> Careful: I beliebe I could have missed some cases of move generation I did not consider legal, at times when I play
+> Careful: I believe I could have missed some cases of move generation I did not consider legal, at times when I play
 > against it the turns swap and it's because I validate the opponents move in UCI. If it can't find the move
 > that I would call legal, it gets ingnored and then the turns get messed up. I will keep stress testing against 
 > `stockfish` to see what potential moves I might still miss. So far so good.
