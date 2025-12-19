@@ -18,6 +18,7 @@ add_executable(chess_engine_tests
   scoring_tests.cpp
   attack_tests.cpp
   pin_tests.cpp
+  polyglot_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests

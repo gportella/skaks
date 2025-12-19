@@ -214,41 +214,21 @@ const uint64_t Random64[781] = {
 };
 
 
-// Polyglot Zobrist arrays (truncated comment; full arrays below)
-static constexpr uint64_t PG_RANDOM_PIECE[12][64] = {
-    // Order: white: P,N,B,R,Q,K; black: p,n,b,r,q,k
-    // Fill with the standard polyglot constants.
-    // For brevity here, include actual constants from the Polyglot reference.
-};
-static constexpr uint64_t PG_RANDOM_CASTLE[16] = {
-    // index is castling rights bitmask KQkq encoded as 1,2,4,8 combination mapped to 0..15
-    0xF8D626AAAF278509ULL, 0xE1FFA35DB8F94D3BULL, 0x... /* fill with standard constants */
-    // Provide all 16 constants.
-};
-static constexpr uint64_t PG_RANDOM_ENPASSANT[8] = {
-    // file a..h indexes 0..7
-    0x0A3D...ULL, /* fill with standard constants */
-};
-static constexpr uint64_t PG_RANDOM_TURN = 0xF8D626AAAF278509ULL; // standard side key
-
-// Put your canonical Random64[781] here (verbatim from Polyglot)
-extern const uint64_t Random64[781]; // or define in a .cpp you link
-
 inline int polyglot_piece_index(chess::OccupancyType occ) {
   using chess::OccupancyType;
   switch (occ) {
-    case OccupancyType::wP: return 0;
-    case OccupancyType::wN: return 1;
-    case OccupancyType::wB: return 2;
-    case OccupancyType::wR: return 3;
-    case OccupancyType::wQ: return 4;
-    case OccupancyType::wK: return 5;
-    case OccupancyType::bP: return 6;
-    case OccupancyType::bN: return 7;
-    case OccupancyType::bB: return 8;
-    case OccupancyType::bR: return 9;
-    case OccupancyType::bQ: return 10;
-    case OccupancyType::bK: return 11;
+    case OccupancyType::bP: return 0;
+    case OccupancyType::wP: return 1;
+    case OccupancyType::bN: return 2;
+    case OccupancyType::wN: return 3;
+    case OccupancyType::bB: return 4;
+    case OccupancyType::wB: return 5;
+    case OccupancyType::bR: return 6;
+    case OccupancyType::wR: return 7;
+    case OccupancyType::bQ: return 8;
+    case OccupancyType::wQ: return 9;
+    case OccupancyType::bK: return 10;
+    case OccupancyType::wK: return 11;
     default: return -1;
   }
 }
@@ -284,65 +264,15 @@ uint64_t compute_polyglot_key(const chess::Board& b) {
   }
 
   // Turn: XOR when Black to move
-  if (b.side_to_move == SideToMove::Black) {
+  if (b.side_to_move == SideToMove::White) {
     key ^= Random64[780];
   }
 
   return key;
 }
-// Helper: map your OccupancyType to polyglot piece index [0..11]
-static inline bool occ_to_pg_index(OccupancyType occ, int& idxOut) {
-  // White pieces 0..5: P,N,B,R,Q,K ; Black 6..11: p,n,b,r,q,k
-  switch (occ) {
-    case OccupancyType::wP: idxOut = 0; return true;
-    case OccupancyType::wN: idxOut = 1; return true;
-    case OccupancyType::wB: idxOut = 2; return true;
-    case OccupancyType::wR: idxOut = 3; return true;
-    case OccupancyType::wQ: idxOut = 4; return true;
-    case OccupancyType::wK: idxOut = 5; return true;
-    case OccupancyType::bP: idxOut = 6; return true;
-    case OccupancyType::bN: idxOut = 7; return true;
-    case OccupancyType::bB: idxOut = 8; return true;
-    case OccupancyType::bR: idxOut = 9; return true;
-    case OccupancyType::bQ: idxOut = 10; return true;
-    case OccupancyType::bK: idxOut = 11; return true;
-    default: return false;
-  }
-}
-
-// Build castling index as Polyglot expects (bitmask KQkq mapped to [0..15]).
-// Your board.castling_rights appears to store this already; to_mask gives a 4-bit mask.
-static inline int castling_index(const Board& b) {
-  return to_mask(b.castling_rights) & 0xF;
-}
 
 uint64_t compute_key(const Board& b) {
-  uint64_t key = 0;
-
-  // Pieces
-  for (int sq = 0; sq < 64; ++sq) {
-    OccupancyType occ = b.pieces[static_cast<size_t>(sq)];
-    int pidx;
-    if (occ_to_pg_index(occ, pidx)) {
-      key ^= Random64[64 * pidx + sq];
-    }
-  }
-
-  // Side to move: Polyglot XORs a constant if black to move
-  if (b.side_to_move == SideToMove::Black) {
-    key ^= PG_RANDOM_TURN;
-  }
-
-  // Castling rights
-  key ^= Random64[768 + castling_index(b)];
-
-  // En-passant: include file key only if an EP capture is legal now
-  if (b.en_passant >= 0 && ep_capture_available(b)) {
-    const int file = file_of(b.en_passant);
-    key ^= Random64[772 + file];
-  }
-
-  return key;
+  return compute_polyglot_key(b);
 }
 
 // Polyglot move encoding: bits [0..5]=to, [6..11]=from, [12..14]=promo (0 none,1 N,2 B,3 R,4 Q)
@@ -369,17 +299,7 @@ std::optional<uint32_t> decode_move(uint16_t poly_move, const Board& b) {
   const OccupancyType mover = b.pieces[static_cast<size_t>(from)];
   if (mover == OccupancyType::empty) return std::nullopt;
 
-  const OccupancyType captured = b.pieces[static_cast<size_t>(to)];
   const OccupancyType promo = promo_occ(decode_promo(poly_move), b.side_to_move);
-
-  // Flags: we don’t try to infer EP/double/castle here; rely on generator legality.
-  // We mark quiet if no capture and not promotion; otherwise flags=0 and your move-making can set specifics.
-  uint8_t flags = 0;
-  const bool is_capture = captured != OccupancyType::empty;
-  const bool is_promo = promo != OccupancyType::empty;
-  if (!is_capture && !is_promo) flags |= kFlagQuiet;
-
-  const uint32_t enc = encode_move(from, to, mover, captured, promo, flags);
 
   // Validate against legal moves to avoid mismatches
   uint16_t count = 0;

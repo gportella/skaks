@@ -3,6 +3,7 @@
 #include "chess/types.hpp"
 
 #include <bit>
+#include <cassert>
 
 namespace chess {
 
@@ -60,11 +61,14 @@ inline constexpr void toggle_bit(Bitboard& bb, Square sq) noexcept {
   toggle_bit(bb, static_cast<int>(sq));
 }
 
-inline int popcount_bitboard(Bitboard bb) {
-#if defined(_MSC_VER)
-  return static_cast<int>(__popcnt64(bb));
-#else
-  return static_cast<int>(__builtin_popcountll(static_cast<unsigned long long>(bb)));
-#endif
+// inline int popcount_bitboard(Bitboard bb) {
+// #if defined(_MSC_VER)
+//   return static_cast<int>(__popcnt64(bb));
+// #else
+//   return static_cast<int>(__builtin_popcountll(static_cast<unsigned long long>(bb)));
+// #endif
+// }
+inline int popcount_bitboard(Bitboard bb) noexcept {
+  return static_cast<int>(std::popcount(bb));
 }
 } // namespace chess
