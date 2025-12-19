@@ -13,6 +13,7 @@ CTestTestfile.cmake
 
 # IDE/editor state
 .vscode/
+.cache/
 .idea/
 *.user
 *.swp
