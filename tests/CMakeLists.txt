@@ -27,6 +27,11 @@ target_link_libraries(chess_engine_tests
     GTest::gtest_main
 )
 
+target_include_directories(chess_engine_tests
+  PRIVATE
+    ${SKAKS_GENERATED_INCLUDE_DIR}
+)
+
 chess_set_default_warnings(chess_engine_tests)
 chess_enable_sanitizers(chess_engine_tests)
 

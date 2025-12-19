@@ -7,22 +7,32 @@ namespace chess {
 
 CliParseResult parse_cli(int argc, char** argv) {
   CliParseResult result{};
+  if (argc > 0 && argv != nullptr && argv[0] != nullptr) {
+    result.options.executable_path = argv[0];
+  }
   cxxopts::Options options("skaks", "Skaks chess engine options");
 
-  //clang-format off
-  options.add_options()("d,depth", "Search depth in plies",
-                        cxxopts::value<int>()->default_value("4"))(
-      "m,max-moves", "Maximum number of full moves to play",
-      cxxopts::value<int>()->default_value(std::to_string(kMaxMovementCount)))(
-      "f,fen", "Start position in FEN notation", cxxopts::value<std::string>())(
-      "p,profile", "Enable profiling output")("qs,quiescence", "Enable quiescence search")(
-      "u,uci", "Force UCI protocol mode")("o,onlyfen", "Print FEN only in self-play mode")(
-      "s,self", "Run self-play CLI loop")("v,version",
-                                          "Show version information (repeat for extended details)")(
-      "perf", "Run built-in performance benchmark")("perf-iters", "Number of benchmark iterations",
-                                                    cxxopts::value<int>()->default_value("3"))(
-      "h,help", "Show this help message");
-  //clang-format on
+  // clang-format off
+  options.add_options()
+      ("d,depth", "Search depth in plies",
+       cxxopts::value<int>()->default_value("4"))
+      ("m,max-moves", "Maximum number of full moves to play",
+       cxxopts::value<int>()->default_value(std::to_string(kMaxMovementCount)))
+      ("f,fen", "Start position in FEN notation", cxxopts::value<std::string>())
+      ("p,profile", "Enable profiling output")
+      ("qs,quiescence", "Enable quiescence search")
+      ("u,uci", "Force UCI protocol mode")
+      ("polyglot", "Enable Polyglot book usage")
+      ("polyglot-book", "Path to Polyglot opening book",
+       cxxopts::value<std::string>())
+      ("o,onlyfen", "Print FEN only in self-play mode")
+      ("s,self", "Run self-play CLI loop")
+      ("v,version", "Show version information (repeat for extended details)")
+      ("perf", "Run built-in performance benchmark")
+      ("perf-iters", "Number of benchmark iterations",
+       cxxopts::value<int>()->default_value("3"))
+      ("h,help", "Show this help message");
+  // clang-format on
 
   try {
     const auto parsed = options.parse(argc, argv);
@@ -44,6 +54,13 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.enable_profile = parsed.count("profile") > 0;
     result.options.quiescence_search = parsed.count("quiescence") > 0;
     result.options.only_fen = parsed.count("onlyfen") > 0;
+    result.options.polyglot = parsed.count("polyglot") > 0;
+    if (parsed.count("polyglot-book") > 0) {
+      result.options.polyglot_book_path =
+          parsed["polyglot-book"].as<std::string>();
+      result.options.polyglot_book_override = true;
+      result.options.polyglot = true;
+    }
     result.options.perf_mode = parsed.count("perf") > 0;
     result.options.perf_iterations = parsed["perf-iters"].as<int>();
     const auto version_requests = parsed.count("version");
@@ -58,7 +75,11 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.message = "--uci and --self cannot be used together";
       return result;
     }
-
+    if (want_uci && parsed.count("perf") > 0) {
+      result.parse_error = true;
+      result.message = "--uci and --perf cannot be used together";
+      return result;
+    }
     result.options.self_play = want_self;
     result.options.use_uci = want_uci || !want_self;
 
@@ -67,8 +88,10 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.use_uci = false;
     }
 
-    if (!want_uci && !want_self && !result.options.show_version && !result.options.perf_mode) {
-      // No explicit mode requested: default to UCI when no extra args were provided.
+    if (!want_uci && !want_self && !result.options.show_version &&
+        !result.options.perf_mode) {
+      // No explicit mode requested: default to UCI when no extra args were
+      // provided.
       const bool user_supplied_args = argc > 1;
       if (user_supplied_args) {
         result.options.self_play = true;
@@ -80,6 +103,10 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.perf_mode = false;
       result.options.self_play = false;
       result.options.use_uci = false;
+    }
+
+    if (result.options.use_uci) {
+      result.options.polyglot = true;
     }
 
     if (result.options.search_depth < 0) {

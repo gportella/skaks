@@ -3,6 +3,7 @@
 #include "chess/board.hpp"
 #include "chess/defaults.hpp"
 #include "chess/moves.hpp"
+#include "chess/polyglot.hpp"
 #include "chess/score.hpp"
 #include "chess/types_io.hpp"
 
@@ -11,8 +12,10 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -46,7 +49,8 @@ void log_uci(std::string_view direction, std::string_view payload) {
 int parse_square(std::string_view token) {
   if (token.size() != 2)
     return -1;
-  const char file = static_cast<char>(std::tolower(static_cast<unsigned char>(token[0])));
+  const char file =
+      static_cast<char>(std::tolower(static_cast<unsigned char>(token[0])));
   const char rank = token[1];
   if (file < 'a' || file > 'h')
     return -1;
@@ -75,7 +79,8 @@ char promotion_to_char(OccupancyType promo) {
 }
 
 OccupancyType promotion_from_char(SideToMove stm, char symbol) {
-  const char lower = static_cast<char>(std::tolower(static_cast<unsigned char>(symbol)));
+  const char lower =
+      static_cast<char>(std::tolower(static_cast<unsigned char>(symbol)));
   if (stm == SideToMove::White) {
     switch (lower) {
     case 'q':
@@ -131,10 +136,12 @@ bool apply_uci_move(Board& board, Engine& engine, std::string_view token) {
 
   for (uint16_t i = 0; i < move_count; ++i) {
     const Move move = decode_move(moves[i]);
-    if (move.from != static_cast<uint16_t>(from_sq) || move.to != static_cast<uint16_t>(to_sq))
+    if (move.from != static_cast<uint16_t>(from_sq) ||
+        move.to != static_cast<uint16_t>(to_sq))
       continue;
     if (promo_symbol != '\0') {
-      const OccupancyType expected = promotion_from_char(board.side_to_move, promo_symbol);
+      const OccupancyType expected =
+          promotion_from_char(board.side_to_move, promo_symbol);
       if (move.promo_pc != expected)
         continue;
     } else if (move.promo_pc != OccupancyType::empty) {
@@ -146,7 +153,8 @@ bool apply_uci_move(Board& board, Engine& engine, std::string_view token) {
     return true;
   }
   const char stm = board.side_to_move == SideToMove::White ? 'w' : 'b';
-  log_uci("warn", std::string("failed to apply move (") + stm + ") " + std::string(token));
+  log_uci("warn", std::string("failed to apply move (") + stm + ") " +
+                      std::string(token));
   return false;
 }
 
@@ -221,12 +229,22 @@ int extract_go_depth(std::string_view args, int fallback) {
 
 } // namespace
 
-void run_uci_loop(Engine& engine, int default_depth) {
+void run_uci_loop(Engine& engine, int default_depth,
+                  const std::optional<UciPolyglotContext>& polyglot_ctx) {
   // Disable buffering on stdout
   std::cout.setf(std::ios::unitbuf);
   std::setvbuf(stdout, nullptr, _IONBF, 0);
   Board board = initial_board(kStartFEN);
   engine.reset_history(board);
+
+  const polyglot::Book* opening_book = nullptr;
+  std::filesystem::path opening_book_path;
+  bool use_weighted_book = true;
+  if (polyglot_ctx && polyglot_ctx->book != nullptr) {
+    opening_book = polyglot_ctx->book;
+    opening_book_path = polyglot_ctx->book_path;
+    use_weighted_book = polyglot_ctx->use_weighted;
+  }
 
   std::string line;
   while (std::getline(std::cin, line)) {
@@ -275,7 +293,34 @@ void run_uci_loop(Engine& engine, int default_depth) {
       } else {
         remainder.clear();
       }
-      const int depth = extract_go_depth(remainder, default_depth > 0 ? default_depth : 4);
+      const int depth =
+          extract_go_depth(remainder, default_depth > 0 ? default_depth : 4);
+      std::optional<uint32_t> book_move;
+      if (opening_book != nullptr) {
+        book_move = polyglot::choose_move(
+            *opening_book, board, use_weighted_book,
+            static_cast<uint64_t>(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+      }
+      if (book_move) {
+        const Move move = decode_move(*book_move);
+        const std::string bestmove = move_to_uci(move);
+        std::ostringstream info_line;
+        info_line << "info string book move";
+        if (!opening_book_path.empty()) {
+          info_line << " from " << opening_book_path.string();
+        }
+        const auto info_str = info_line.str();
+        log_uci("out", info_str);
+        std::cout << info_str << '\n';
+        std::cout.flush();
+
+        const std::string response = "bestmove " + bestmove;
+        log_uci("out", response);
+        std::cout << response << '\n';
+        std::cout.flush();
+        continue;
+      }
       SearchParameters params{};
       params.depth = depth;
       params.alpha = -INF;
@@ -284,9 +329,11 @@ void run_uci_loop(Engine& engine, int default_depth) {
       const auto elapsed_ms = std::max<std::uint64_t>(
           1, result.elapsed_ms); // avoid division by zero in nps calculation
       const bool has_move = result.best_move.moving_pc != OccupancyType::empty;
-      const std::string bestmove = has_move ? move_to_uci(result.best_move) : "0000";
+      const std::string bestmove =
+          has_move ? move_to_uci(result.best_move) : "0000";
       const std::uint64_t nodes = result.nodes;
-      const std::uint64_t nps = (nodes * 1000ULL) / std::max<std::uint64_t>(1, elapsed_ms);
+      const std::uint64_t nps =
+          (nodes * 1000ULL) / std::max<std::uint64_t>(1, elapsed_ms);
 
       std::ostringstream info_line;
       info_line << "info depth " << depth << " seldepth " << depth << " score ";
@@ -300,7 +347,8 @@ void run_uci_loop(Engine& engine, int default_depth) {
       } else {
         info_line << "cp " << result.score;
       }
-      info_line << " time " << elapsed_ms << " nodes " << nodes << " nps " << nps;
+      info_line << " time " << elapsed_ms << " nodes " << nodes << " nps "
+                << nps;
       if (has_move) {
         info_line << " pv " << bestmove;
       }

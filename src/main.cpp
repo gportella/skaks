@@ -6,6 +6,7 @@
 #include "chess/engine.hpp"
 #include "chess/moves.hpp"
 #include "chess/perf.hpp"
+#include "chess/polyglot.hpp"
 #include "chess/search.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
@@ -15,7 +16,10 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
+#include <optional>
+#include <vector>
 
 int main(int argc, char** argv) {
   const auto cli = chess::parse_cli(argc, argv);
@@ -29,7 +33,8 @@ int main(int argc, char** argv) {
   }
 
   if (cli.options.show_version) {
-    std::cout << chess::kEngineName << " version " << chess::kEngineVersion << "\n";
+    std::cout << chess::kEngineName << " version " << chess::kEngineVersion
+              << "\n";
     if (cli.options.show_extended_version) {
       std::cout << "Optimizations:\n";
       for (const auto feature : chess::kOptimizationFeatures) {
@@ -43,12 +48,54 @@ int main(int argc, char** argv) {
 
   chess::Engine engine;
 
+  chess::polyglot::Book opening_book;
+  bool opening_book_ready = false;
+  std::filesystem::path opening_book_path;
+  const bool use_weighted_book = true;
+  if (cli.options.polyglot) {
+    std::optional<std::filesystem::path> override_path;
+    if (cli.options.polyglot_book_override) {
+      override_path = cli.options.polyglot_book_path;
+    }
+    std::vector<std::filesystem::path> attempted_paths;
+    auto book_path = chess::polyglot::resolve_book_path(
+        cli.options.executable_path, override_path, attempted_paths);
+    if (!book_path) {
+      std::cerr << "Failed to locate Polyglot book.\n";
+      if (!attempted_paths.empty()) {
+        std::cerr << "Checked paths:\n";
+        for (const auto& candidate : attempted_paths) {
+          std::cerr << "  - " << candidate << "\n";
+        }
+      }
+      return EXIT_FAILURE;
+    }
+    const bool loaded =
+        chess::polyglot::load_book(book_path->string(), opening_book);
+    if (!loaded) {
+      std::cerr << "Failed to load Polyglot book from " << book_path->string()
+                << "\n";
+      return EXIT_FAILURE;
+    }
+    opening_book_ready = true;
+    opening_book_path = *book_path;
+    if (!cli.options.use_uci) {
+      std::cout << "Polyglot book loaded from " << opening_book_path.string()
+                << "\n";
+    }
+  }
+
   if (cli.options.perf_mode) {
     return run_perf_mode(engine, cli.options);
   }
 
   if (cli.options.use_uci) {
-    chess::run_uci_loop(engine, cli.options.search_depth);
+    std::optional<chess::UciPolyglotContext> ctx;
+    if (opening_book_ready) {
+      ctx = chess::UciPolyglotContext{&opening_book, opening_book_path,
+                                      use_weighted_book};
+    }
+    chess::run_uci_loop(engine, cli.options.search_depth, ctx);
     return EXIT_SUCCESS;
   }
 
@@ -56,13 +103,16 @@ int main(int argc, char** argv) {
   try {
     board = chess::initial_board(cli.options.fen);
   } catch (const std::exception& ex) {
-    std::cerr << "Failed to load FEN: " << ex.what()
-              << "\nHint: pass custom positions with --fen \"<fen>\" or -f \"<fen>\"." << std::endl;
+    std::cerr
+        << "Failed to load FEN: " << ex.what()
+        << "\nHint: pass custom positions with --fen \"<fen>\" or -f \"<fen>\"."
+        << std::endl;
     return EXIT_FAILURE;
   }
   engine.reset_history(board);
 
-  const bool profile = (std::getenv("SKAKS_PROFILE") != nullptr) || cli.options.enable_profile;
+  const bool profile =
+      (std::getenv("SKAKS_PROFILE") != nullptr) || cli.options.enable_profile;
   std::chrono::steady_clock::time_point total_start{};
   if (profile) {
     total_start = std::chrono::steady_clock::now();
@@ -87,29 +137,59 @@ int main(int argc, char** argv) {
     }
     const int current_full_move = (move_number / 2) + 1;
     if (!cli.options.only_fen) {
-      std::cout << "Move: " << current_full_move << " Ply: " << move_number << ", "
-                << board.side_to_move << " to move.\n";
+      std::cout << "Move: " << current_full_move << " Ply: " << move_number
+                << ", " << board.side_to_move << " to move.\n";
     }
     chess::SearchParameters params{};
     params.depth = cli.options.search_depth;
     params.alpha = -10000;
     params.beta = 10000;
 
-    auto result = engine.search(board, params);
+    std::optional<chess::Move> move_to_play;
+    std::optional<chess::SearchResult> search_result;
+    bool move_from_book = false;
 
-    if (profile && !cli.options.only_fen) {
+    if (opening_book_ready) {
+      auto encoded_book_move = chess::polyglot::choose_move(
+          opening_book, board, use_weighted_book,
+          static_cast<uint64_t>(
+              std::chrono::steady_clock::now().time_since_epoch().count()));
+      if (encoded_book_move) {
+        move_to_play = chess::decode_move(*encoded_book_move);
+        move_from_book = true;
+        if (!cli.options.only_fen) {
+          std::cout << "Book move selected from " << opening_book_path.string()
+                    << "\n";
+        }
+      }
+    }
+
+    if (!move_to_play) {
+      auto result = engine.search(board, params);
+      move_to_play = result.best_move;
+      search_result = result;
+    }
+
+    if (profile && !cli.options.only_fen && search_result) {
       const auto move_end = std::chrono::steady_clock::now();
-      const auto elapsed =
-          std::chrono::duration_cast<std::chrono::milliseconds>(move_end - move_start);
+      const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+          move_end - move_start);
       std::cout << "[timing] search_ms=" << elapsed.count() << "\n";
     }
 
     if (!cli.options.only_fen) {
-      std::cout << "Best move score: " << result.score << "\n";
+      if (search_result) {
+        std::cout << "Best move score: " << search_result->score << "\n";
+      } else if (move_from_book) {
+        std::cout << "Best move score: (book)\n";
+      }
     }
 
-    const bool has_move = result.best_move.moving_pc != chess::OccupancyType::empty;
-    const auto outcome = result.outcome;
+    const bool has_move =
+        move_to_play && move_to_play->moving_pc != chess::OccupancyType::empty;
+    const auto outcome = search_result
+                             ? search_result->outcome
+                             : chess::SearchResult::Outcome::InProgress;
     if (!has_move) {
       if (!cli.options.only_fen) {
         const bool side_in_check = chess::is_check(board, board.side_to_move);
@@ -123,7 +203,8 @@ int main(int argc, char** argv) {
       result_announced = true;
       break;
     }
-    if (!cli.options.only_fen && outcome != chess::SearchResult::Outcome::InProgress) {
+    if (!cli.options.only_fen &&
+        outcome != chess::SearchResult::Outcome::InProgress) {
       switch (outcome) {
       case chess::SearchResult::Outcome::Mate:
         std::cout << "(search) Mate sequence detected.\n";
@@ -140,11 +221,18 @@ int main(int argc, char** argv) {
     }
 
     if (!cli.options.only_fen) {
-      std::cout << "Best move from " << chess::square_to_string(result.best_move.from) << " to "
-                << chess::square_to_string(result.best_move.to) << "\n";
+      if (move_to_play) {
+        std::cout << "Best move from "
+                  << chess::square_to_string(move_to_play->from) << " to "
+                  << chess::square_to_string(move_to_play->to);
+        if (move_from_book) {
+          std::cout << " (book)";
+        }
+        std::cout << "\n";
+      }
     }
-    const bool irreversible = chess::move_is_irreversible(result.best_move);
-    chess::make_move(board, result.best_move);
+    const bool irreversible = chess::move_is_irreversible(*move_to_play);
+    chess::make_move(board, *move_to_play);
     engine.record_position(board.position_key, irreversible);
     if (cli.options.only_fen) {
       std::cout << chess::board_to_fen(board) << "\n";
@@ -153,7 +241,6 @@ int main(int argc, char** argv) {
       chess::terminal_board_print(board);
       std::cout << "FEN: " << chess::board_to_fen(board) << "\n\n";
     }
-    // board.side_to_move = chess::flip_side(board.side_to_move);
     move_number++;
 
     const bool limit_hit = ((move_number / 2) + 1 > max_full_moves);
@@ -163,9 +250,11 @@ int main(int argc, char** argv) {
     }
   }
   if (!cli.options.only_fen && !result_announced) {
-    const bool king_was_captured = board.king_captured != chess::PieceColor::None;
+    const bool king_was_captured =
+        board.king_captured != chess::PieceColor::None;
     const bool has_moves = chess::has_legal_moves(board, board.side_to_move);
-    const bool terminal_position = king_was_captured || !has_moves || board.is_terminal();
+    const bool terminal_position =
+        king_was_captured || !has_moves || board.is_terminal();
 
     if (terminal_position) {
       std::cout << "Game over detected.\n";
@@ -190,8 +279,8 @@ int main(int argc, char** argv) {
 
   if (profile && !cli.options.only_fen) {
     const auto total_end = std::chrono::steady_clock::now();
-    const auto elapsed =
-        std::chrono::duration_cast<std::chrono::milliseconds>(total_end - total_start);
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        total_end - total_start);
     std::cout << "[timing] total_ms=" << elapsed.count() << "\n";
   }
 

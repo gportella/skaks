@@ -1,17 +1,21 @@
 #pragma once
-#include <cstdint>
-#include <vector>
-#include <unordered_map>
-#include <optional>
-#include <string>
-#include <span>
-
 #include "chess/board.hpp"
 #include "chess/moves.hpp"
 #include "chess/types.hpp"
 
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
 namespace chess::polyglot {
 
+// Default Polyglot book path
+inline constexpr std::string_view kDefaultPolyglotBookPath = "book/baron30.bin";
 // Entry as stored in memory
 struct Entry {
   uint16_t move;   // Polyglot 16-bit move encoding
@@ -28,11 +32,12 @@ uint64_t compute_key(const Board& b);
 // Load a .bin file into memory. Returns true on success.
 bool load_book(const std::string& path, Book& out);
 
-// Decode Polyglot move to engine Move (as encoded uint32_t), or std::nullopt if illegal/unmappable.
-// Promo mapping uses side-to-move color from Board b.
+// Decode Polyglot move to engine Move (as encoded uint32_t), or std::nullopt if
+// illegal/unmappable. Promo mapping uses side-to-move color from Board b.
 std::optional<uint32_t> decode_move(uint16_t poly_move, const Board& b);
 
-// Lookup candidates for a position. Returns span to internal vector for convenience.
+// Lookup candidates for a position. Returns span to internal vector for
+// convenience.
 std::span<const Entry> lookup(const Book& book, const Board& b);
 
 // Select a move from entries:
@@ -45,5 +50,13 @@ std::optional<uint32_t> select(const Board& b, std::span<const Entry> entries,
 // Convenience: try book at root, return chosen move or nullopt.
 std::optional<uint32_t> choose_move(const Book& book, const Board& b,
                                     bool use_weighted, uint64_t seed);
+
+// Resolve the Polyglot book location. Returns the first matching path or
+// std::nullopt if no candidate exists. The attempted paths vector is appended
+// with every checked location in the order they were inspected.
+std::optional<std::filesystem::path>
+resolve_book_path(std::string_view executable_path,
+                  const std::optional<std::filesystem::path>& override_path,
+                  std::vector<std::filesystem::path>& attempted_paths);
 
 } // namespace chess::polyglot

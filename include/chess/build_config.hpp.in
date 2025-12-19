@@ -1,0 +1,21 @@
+#pragma once
+
+#include <string_view>
+
+namespace chess::config {
+
+inline constexpr std::string_view kSourceRoot = R"(@CMAKE_CURRENT_SOURCE_DIR@)";
+inline constexpr std::string_view kPolyglotBookRelative =
+    R"(@SKAKS_POLYGLOT_BOOK_RELATIVE_PATH@)";
+inline constexpr std::string_view kPolyglotBookSourcePath =
+    R"(@SKAKS_POLYGLOT_BOOK_SOURCE_PATH@)";
+inline constexpr std::string_view kInstallDatadir = R"(@CMAKE_INSTALL_DATADIR@)";
+inline constexpr std::string_view kInstallFullDatadir =
+    R"(@CMAKE_INSTALL_FULL_DATADIR@)";
+inline constexpr std::string_view kInstallPrefix = R"(@CMAKE_INSTALL_PREFIX@)";
+inline constexpr std::string_view kPolyglotBookDatadirRelative =
+    R"(@SKAKS_POLYGLOT_BOOK_DATADIR_RELATIVE@)";
+inline constexpr std::string_view kPolyglotBookInstallPath =
+    R"(@SKAKS_POLYGLOT_BOOK_INSTALL_PATH@)";
+
+} // namespace chess::config

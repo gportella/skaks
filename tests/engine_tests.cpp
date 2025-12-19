@@ -50,8 +50,10 @@ TEST(EngineTests, DefaultEvaluationIsZero) {
 TEST(CastlingTests, AllowsBothSidesWhenPathClearAndSafe) {
   const auto board = make_board("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
 
-  const auto white_rights = chess::king_castle_rights(board, chess::SideToMove::White);
-  const auto black_rights = chess::king_castle_rights(board, chess::SideToMove::Black);
+  const auto white_rights =
+      chess::king_castle_rights(board, chess::SideToMove::White);
+  const auto black_rights =
+      chess::king_castle_rights(board, chess::SideToMove::Black);
 
   EXPECT_EQ(white_rights, chess::WK | chess::WQ);
   EXPECT_EQ(black_rights, chess::BK | chess::BQ);
@@ -60,8 +62,10 @@ TEST(CastlingTests, AllowsBothSidesWhenPathClearAndSafe) {
 TEST(CastlingTests, BlocksSideWhenPathOccupied) {
   const auto board = make_board("r3k2r/8/8/8/8/8/8/R3K1NR w KQkq - 0 1");
 
-  const auto white_rights = chess::king_castle_rights(board, chess::SideToMove::White);
-  const auto black_rights = chess::king_castle_rights(board, chess::SideToMove::Black);
+  const auto white_rights =
+      chess::king_castle_rights(board, chess::SideToMove::White);
+  const auto black_rights =
+      chess::king_castle_rights(board, chess::SideToMove::Black);
 
   EXPECT_EQ(white_rights, chess::WQ);
   EXPECT_EQ(black_rights, chess::BK | chess::BQ);

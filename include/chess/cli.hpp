@@ -15,12 +15,16 @@ struct CliOptions {
   bool use_uci = true;
   bool self_play = false;
   bool only_fen = false;
+  bool polyglot = false;
+  std::string polyglot_book_path;
+  bool polyglot_book_override = false;
   bool perf_mode = false;
   bool quiescence_search = false;
   int perf_iterations = 3;
   int version_requests = 0;
   bool show_version = false;
   bool show_extended_version = false;
+  std::string executable_path;
 };
 
 struct CliParseResult {

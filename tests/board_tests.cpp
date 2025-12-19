@@ -23,7 +23,8 @@ TEST(BoardFen, RoundTripStartPosition) {
 }
 
 TEST(BoardFen, RoundTripWithEnPassantAndNoCastling) {
-  const std::string fen = "rnbqkbnr/ppp1pppp/8/3p4/3Pp3/8/PPP1PPPP/RNBQKBNR w KQkq e3 0 3";
+  const std::string fen =
+      "rnbqkbnr/ppp1pppp/8/3p4/3Pp3/8/PPP1PPPP/RNBQKBNR w KQkq e3 0 3";
   const auto board = parse_board(fen);
   EXPECT_EQ(chess::board_to_fen(board), fen);
 }

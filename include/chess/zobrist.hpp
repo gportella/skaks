@@ -12,7 +12,8 @@ constexpr int kFirstPieceIndex = static_cast<int>(OccupancyType::wP);
 constexpr int kLastPieceIndex = static_cast<int>(OccupancyType::bK);
 
 static_assert(kEmptyIndex == 0, "Expect OccupancyType::empty == 0");
-static_assert(kLastPieceIndex - kFirstPieceIndex + 1 == 12, "Expect 12 piece types");
+static_assert(kLastPieceIndex - kFirstPieceIndex + 1 == 12,
+              "Expect 12 piece types");
 
 inline int occ_to_zidx(OccupancyType o) {
   int v = static_cast<int>(o);

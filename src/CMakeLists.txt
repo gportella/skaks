@@ -16,6 +16,7 @@ add_library(chess_engine_core STATIC
 target_include_directories(chess_engine_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${SKAKS_GENERATED_INCLUDE_DIR}
 )
 
 target_compile_features(chess_engine_core PUBLIC cxx_std_23)
@@ -27,6 +28,14 @@ add_executable(skaks
   cli.cpp
   main.cpp
   uci.cpp
+)
+
+target_include_directories(skaks
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${SKAKS_GENERATED_INCLUDE_DIR}
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 
 target_link_libraries(skaks
