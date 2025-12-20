@@ -73,7 +73,7 @@ def main():
     lines.extend(version_output.splitlines())
 
     lines.append("--- perf ---")
-    for depth in sorted({1, 2, 3, SEARCH_DEPTH}):
+    for depth in sorted({1, 2, 3, 4, SEARCH_DEPTH}):
         for name, fen in FEN_CASES:
             cmd = [
                 binary,

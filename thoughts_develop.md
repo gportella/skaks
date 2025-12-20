@@ -61,8 +61,8 @@ I read that the new `<bit>` is better for bitwise opps and bitcouting. Will need
 
 ## Low hanging fruit evals
 
-- Introduce a tempo/initiative term based on side to move and threat density to know when to favor aggression.
-- Some simple opening book // end game would be nice
+- [x] Introduce a tempo/initiative term based on side to move and threat density to know when to favor aggression.
+- [x] Some simple opening book // end game would be nice
 - Extend mobility similar move-count bonuses/penalties to knights, bishops, and rooks to reward activity.
 - Work on pawn structure, currently only center squares; add doubled/isolated/backward pawn penalties plus passed-pawn bonuses with rank scaling for sharper endings.
 - King safety stops at pawn shield and check state, I need to  incorporate open-file/diagonal pressure near the king, opposing pawn storms, and penalties when castling rights are lost but king stays in center. Ideally.

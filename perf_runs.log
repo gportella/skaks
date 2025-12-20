@@ -435,3 +435,109 @@ Optimizations:
 [perf] iter=2/3 nodes=8761 elapsed_ms=5 nps=1752200
 [perf] iter=3/3 nodes=8761 elapsed_ms=5 nps=1752200
 [perf] total_nodes=26283 total_ms=15 total_nps=1752200 avg_nodes=8761 avg_ms=5
+=== perf snapshot 2025-12-20T09:55:37 ===
+binary: /usr/local/bin/skaks
+--- version ---
+skaks version 0.6
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+--- perf ---
+[case] startpos
+[perf] depth=1 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=41 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=41 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=41 elapsed_ms=0 nps=0
+[perf] total_nodes=123 total_ms=0 total_nps=0 avg_nodes=41 avg_ms=0
+[case] balanced_midgame
+[perf] depth=1 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=98 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=98 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=98 elapsed_ms=0 nps=0
+[perf] total_nodes=294 total_ms=0 total_nps=0 avg_nodes=98 avg_ms=0
+[case] simplified_endgame
+[perf] depth=1 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=20 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=20 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=20 elapsed_ms=0 nps=0
+[perf] total_nodes=60 total_ms=0 total_nps=0 avg_nodes=20 avg_ms=0
+[case] startpos
+[perf] depth=2 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=200 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=200 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=200 elapsed_ms=0 nps=0
+[perf] total_nodes=600 total_ms=0 total_nps=0 avg_nodes=200 avg_ms=0
+[case] balanced_midgame
+[perf] depth=2 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=1315 elapsed_ms=4 nps=328750
+[perf] iter=2/3 nodes=1315 elapsed_ms=5 nps=263000
+[perf] iter=3/3 nodes=1315 elapsed_ms=4 nps=328750
+[perf] total_nodes=3945 total_ms=13 total_nps=303461 avg_nodes=1315 avg_ms=4
+[case] simplified_endgame
+[perf] depth=2 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=77 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=77 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=77 elapsed_ms=0 nps=0
+[perf] total_nodes=231 total_ms=0 total_nps=0 avg_nodes=77 avg_ms=0
+[case] startpos
+[perf] depth=3 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=1216 elapsed_ms=2 nps=608000
+[perf] iter=2/3 nodes=1216 elapsed_ms=2 nps=608000
+[perf] iter=3/3 nodes=1216 elapsed_ms=2 nps=608000
+[perf] total_nodes=3648 total_ms=6 total_nps=608000 avg_nodes=1216 avg_ms=2
+[case] balanced_midgame
+[perf] depth=3 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=7183 elapsed_ms=20 nps=359150
+[perf] iter=2/3 nodes=7183 elapsed_ms=17 nps=422529
+[perf] iter=3/3 nodes=7183 elapsed_ms=16 nps=448937
+[perf] total_nodes=21549 total_ms=53 total_nps=406584 avg_nodes=7183 avg_ms=17
+[case] simplified_endgame
+[perf] depth=3 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=254 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=254 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=254 elapsed_ms=0 nps=0
+[perf] total_nodes=762 total_ms=0 total_nps=0 avg_nodes=254 avg_ms=0
+[case] startpos
+[perf] depth=4 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=3531 elapsed_ms=5 nps=706200
+[perf] iter=2/3 nodes=3531 elapsed_ms=5 nps=706200
+[perf] iter=3/3 nodes=3531 elapsed_ms=5 nps=706200
+[perf] total_nodes=10593 total_ms=15 total_nps=706200 avg_nodes=3531 avg_ms=5
+[case] balanced_midgame
+[perf] depth=4 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=30632 elapsed_ms=73 nps=419616
+[perf] iter=2/3 nodes=30632 elapsed_ms=73 nps=419616
+[perf] iter=3/3 nodes=30632 elapsed_ms=79 nps=387746
+[perf] total_nodes=91896 total_ms=225 total_nps=408426 avg_nodes=30632 avg_ms=75
+[case] simplified_endgame
+[perf] depth=4 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=513 elapsed_ms=0 nps=0
+[perf] iter=2/3 nodes=513 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=513 elapsed_ms=0 nps=0
+[perf] total_nodes=1539 total_ms=0 total_nps=0 avg_nodes=513 avg_ms=0
+[case] startpos
+[perf] depth=8 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=910602 elapsed_ms=1712 nps=531893
+[perf] iter=2/3 nodes=910602 elapsed_ms=1703 nps=534704
+[perf] iter=3/3 nodes=910602 elapsed_ms=1727 nps=527273
+[perf] total_nodes=2731806 total_ms=5142 total_nps=531273 avg_nodes=910602 avg_ms=1714
+[case] balanced_midgame
+[perf] depth=8 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=3118819 elapsed_ms=5942 nps=524876
+[perf] iter=2/3 nodes=3118819 elapsed_ms=6035 nps=516788
+[perf] iter=3/3 nodes=3118819 elapsed_ms=6036 nps=516702
+[perf] total_nodes=9356457 total_ms=18013 total_nps=519428 avg_nodes=3118819 avg_ms=6004
+[case] simplified_endgame
+[perf] depth=8 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=8347 elapsed_ms=5 nps=1669400
+[perf] iter=2/3 nodes=8347 elapsed_ms=5 nps=1669400
+[perf] iter=3/3 nodes=8347 elapsed_ms=5 nps=1669400
+[perf] total_nodes=25041 total_ms=15 total_nps=1669400 avg_nodes=8347 avg_ms=5
