@@ -4,12 +4,14 @@
 import argparse
 import csv
 import os
+import datetime
 import select
 import subprocess
 import sys
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Dict
 
 try:
     import chess
@@ -19,6 +21,43 @@ except ImportError:  # pragma: no cover
 
 DEFAULT_PUZZLE_FILE = Path(__file__).resolve().with_name("puzzles.csv")
 DEFAULT_ENGINE = "skaks"
+OUTPUT_FILE = Path("puzzle_runs.log")
+
+
+def locate_skaks() -> str:
+    """Locate the skaks binary, honouring SKAKS_BIN when provided."""
+    override = os.environ.get("SKAKS_BIN")
+    if override:
+        return override
+
+    discovered = shutil.which("skaks")
+    if discovered:
+        return discovered
+
+    fallback = Path(__file__).resolve().parent / "build/debug/src/skaks"
+    if fallback.exists():
+        return str(fallback)
+
+    raise SystemExit(
+        "Unable to locate skaks binary. Export SKAKS_BIN or ensure it is on PATH."
+    )
+
+
+def run_command(args):
+    """Run a command and surface stderr on failure."""
+    try:
+        return subprocess.run(args, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(f"Command failed: {' '.join(args)}\n")
+        if exc.stdout:
+            sys.stderr.write(exc.stdout)
+        if exc.stderr:
+            sys.stderr.write(exc.stderr)
+        raise
+
+
+def find_epd_files(directory: Path) -> List[Path]:
+    return sorted(p for p in directory.glob("*.epd") if p.is_file())
 
 
 @dataclass
@@ -37,6 +76,7 @@ class Puzzle:
 
 class UciEngine:
     def __init__(self, binary: str, timeout: float):
+        self.binary = binary
         env = os.environ.copy()
         self._proc = subprocess.Popen(
             [binary],
@@ -112,11 +152,19 @@ class UciEngine:
             pass
 
 
-def load_puzzles(path: Path, limit: Optional[int]) -> List[Puzzle]:
-    suffix = path.suffix.lower()
-    if suffix == ".epd":
-        return load_puzzles_epd(path, limit)
-    return load_puzzles_csv(path, limit)
+def load_puzzles(
+    path: Path, directory: Path, limit: Optional[int]
+) -> Dict[str, Puzzle]:
+    epd_files = find_epd_files(directory=directory)
+    out = {}
+    for f in epd_files + [path]:
+        suffix = path.suffix.lower()
+        if suffix == ".epd":
+            out[f.name] = load_puzzles_epd(path, limit)
+        elif suffix == ".csv":
+            out[f.name] = load_puzzles_csv(path, limit)
+
+    return out
 
 
 def load_puzzles_csv(path: Path, limit: Optional[int]) -> List[Puzzle]:
@@ -183,60 +231,89 @@ def load_puzzles_epd(path: Path, limit: Optional[int]) -> List[Puzzle]:
 
 
 def run_suite(
-    puzzles: Iterable[Puzzle], engine: UciEngine, depth: int, progress_interval: int
+    puzzles: Dict[str, Puzzle], engine: UciEngine, depth: int, progress_interval: int
 ) -> Tuple[int, int, List[Tuple[Puzzle, str]]]:
-    puzzle_list = list(puzzles)
-    total = len(puzzle_list)
-    solved = 0
-    failures: List[Tuple[Puzzle, str]] = []
+    timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+    lines = []
+    lines.append(f"=== perf snapshot {timestamp} ===")
+    lines.append(f"binary: {engine.binary}")
 
-    for index, puzzle in enumerate(puzzle_list, start=1):
-        expected_moves = puzzle.moves
-        if not expected_moves:
-            failures.append((puzzle, "no-solution-moves"))
-            continue
+    if "skaks" in engine.binary:
+        version_output = run_command([engine.binary, "-vv"]).stdout.strip()
+        lines.append("--- version ---")
+        lines.extend(version_output.splitlines())
 
-        played_moves: List[str] = []
-        puzzle_solved = True
+    lines.append("--- perf ---")
+    with OUTPUT_FILE.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines))
+        for fname, pzzl in puzzles.items():
+            puzzle_list = list(pzzl)
+            total = len(puzzle_list)
+            solved = 0
+            total = 0
+            failures: List[Tuple[Puzzle, str]] = []
 
-        for ply_idx in range(0, len(expected_moves), 2):
-            expected_move = expected_moves[ply_idx]
-            predicted: Optional[str]
-            try:
-                predicted = engine.bestmove(puzzle.fen, depth, played_moves)
-            except TimeoutError:
-                failures.append((puzzle, f"timeout at ply {ply_idx}"))
-                predicted = None
-                puzzle_solved = False
-                break
-            except RuntimeError as exc:
-                failures.append((puzzle, f"error:{exc}"))
-                print()
-                raise
+            for index, puzzle in enumerate(puzzle_list, start=1):
+                expected_moves = puzzle.moves
+                if not expected_moves:
+                    failures.append((puzzle, "no-solution-moves"))
+                    continue
 
-            if predicted != expected_move:
-                display = predicted if predicted is not None else "no-move"
-                failures.append(
-                    (
-                        puzzle,
-                        f"{expected_move} at ply {ply_idx}, computed {display}",
+                played_moves: List[str] = []
+                puzzle_solved = True
+
+                for ply_idx in range(0, len(expected_moves), 2):
+                    expected_move = expected_moves[ply_idx]
+                    predicted: Optional[str]
+                    try:
+                        predicted = engine.bestmove(puzzle.fen, depth, played_moves)
+                    except TimeoutError:
+                        failures.append((puzzle, f"timeout at ply {ply_idx}"))
+                        predicted = None
+                        puzzle_solved = False
+                        break
+                    except RuntimeError as exc:
+                        failures.append((puzzle, f"error:{exc}"))
+                        print()
+                        raise
+
+                    if predicted != expected_move:
+                        display = predicted if predicted is not None else "no-move"
+                        failures.append(
+                            (
+                                puzzle,
+                                f"{expected_move} at ply {ply_idx}, computed {display}",
+                            )
+                        )
+                        puzzle_solved = False
+                        break
+
+                    played_moves.append(expected_move)
+
+                    opponent_idx = ply_idx + 1
+                    if opponent_idx < len(expected_moves):
+                        played_moves.append(expected_moves[opponent_idx])
+
+                if puzzle_solved:
+                    solved += 1
+
+                if progress_interval > 0 and (
+                    index % progress_interval == 0 or index == total
+                ):
+                    percent = (index / total) * 100.0 if total else 100.0
+                    print(
+                        f"Progress: {index}/{total} ({percent:.1f}%)",
+                        end="\r",
+                        flush=True,
                     )
-                )
-                puzzle_solved = False
-                break
-
-            played_moves.append(expected_move)
-
-            opponent_idx = ply_idx + 1
-            if opponent_idx < len(expected_moves):
-                played_moves.append(expected_moves[opponent_idx])
-
-        if puzzle_solved:
-            solved += 1
-
-        if progress_interval > 0 and (index % progress_interval == 0 or index == total):
-            percent = (index / total) * 100.0 if total else 100.0
-            print(f"Progress: {index}/{total} ({percent:.1f}%)", end="\r", flush=True)
+            percentage = (solved / total) * 100.0
+            print(
+                f"Solved {solved}/{total} puzzles at depth {depth} ({percentage:.1f}%)"
+            )
+            print(
+                f"Solved {solved}/{total} puzzles at depth {depth} ({percentage:.1f}%)",
+                file=handle,
+            )
 
     if total:
         print()
@@ -246,6 +323,12 @@ def run_suite(
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run tactical puzzles against skaks.")
+    parser.add_argument(
+        "--directory",
+        type=Path,
+        default=Path(__file__).resolve().parent,
+        help="Directory containing EPD files (default: script directory)",
+    )
     parser.add_argument(
         "--puzzles",
         type=Path,
@@ -291,7 +374,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 def main(argv: List[str]) -> int:
     args = parse_args(argv)
-    puzzles = load_puzzles(args.puzzles, args.limit)
+    puzzles = load_puzzles(args.puzzles, args.directory.resolve(), args.limit)
     if not puzzles:
         print("No puzzles loaded.", file=sys.stderr)
         return 1

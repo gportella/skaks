@@ -306,10 +306,8 @@ void run_uci_loop(Engine& engine, int default_depth,
         const Move move = decode_move(*book_move);
         const std::string bestmove = move_to_uci(move);
         std::ostringstream info_line;
-        info_line << "info string book move";
-        if (!opening_book_path.empty()) {
-          info_line << " from " << opening_book_path.string();
-        }
+        info_line << "info depth 0 seldepth 0 score cp 0 time 0 nodes 0 nps 0 pv "
+                  << bestmove << " (book)";
         const auto info_str = info_line.str();
         log_uci("out", info_str);
         std::cout << info_str << '\n';
