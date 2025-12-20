@@ -66,7 +66,7 @@ I read that the new `<bit>` is better for bitwise opps and bitcouting. Will need
 - Extend mobility similar move-count bonuses/penalties to knights, bishops, and rooks to reward activity.
 - Work on pawn structure, currently only center squares; add doubled/isolated/backward pawn penalties plus passed-pawn bonuses with rank scaling for sharper endings.
 - King safety stops at pawn shield and check state, I need to  incorporate open-file/diagonal pressure near the king, opposing pawn storms, and penalties when castling rights are lost but king stays in center. Ideally.
-- The material ignores bishop pair and rook-on-seventh obviius themes; Maybe I can add small static bonuses to increase tactical play.
+- The material ignores bishop pair and rook-on-seventh obvius themes; Maybe I can add small static bonuses to increase tactical play.
 - Detect rooks on open/semi-open files and outposted knights/bishops anchored by pawns; simple square-and-neighbor checks based on existing PST indexing.
 
 ## Make sure to follow the rules 
