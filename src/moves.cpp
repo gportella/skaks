@@ -40,13 +40,19 @@ inline int killer_priority(uint32_t code, const KillerTable* killers, int ply) {
 } // namespace
 
 inline int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
-  static const int scores[13] = {0, 100, 320, 330, 500, 900, 20000, 100, 320, 330, 500, 900, 20000};
-  return scores[static_cast<size_t>(captured)] * 10 - scores[static_cast<size_t>(piece)];
+  static const int scores[13] = {0,   100, 320, 330, 500, 900,  20000,
+                                 100, 320, 330, 500, 900, 20000};
+  return scores[static_cast<size_t>(captured)] * 10 -
+         scores[static_cast<size_t>(piece)];
 }
 
-// Order: ttMove first, then captures by MVV-LVA, then quiets (killer quiets boosted)
-void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count,
-                uint32_t tt_code, const KillerTable* killers, int ply) {
+// Order: ttMove first, then captures by MVV-LVA, then quiets (killer quiets
+// boosted)
+void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves,
+                uint16_t move_count, uint32_t tt_code,
+                const KillerTable* killers,
+                const std::array<std::array<int, 64>, 64>* history_heuristic,
+                int ply) {
   std::array<MoveKey, kMaxMovementCount> keys;
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -57,14 +63,21 @@ void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_co
       key = 2'000'000; // force first
     } else {
       const uint16_t cap_raw = move_captured(m);
-      const bool is_capture = cap_raw != static_cast<uint8_t>(OccupancyType::empty);
+      const bool is_capture =
+          cap_raw != static_cast<uint8_t>(OccupancyType::empty);
       if (is_capture) {
         auto cap = static_cast<OccupancyType>(cap_raw);
         auto pc = static_cast<OccupancyType>(move_piece(m));
         key = 1'000'000 + mvv_lva_score(cap, pc);
       } else {
         key = 100'000;
-        key += killer_priority(m, killers, ply); // quiet killers ahead of other quiets
+        key += killer_priority(m, killers,
+                               ply); // quiet killers ahead of other quiets
+        if (history_heuristic != nullptr) {
+          const auto from = static_cast<std::size_t>(move_from(m));
+          const auto to = static_cast<std::size_t>(move_to(m));
+          key += (*history_heuristic)[from][to];
+        }
       }
     }
 
@@ -78,16 +91,16 @@ void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_co
     moves[i] = keys[i].code;
 }
 
-std::array<uint32_t, kMaxMovementCount> generate_all_moves(const Board& board, SideToMove stm,
-                                                           uint16_t& move_count) {
+std::array<uint32_t, kMaxMovementCount>
+generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count) {
   std::array<uint32_t, kMaxMovementCount> moves{};
   move_count = 0;
   emit_all_moves(board, stm, moves, move_count);
   return moves;
 }
 
-std::array<uint32_t, kMaxMovementCount> generate_legal_moves(Board& board, SideToMove stm,
-                                                             uint16_t& move_count) {
+std::array<uint32_t, kMaxMovementCount>
+generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count) {
   std::array<uint32_t, kMaxMovementCount> legal_moves{};
   uint16_t legal_move_count = 0;
   auto pseudo_moves = generate_all_moves(board, stm, move_count);
@@ -106,14 +119,17 @@ std::array<uint32_t, kMaxMovementCount> generate_legal_moves(Board& board, SideT
 
 inline Undo make_move(Board& b, const Move& m) {
   const bool white = (b.side_to_move == SideToMove::White);
-  const Square king_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
-  const Square queen_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_start;
-  const Square king_target =
-      kCastlingSideConfigs[to_index(b.side_to_move)].king_kingside_target; // used for short castle
-  const Square queen_target =
-      kCastlingSideConfigs[to_index(b.side_to_move)].king_queenside_target; // used for long castle
+  const Square king_rook =
+      kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
+  const Square queen_rook =
+      kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_start;
+  const Square king_target = kCastlingSideConfigs[to_index(b.side_to_move)]
+                                 .king_kingside_target; // used for short castle
+  const Square queen_target = kCastlingSideConfigs[to_index(b.side_to_move)]
+                                  .king_queenside_target; // used for long castle
   const Square rook_kingside_target =
-      kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_target; // used for short castle
+      kCastlingSideConfigs[to_index(b.side_to_move)]
+          .rook_kingside_target; // used for short castle
   const Square rook_queenside_target =
       kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_target;
   Undo undo;
@@ -133,11 +149,13 @@ inline Undo make_move(Board& b, const Move& m) {
   undo.from = m.from;
   undo.to = m.to;
   undo.flags = m.flags;
-  undo.captured_sq = undo.was_en_passant ? (white ? (m.to - 8) : (m.to + 8)) : m.to;
+  undo.captured_sq =
+      undo.was_en_passant ? (white ? (m.to - 8) : (m.to + 8)) : m.to;
   if (undo.was_en_passant) {
     undo.captured_pc = white ? OccupancyType::bP : OccupancyType::wP;
   }
-  std::copy(std::begin(b.occupancy), std::end(b.occupancy), std::begin(undo.occupancy));
+  std::copy(std::begin(b.occupancy), std::end(b.occupancy),
+            std::begin(undo.occupancy));
   undo.rook_list_before = {b.rook_list[0], b.rook_list[1]};
   undo.king_list_before = {b.king_list[0], b.king_list[1]};
   undo.pawn_list_before = {b.pawn_list[0], b.pawn_list[1]};
@@ -157,10 +175,11 @@ inline Undo make_move(Board& b, const Move& m) {
   if (undo.was_en_passant) {
     b.pieces[captured_idx] = OccupancyType::empty;
   }
-  b.pieces[to_idx] = (m.promo_pc != OccupancyType::empty) &&
-                             (m.moving_pc == (white ? OccupancyType::wP : OccupancyType::bP))
-                         ? m.promo_pc
-                         : m.moving_pc;
+  b.pieces[to_idx] =
+      (m.promo_pc != OccupancyType::empty) &&
+              (m.moving_pc == (white ? OccupancyType::wP : OccupancyType::bP))
+          ? m.promo_pc
+          : m.moving_pc;
 
   auto update_piece_square = [](PieceList& list, Square from, Square to) {
     for (std::uint8_t i = 0; i < list.count; ++i) {
@@ -201,25 +220,34 @@ inline Undo make_move(Board& b, const Move& m) {
   }
 
   // normal capture, could be en passant or regular capture
-  if ((m.promo_pc == OccupancyType::empty) && (undo.captured_pc != OccupancyType::empty)) {
+  if ((m.promo_pc == OccupancyType::empty) &&
+      (undo.captured_pc != OccupancyType::empty)) {
     // 0 is the moving piece, 1 is the captured piece or the rook in castling
-    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1];
+    undo.pieces_bb[0] =
+        b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1];
     undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
 
     // bitboard updates
-    // remove bit from the captured piece, remove from the "from" square, add to the "to" square
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1], undo.captured_sq);
+    // remove bit from the captured piece, remove from the "from" square, add to
+    // the "to" square
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1],
+              undo.captured_sq);
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.to);
 
-    remove_piece_square(b.rook_list[enemy_index], static_cast<Square>(undo.captured_sq));
-    remove_piece_square(b.pawn_list[enemy_index], static_cast<Square>(undo.captured_sq));
-    remove_piece_square(b.king_list[enemy_index], static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.rook_list[enemy_index],
+                        static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.pawn_list[enemy_index],
+                        static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.king_list[enemy_index],
+                        static_cast<Square>(undo.captured_sq));
 
-    if (undo.captured_pc == OccupancyType::wK || undo.captured_pc == OccupancyType::bK) {
+    if (undo.captured_pc == OccupancyType::wK ||
+        undo.captured_pc == OccupancyType::bK) {
       b.king_positions[enemy_index] = -1;
-      b.king_captured =
-          (undo.captured_pc == OccupancyType::wK) ? PieceColor::White : PieceColor::Black;
+      b.king_captured = (undo.captured_pc == OccupancyType::wK)
+                            ? PieceColor::White
+                            : PieceColor::Black;
     }
 
   }
@@ -229,24 +257,29 @@ inline Undo make_move(Board& b, const Move& m) {
   {
     undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
     undo.pieces_bb[1] =
-        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) -
+        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
+                                                   : OccupancyType::bR) -
                     1]; // Assuming rook is involved
 
     // bitboard updates
     // remove king and rook from their original squares, add to their new squares
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
-    clear_bit(
-        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
-        flag_is_castle(m.flags) ? king_rook : queen_rook);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
+                                                         : OccupancyType::bR) -
+                          1],
+              flag_is_castle(m.flags) ? king_rook : queen_rook);
 
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1],
             flag_is_castle(m.flags) ? king_target : queen_target);
-    set_bit(
-        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
-        flag_is_castle(m.flags) ? (rook_kingside_target) : (rook_queenside_target));
+    set_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
+                                                       : OccupancyType::bR) -
+                        1],
+            flag_is_castle(m.flags) ? (rook_kingside_target)
+                                    : (rook_queenside_target));
 
     const Square rook_from = flag_is_castle(m.flags) ? king_rook : queen_rook;
-    const Square rook_to = flag_is_castle(m.flags) ? rook_kingside_target : rook_queenside_target;
+    const Square rook_to =
+        flag_is_castle(m.flags) ? rook_kingside_target : rook_queenside_target;
     b.pieces[to_index(rook_from)] = OccupancyType::empty;
     b.pieces[to_index(rook_to)] = white ? OccupancyType::wR : OccupancyType::bR;
 
@@ -257,7 +290,8 @@ inline Undo make_move(Board& b, const Move& m) {
 
   }
   // promotion with no capture, 0 is the pawn, 1 is the promoted piece
-  else if ((m.promo_pc != OccupancyType::empty) && (m.captured_pc == OccupancyType::empty)) {
+  else if ((m.promo_pc != OccupancyType::empty) &&
+           (m.captured_pc == OccupancyType::empty)) {
     undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
     undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1];
 
@@ -273,23 +307,30 @@ inline Undo make_move(Board& b, const Move& m) {
   // promotion with capture
   else if (m.promo_pc != OccupancyType::empty) {
     // 0 is the pawn being promoted, 1 capture piece, 2 is the promoted piece
-    undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1];
+    undo.pieces_bb[0] =
+        b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1];
     undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
     undo.pieces_bb[2] = b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1];
 
     // bitboard updates
-    clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1], undo.captured_sq);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1],
+              undo.captured_sq);
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1], m.to);
 
     remove_piece_square(b.pawn_list[mover_index], from_sq);
-    remove_piece_square(b.rook_list[enemy_index], static_cast<Square>(undo.captured_sq));
-    remove_piece_square(b.pawn_list[enemy_index], static_cast<Square>(undo.captured_sq));
-    remove_piece_square(b.king_list[enemy_index], static_cast<Square>(undo.captured_sq));
-    if (undo.captured_pc == OccupancyType::wK || undo.captured_pc == OccupancyType::bK) {
+    remove_piece_square(b.rook_list[enemy_index],
+                        static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.pawn_list[enemy_index],
+                        static_cast<Square>(undo.captured_sq));
+    remove_piece_square(b.king_list[enemy_index],
+                        static_cast<Square>(undo.captured_sq));
+    if (undo.captured_pc == OccupancyType::wK ||
+        undo.captured_pc == OccupancyType::bK) {
       b.king_positions[enemy_index] = -1;
-      b.king_captured =
-          (undo.captured_pc == OccupancyType::wK) ? PieceColor::White : PieceColor::Black;
+      b.king_captured = (undo.captured_pc == OccupancyType::wK)
+                            ? PieceColor::White
+                            : PieceColor::Black;
     }
     if (m.promo_pc == OccupancyType::wR || m.promo_pc == OccupancyType::bR) {
       add_piece_square(b.rook_list[mover_index], to_sq);
@@ -307,19 +348,23 @@ inline Undo make_move(Board& b, const Move& m) {
     b.occupancy[mover_index] |= bit_mask(m.to);
   }
 
-  b.occupancy[to_index(PieceColor::White)] = calculate_occupancy(b, PieceColor::White);
-  b.occupancy[to_index(PieceColor::Black)] = calculate_occupancy(b, PieceColor::Black);
+  b.occupancy[to_index(PieceColor::White)] =
+      calculate_occupancy(b, PieceColor::White);
+  b.occupancy[to_index(PieceColor::Black)] =
+      calculate_occupancy(b, PieceColor::Black);
   b.occupancy[to_index(PieceColor::Both)] =
-      b.occupancy[to_index(PieceColor::White)] | b.occupancy[to_index(PieceColor::Black)];
+      b.occupancy[to_index(PieceColor::White)] |
+      b.occupancy[to_index(PieceColor::Black)];
 
   // Update position key and board state
   //   change to incremental update XOR later
   b.position_key = compute_position_key(b); // Recompute for simplicity
 
-  b.fifty_move_counter = (m.moving_pc == OccupancyType::wP || m.moving_pc == OccupancyType::bP ||
-                          m.captured_pc != OccupancyType::empty)
-                             ? 0
-                             : b.fifty_move_counter + 1;
+  b.fifty_move_counter =
+      (m.moving_pc == OccupancyType::wP || m.moving_pc == OccupancyType::bP ||
+       m.captured_pc != OccupancyType::empty)
+          ? 0
+          : b.fifty_move_counter + 1;
   b.en_passant = -1;
   b.ep_square = 0;
   if (flag_is_double_push(m.flags)) {
@@ -333,6 +378,97 @@ inline Undo make_move(Board& b, const Move& m) {
   b.side_to_move = flip_side(b.side_to_move);
 
   return undo;
+}
+
+bool allow_null_move(Board& b, int depth) {
+  if (depth < NULL_MOVE_MIN_DEPTH) {
+    return false;
+  }
+
+  if (b.king_captured != PieceColor::None) {
+    return false;
+  }
+
+  if (is_check(b, b.side_to_move)) {
+    return false;
+  }
+
+  if (b.fifty_move_counter < 2) {
+    return false;
+  }
+
+  const std::size_t pawn_index =
+      (b.side_to_move == SideToMove::White)
+          ? static_cast<std::size_t>(OccupancyType::wP) - 1
+          : static_cast<std::size_t>(OccupancyType::bP) - 1;
+  const bool has_pawn = b.pieces_bb[pawn_index] != 0ULL;
+  if (!has_pawn) {
+    return false;
+  }
+
+  Bitboard non_pawn_material = 0ULL;
+  if (b.side_to_move == SideToMove::White) {
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::wN) - 1];
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::wB) - 1];
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::wR) - 1];
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::wQ) - 1];
+  } else {
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::bN) - 1];
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::bB) - 1];
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::bR) - 1];
+    non_pawn_material |=
+        b.pieces_bb[static_cast<std::size_t>(OccupancyType::bQ) - 1];
+  }
+
+  if (non_pawn_material == 0ULL) {
+    return false;
+  }
+
+  return true;
+}
+
+UndoNull make_null_move(Board& b) {
+  UndoNull undo;
+  undo.position_key_before = b.position_key;
+  undo.fifty_move_counter_before = b.fifty_move_counter;
+  undo.en_passant_before = b.en_passant;
+
+  if (b.side_to_move == SideToMove::Black) {
+    ++b.ply_count;
+  }
+
+  b.en_passant = -1;
+  b.ep_square = 0;
+  b.fifty_move_counter += 1;
+
+  // Switch side to move
+  b.side_to_move = flip_side(b.side_to_move);
+
+  // Update position key and board state
+  //   change to incremental update XOR later
+  b.position_key = compute_position_key(b); // Recompute for simplicity
+
+  return undo;
+}
+
+void undo_null_move(Board& b, const UndoNull& u) {
+  // Restore position key and board state
+  b.position_key = u.position_key_before;
+  b.fifty_move_counter = u.fifty_move_counter_before;
+  b.en_passant = u.en_passant_before;
+
+  // Switch side to move back
+  b.side_to_move = flip_side(b.side_to_move);
+  if (b.side_to_move == SideToMove::Black) {
+    --b.ply_count;
+  }
 }
 
 int update_castling_rights(Board& b, const Move& m) {
@@ -390,14 +526,17 @@ inline void undo_move(Board& b, const Undo& u) {
     --b.ply_count;
   }
   const bool white = (b.side_to_move == SideToMove::White);
-  const Square king_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
-  const Square queen_rook = kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_start;
-  const Square king_target =
-      kCastlingSideConfigs[to_index(b.side_to_move)].king_kingside_target; // used for short castle
-  const Square queen_target =
-      kCastlingSideConfigs[to_index(b.side_to_move)].king_queenside_target; // used for long castle
+  const Square king_rook =
+      kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
+  const Square queen_rook =
+      kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_start;
+  const Square king_target = kCastlingSideConfigs[to_index(b.side_to_move)]
+                                 .king_kingside_target; // used for short castle
+  const Square queen_target = kCastlingSideConfigs[to_index(b.side_to_move)]
+                                  .king_queenside_target; // used for long castle
   const Square rook_kingside_target =
-      kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_target; // used for short castle
+      kCastlingSideConfigs[to_index(b.side_to_move)]
+          .rook_kingside_target; // used for short castle
   const Square rook_queenside_target =
       kCastlingSideConfigs[to_index(b.side_to_move)].rook_queenside_target;
 
@@ -408,7 +547,8 @@ inline void undo_move(Board& b, const Undo& u) {
   b.ep_square = u.ep_square_before;
   b.castling_rights = u.castling_rights_before;
   b.has_castled = u.castled_before;
-  std::copy(std::begin(u.occupancy), std::end(u.occupancy), std::begin(b.occupancy));
+  std::copy(std::begin(u.occupancy), std::end(u.occupancy),
+            std::begin(b.occupancy));
   b.rook_list[0] = u.rook_list_before[0];
   b.rook_list[1] = u.rook_list_before[1];
   b.king_list[0] = u.king_list_before[0];
@@ -429,17 +569,20 @@ inline void undo_move(Board& b, const Undo& u) {
   }
   // bring back bitboards
   // normal capture, could be en passant or regular capture
-  if ((u.promo_pc == OccupancyType::empty) && (u.captured_pc != OccupancyType::empty)) {
+  if ((u.promo_pc == OccupancyType::empty) &&
+      (u.captured_pc != OccupancyType::empty)) {
     // 0 is the moving piece, 1 is the captured piece or the rook in castling
 
     b.pieces_bb[static_cast<std::size_t>(u.captured_pc) - 1] = u.pieces_bb[0];
     b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1] = u.pieces_bb[1];
 
     // bitboard updates
-    // set bit to the from, remove from the "to" square, add back to the captured square
+    // set bit to the from, remove from the "to" square, add back to the captured
+    // square
     clear_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.to);
     set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
-    set_bit(b.pieces_bb[static_cast<std::size_t>(u.captured_pc) - 1], u.captured_sq);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.captured_pc) - 1],
+            u.captured_sq);
 
   }
   // castling 0 is king, 1 is the rook
@@ -448,29 +591,37 @@ inline void undo_move(Board& b, const Undo& u) {
   {
 
     b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1] = u.pieces_bb[0];
-    b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1] =
-        u.pieces_bb[1];
+    b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
+                                               : OccupancyType::bR) -
+                1] = u.pieces_bb[1];
 
     // bitboard updates
-    // set king and rook back to their original squares, remove from their new squares
+    // set king and rook back to their original squares, remove from their new
+    // squares
     clear_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1],
               flag_is_castle(u.flags) ? king_target : queen_target);
-    clear_bit(
-        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
-        flag_is_castle(u.flags) ? rook_kingside_target : rook_queenside_target);
+    clear_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
+                                                         : OccupancyType::bR) -
+                          1],
+              flag_is_castle(u.flags) ? rook_kingside_target
+                                      : rook_queenside_target);
     set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
-    set_bit(
-        b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR : OccupancyType::bR) - 1],
-        flag_is_castle(u.flags) ? king_rook : queen_rook);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
+                                                       : OccupancyType::bR) -
+                        1],
+            flag_is_castle(u.flags) ? king_rook : queen_rook);
 
     const Square rook_from = flag_is_castle(u.flags) ? king_rook : queen_rook;
-    const Square rook_to = flag_is_castle(u.flags) ? rook_kingside_target : rook_queenside_target;
+    const Square rook_to =
+        flag_is_castle(u.flags) ? rook_kingside_target : rook_queenside_target;
     b.pieces[to_index(rook_to)] = OccupancyType::empty;
-    b.pieces[to_index(rook_from)] = white ? OccupancyType::wR : OccupancyType::bR;
+    b.pieces[to_index(rook_from)] =
+        white ? OccupancyType::wR : OccupancyType::bR;
 
   }
   // promotion with no capture, 0 is the pawn, 1 is the promoted piece
-  else if ((u.promo_pc != OccupancyType::empty) && (u.captured_pc == OccupancyType::empty)) {
+  else if ((u.promo_pc != OccupancyType::empty) &&
+           (u.captured_pc == OccupancyType::empty)) {
     b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1] = u.pieces_bb[0];
     b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1] = u.pieces_bb[1];
 
@@ -487,11 +638,12 @@ inline void undo_move(Board& b, const Undo& u) {
     b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1] = u.pieces_bb[2];
 
     // bitboard updates
-    // set bit to the from pawn, set bit to the captured piece, remove promoted piece from to
-    // square
+    // set bit to the from pawn, set bit to the captured piece, remove promoted
+    // piece from to square
     clear_bit(b.pieces_bb[static_cast<std::size_t>(u.promo_pc) - 1], u.to);
     set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
-    set_bit(b.pieces_bb[static_cast<std::size_t>(u.captured_pc) - 1], u.captured_sq);
+    set_bit(b.pieces_bb[static_cast<std::size_t>(u.captured_pc) - 1],
+            u.captured_sq);
   }
   //
   else {

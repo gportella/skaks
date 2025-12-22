@@ -154,15 +154,30 @@ class UciEngine:
 
 def load_puzzles(
     path: Path, directory: Path, limit: Optional[int]
-) -> Dict[str, Puzzle]:
+) -> Dict[str, List[Puzzle]]:
     epd_files = find_epd_files(directory=directory)
-    out = {}
-    for f in epd_files + [path]:
-        suffix = path.suffix.lower()
+    out: Dict[str, List[Puzzle]] = {}
+    seen: set[Path] = set()
+
+    for candidate in epd_files + [path]:
+        if not candidate.exists():
+            continue
+
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+
+        suffix = candidate.suffix.lower()
         if suffix == ".epd":
-            out[f.name] = load_puzzles_epd(path, limit)
+            puzzles = load_puzzles_epd(candidate, limit)
         elif suffix == ".csv":
-            out[f.name] = load_puzzles_csv(path, limit)
+            puzzles = load_puzzles_csv(candidate, limit)
+        else:
+            continue
+
+        if puzzles:
+            out[candidate.name] = puzzles
 
     return out
 
@@ -196,7 +211,14 @@ def parse_epd_line(line: str) -> Optional[Puzzle]:
         return None
 
     best_moves = operations.get("bm")
-    move_list = [move.uci().lower() for move in (best_moves or []) if move is not None]
+    if isinstance(best_moves, chess.Move):
+        iterable_moves = [best_moves]
+    elif isinstance(best_moves, Iterable) and not isinstance(best_moves, (str, bytes)):
+        iterable_moves = list(best_moves)
+    else:
+        iterable_moves = []
+
+    move_list = [move.uci().lower() for move in iterable_moves if move is not None]
     if not move_list:
         return None
 
@@ -231,7 +253,11 @@ def load_puzzles_epd(path: Path, limit: Optional[int]) -> List[Puzzle]:
 
 
 def run_suite(
-    puzzles: Dict[str, Puzzle], engine: UciEngine, depth: int, progress_interval: int
+    puzzles: Dict[str, List[Puzzle]],
+    directory: Path,
+    engine: UciEngine,
+    depth: int,
+    progress_interval: int,
 ) -> Tuple[int, int, List[Tuple[Puzzle, str]]]:
     timestamp = datetime.datetime.now().isoformat(timespec="seconds")
     lines = []
@@ -245,13 +271,15 @@ def run_suite(
 
     lines.append("--- perf ---")
     with OUTPUT_FILE.open("a", encoding="utf-8") as handle:
-        handle.write("\n".join(lines))
-        for fname, pzzl in puzzles.items():
-            puzzle_list = list(pzzl)
-            total = len(puzzle_list)
-            solved = 0
-            total = 0
-            failures: List[Tuple[Puzzle, str]] = []
+        handle.write("\n".join(lines) + "\n")
+        overall_solved = 0
+        overall_total = 0
+        failures: List[Tuple[Puzzle, str]] = []
+
+        for fname, puzzle_list in puzzles.items():
+            file_total = len(puzzle_list)
+            file_solved = 0
+            last_progress_len = 0
 
             for index, puzzle in enumerate(puzzle_list, start=1):
                 expected_moves = puzzle.moves
@@ -295,30 +323,39 @@ def run_suite(
                         played_moves.append(expected_moves[opponent_idx])
 
                 if puzzle_solved:
-                    solved += 1
+                    file_solved += 1
 
                 if progress_interval > 0 and (
-                    index % progress_interval == 0 or index == total
+                    index % progress_interval == 0 or index == file_total
                 ):
-                    percent = (index / total) * 100.0 if total else 100.0
-                    print(
-                        f"Progress: {index}/{total} ({percent:.1f}%)",
-                        end="\r",
-                        flush=True,
-                    )
-            percentage = (solved / total) * 100.0
-            print(
-                f"Solved {solved}/{total} puzzles at depth {depth} ({percentage:.1f}%)"
-            )
-            print(
-                f"Solved {solved}/{total} puzzles at depth {depth} ({percentage:.1f}%)",
-                file=handle,
-            )
+                    percent = (index / file_total) * 100.0 if file_total else 100.0
+                    progress_line = f"Progress: {index}/{file_total} ({percent:.1f}%)"
+                    padding = max(0, last_progress_len - len(progress_line))
+                    sys.stdout.write("\r" + progress_line + " " * padding)
+                    sys.stdout.flush()
+                    last_progress_len = len(progress_line)
+            overall_solved += file_solved
+            overall_total += file_total
 
-    if total:
-        print()
+            if last_progress_len:
+                sys.stdout.write("\r" + " " * last_progress_len + "\r")
+                sys.stdout.flush()
 
-    return solved, total, failures
+            if file_total:
+                percentage = (file_solved / file_total) * 100.0
+            else:
+                percentage = 0.0
+
+            summary_line = f"Solved {file_solved}/{file_total} puzzles at depth {depth} ({percentage:.1f}%)"
+            print(f"[{fname}] {summary_line}")
+            handle.write(f"[{fname}] {summary_line}\n")
+
+        overall_line = (
+            f"Overall solved {overall_solved}/{overall_total} puzzles at depth {depth}"
+        )
+        handle.write(overall_line + "\n")
+
+    return overall_solved, overall_total, failures
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -374,7 +411,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 def main(argv: List[str]) -> int:
     args = parse_args(argv)
-    puzzles = load_puzzles(args.puzzles, args.directory.resolve(), args.limit)
+    directory = args.directory.resolve()
+    puzzles = load_puzzles(args.puzzles, directory, args.limit)
     if not puzzles:
         print("No puzzles loaded.", file=sys.stderr)
         return 1
@@ -384,7 +422,7 @@ def main(argv: List[str]) -> int:
     try:
         with UciEngine(engine_path, args.timeout) as engine:
             solved, total, failures = run_suite(
-                puzzles, engine, args.depth, args.progress_interval
+                puzzles, directory, engine, args.depth, args.progress_interval
             )
     except FileNotFoundError:
         print(f"Engine binary not found: {engine_path}", file=sys.stderr)
@@ -396,7 +434,7 @@ def main(argv: List[str]) -> int:
         print(f"Engine error: {exc}", file=sys.stderr)
         return 4
 
-    percentage = (solved / total) * 100.0
+    percentage = (solved / total) * 100.0 if total else 0.0
     print(f"Solved {solved}/{total} puzzles at depth {args.depth} ({percentage:.1f}%)")
 
     if args.show_failures and failures:

@@ -24,8 +24,15 @@ inline constexpr int QUIESCENCE_MAX_PLY = 12;
 inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 16;
 inline constexpr int QUIESCENCE_ZERO_GAIN_SKIP_INDEX = 6;
 
-inline constexpr uint8_t MAX_BB_UPDATE_PIECES = 3; // max 3 pieces change per move
-                                                   // (castle+capture || capture promotion)
+inline constexpr int NULL_MOVE_REDUCTION = 3;
+inline constexpr int NULL_MOVE_MIN_DEPTH = NULL_MOVE_REDUCTION + 1;
+
+// inline constexpr int LATE_MOVE_REDUCTION_BASE = 2;
+// inline constexpr int LATE_MOVE_REDUCTION_DIVISOR = 3;
+
+inline constexpr uint8_t MAX_BB_UPDATE_PIECES =
+    3; // max 3 pieces change per move
+       // (castle+capture || capture promotion)
 inline constexpr std::array<int, 8> kRanks{0, 1, 2, 3, 4, 5, 6, 7};
 inline constexpr std::string_view kFiles = "abcdefgh";
 inline constexpr std::uint8_t kBoardSize = 64;

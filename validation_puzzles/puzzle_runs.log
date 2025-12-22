@@ -1,4 +1,4 @@
-=== perf snapshot 2025-12-20T14:39:03 ===
+=== perf snapshot 2025-12-20T18:27:30 ===
 binary: skaks
 --- version ---
 skaks version 0.6
@@ -14,3 +14,115 @@ Optimizations:
  - Killer move heuristic for quiet move ordering
  - Support for polyglot book of moves
 --- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 1/10 puzzles at depth 3 (10.0%)
+[brakto_kopec.epd] Solved 0/10 puzzles at depth 3 (0.0%)
+[eigennmann_rapid_engine.epd] Solved 1/10 puzzles at depth 3 (10.0%)
+[lct_2.epd] Solved 0/10 puzzles at depth 3 (0.0%)
+[wacknew.epd] Solved 5/10 puzzles at depth 3 (50.0%)
+[puzzles.csv] Solved 1/10 puzzles at depth 3 (10.0%)
+Overall solved 8/60 puzzles at depth 3
+=== perf snapshot 2025-12-20T18:27:38 ===
+binary: skaks
+--- version ---
+skaks version 0.6
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+--- perf ---
+=== perf snapshot 2025-12-20T18:27:55 ===
+binary: skaks
+--- version ---
+skaks version 0.6
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 1/10 puzzles at depth 6 (10.0%)
+[brakto_kopec.epd] Solved 3/10 puzzles at depth 6 (30.0%)
+[eigennmann_rapid_engine.epd] Solved 2/10 puzzles at depth 6 (20.0%)
+[lct_2.epd] Solved 0/10 puzzles at depth 6 (0.0%)
+[wacknew.epd] Solved 6/10 puzzles at depth 6 (60.0%)
+[puzzles.csv] Solved 1/10 puzzles at depth 6 (10.0%)
+Overall solved 13/60 puzzles at depth 6
+=== perf snapshot 2025-12-20T18:29:03 ===
+binary: skaks
+--- version ---
+skaks version 0.6
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 1/10 puzzles at depth 3 (10.0%)
+[brakto_kopec.epd] Solved 0/10 puzzles at depth 3 (0.0%)
+[eigennmann_rapid_engine.epd] Solved 1/10 puzzles at depth 3 (10.0%)
+[lct_2.epd] Solved 0/10 puzzles at depth 3 (0.0%)
+[wacknew.epd] Solved 5/10 puzzles at depth 3 (50.0%)
+[puzzles.csv] Solved 1/10 puzzles at depth 3 (10.0%)
+Overall solved 8/60 puzzles at depth 3
+=== perf snapshot 2025-12-20T18:29:08 ===
+binary: skaks
+--- version ---
+skaks version 0.6
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 1/10 puzzles at depth 5 (10.0%)
+[brakto_kopec.epd] Solved 3/10 puzzles at depth 5 (30.0%)
+[eigennmann_rapid_engine.epd] Solved 1/10 puzzles at depth 5 (10.0%)
+[lct_2.epd] Solved 0/10 puzzles at depth 5 (0.0%)
+=== perf snapshot 2025-12-20T18:29:19 ===
+binary: skaks
+--- version ---
+skaks version 0.6
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/10 puzzles at depth 7 (20.0%)
+[brakto_kopec.epd] Solved 3/10 puzzles at depth 7 (30.0%)
+[eigennmann_rapid_engine.epd] Solved 2/10 puzzles at depth 7 (20.0%)
+[lct_2.epd] Solved 0/10 puzzles at depth 7 (0.0%)
+[wacknew.epd] Solved 7/10 puzzles at depth 7 (70.0%)
+[puzzles.csv] Solved 1/10 puzzles at depth 7 (10.0%)
+Overall solved 15/60 puzzles at depth 7
