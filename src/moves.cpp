@@ -18,6 +18,7 @@ namespace chess {
 struct MoveKey {
   uint32_t code;
   int key; // higher is better
+  uint16_t order; // original emission order for deterministic ties
 };
 
 namespace {
@@ -89,11 +90,15 @@ void sort_moves(const Board& board,
       }
     }
 
-    keys[i] = {m, key};
+    keys[i] = {m, key, i};
   }
 
-  std::sort(keys.begin(), keys.begin() + move_count,
-            [](const MoveKey& a, const MoveKey& b) { return a.key > b.key; });
+  std::sort(keys.begin(), keys.begin() + move_count, [](const MoveKey& a, const MoveKey& b) {
+    if (a.key == b.key) {
+      return a.order < b.order;
+    }
+    return a.key > b.key;
+  });
 
   for (uint16_t i = 0; i < move_count; ++i)
     moves[i] = keys[i].code;
