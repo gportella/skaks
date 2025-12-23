@@ -54,7 +54,7 @@ void sort_moves(const Board& board,
                 uint16_t move_count, uint32_t tt_code,
                 const KillerTable* killers,
                 const std::array<std::array<int, 64>, 64>* history_heuristic,
-                int ply, SEECache* see_cache) {
+                int ply) {
   std::array<MoveKey, kMaxMovementCount> keys;
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -71,9 +71,7 @@ void sort_moves(const Board& board,
         auto cap = static_cast<OccupancyType>(cap_raw);
         auto pc = static_cast<OccupancyType>(move_piece(m));
         key = 1'000'000 + mvv_lva_score(cap, pc);
-        const Move decoded = decode_move(m);
-        const int see_gain =
-            static_exchange_eval_cached(board, decoded, see_cache);
+        auto see_gain = static_exchange_eval(board, decode_move(m));
         if (see_gain < 0) {
           key -= 10;
         } else {
@@ -338,6 +336,14 @@ inline Undo make_move(Board& b, const Move& m) {
   undo.castled_before = b.has_castled;
   undo.king_captured_before = b.king_captured;
 
+  const Zobrist& zobrist = zobrist_table();
+  std::uint64_t key = b.position_key;
+  if (b.en_passant >= 0 && ep_capture_available(b)) {
+    key ^= zobrist.enPassantFile[file_of(b.en_passant)];
+  }
+  const int castle_mask_before = to_mask(b.castling_rights);
+  key ^= zobrist.castle[castle_mask_before];
+
   const auto mover_index = to_index(b.side_to_move);
   const auto enemy_index = to_index(flip_side(b.side_to_move));
   const Square from_sq = static_cast<Square>(m.from);
@@ -345,6 +351,11 @@ inline Undo make_move(Board& b, const Move& m) {
   const auto from_idx = to_index(m.from);
   const auto to_idx = to_index(m.to);
   const auto captured_idx = to_index(undo.captured_sq);
+
+  key ^= zobrist.piece[occ_to_zidx(m.moving_pc)][from_idx];
+  if (undo.captured_pc != OccupancyType::empty) {
+    key ^= zobrist.piece[occ_to_zidx(undo.captured_pc)][captured_idx];
+  }
 
   b.pieces[from_idx] = OccupancyType::empty;
   if (undo.was_en_passant) {
@@ -455,6 +466,10 @@ inline Undo make_move(Board& b, const Move& m) {
     const Square rook_from = flag_is_castle(m.flags) ? king_rook : queen_rook;
     const Square rook_to =
         flag_is_castle(m.flags) ? rook_kingside_target : rook_queenside_target;
+    const int rook_z =
+      occ_to_zidx(white ? OccupancyType::wR : OccupancyType::bR);
+    key ^= zobrist.piece[rook_z][to_index(rook_from)];
+    key ^= zobrist.piece[rook_z][to_index(rook_to)];
     b.pieces[to_index(rook_from)] = OccupancyType::empty;
     b.pieces[to_index(rook_to)] = white ? OccupancyType::wR : OccupancyType::bR;
 
@@ -523,6 +538,11 @@ inline Undo make_move(Board& b, const Move& m) {
     b.occupancy[mover_index] |= bit_mask(m.to);
   }
 
+  const OccupancyType placed_piece = b.pieces[to_idx];
+  if (placed_piece != OccupancyType::empty) {
+    key ^= zobrist.piece[occ_to_zidx(placed_piece)][to_idx];
+  }
+
   b.occupancy[to_index(PieceColor::White)] =
       calculate_occupancy(b, PieceColor::White);
   b.occupancy[to_index(PieceColor::Black)] =
@@ -530,10 +550,6 @@ inline Undo make_move(Board& b, const Move& m) {
   b.occupancy[to_index(PieceColor::Both)] =
       b.occupancy[to_index(PieceColor::White)] |
       b.occupancy[to_index(PieceColor::Black)];
-
-  // Update position key and board state
-  //   change to incremental update XOR later
-  b.position_key = compute_position_key(b); // Recompute for simplicity
 
   b.fifty_move_counter =
       (m.moving_pc == OccupancyType::wP || m.moving_pc == OccupancyType::bP ||
@@ -547,10 +563,18 @@ inline Undo make_move(Board& b, const Move& m) {
     b.en_passant = mid;
     b.ep_square = bb_of(mid);
   }
-  update_castling_rights(b, m);
+  const int castle_mask_after = update_castling_rights(b, m);
+  key ^= zobrist.castle[castle_mask_after];
 
   // Switch side to move
   b.side_to_move = flip_side(b.side_to_move);
+  key ^= zobrist.sideToMove;
+
+  if (b.en_passant >= 0 && ep_capture_available(b)) {
+    key ^= zobrist.enPassantFile[file_of(b.en_passant)];
+  }
+
+  b.position_key = key;
 
   return undo;
 }
@@ -619,16 +643,21 @@ UndoNull make_null_move(Board& b) {
     ++b.ply_count;
   }
 
+  const Zobrist& zobrist = zobrist_table();
+  std::uint64_t key = b.position_key;
+  if (b.en_passant >= 0 && ep_capture_available(b)) {
+    key ^= zobrist.enPassantFile[file_of(b.en_passant)];
+  }
+
   b.en_passant = -1;
   b.ep_square = 0;
   b.fifty_move_counter += 1;
 
   // Switch side to move
   b.side_to_move = flip_side(b.side_to_move);
+  key ^= zobrist.sideToMove;
 
-  // Update position key and board state
-  //   change to incremental update XOR later
-  b.position_key = compute_position_key(b); // Recompute for simplicity
+  b.position_key = key;
 
   return undo;
 }
@@ -829,8 +858,5 @@ inline void undo_move(Board& b, const Undo& u) {
     set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
   }
 
-  // Update position key and board state
-  //   change to incremental update XOR later
-  b.position_key = compute_position_key(b); // Recompute for simplicity
 }
 } // namespace chess

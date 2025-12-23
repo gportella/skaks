@@ -32,5 +32,6 @@ struct Zobrist {
 std::uint64_t compute_position_key(const Board& b);
 void update_key_for_move(Board& b, const Move& m);
 void init_zobrist(std::uint64_t seed);
+const Zobrist& zobrist_table();
 
 } // namespace chess

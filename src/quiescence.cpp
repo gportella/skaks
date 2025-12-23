@@ -1,6 +1,5 @@
 #include "chess/quiescence.hpp"
 
-// #include "chess/exchange.hpp"
 #include "chess/moves.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
@@ -134,13 +133,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
 
     if (!in_check) {
       // found that the simple capture gain helps a lot in pruning
-      // more that SEE. We still drop moves with negative SEE though.
+      // more that SEE, and seems like the quality is a tad better too...
       const int delta_gain = capture_gain(move);
-      // const int see_gain = static_exchange_eval(board, move);
-
-      // if (see_gain <= 0) {
-      //   continue;
-      // }
 
       if (i >= QUIESCENCE_ZERO_GAIN_SKIP_INDEX && delta_gain == 0) {
         continue;
