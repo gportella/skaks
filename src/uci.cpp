@@ -46,6 +46,24 @@ void log_uci(std::string_view direction, std::string_view payload) {
   stream.flush();
 }
 
+[[noreturn]] void fatal_uci_violation(const Board& board,
+                                      std::string_view detail) {
+  const std::string fen = board_to_fen(board);
+  std::ostringstream oss;
+  oss << "fatal uci violation: " << detail << " | fen=" << fen;
+  const std::string message = oss.str();
+
+  log_uci("err", message);
+
+  std::cerr << message << '\n';
+  std::cerr.flush();
+
+  std::cout << "info string " << message << '\n';
+  std::cout.flush();
+
+  std::abort();
+}
+
 int parse_square(std::string_view token) {
   if (token.size() != 2)
     return -1;
@@ -152,9 +170,10 @@ bool apply_uci_move(Board& board, Engine& engine, std::string_view token) {
     engine.record_position(board.position_key, move_is_irreversible(move));
     return true;
   }
-  const char stm = board.side_to_move == SideToMove::White ? 'w' : 'b';
-  log_uci("warn", std::string("failed to apply move (") + stm + ") " +
-                      std::string(token));
+  std::ostringstream detail;
+  detail << "failed to apply move token='" << token
+         << "' stm=" << (board.side_to_move == SideToMove::White ? 'w' : 'b');
+  fatal_uci_violation(board, detail.str());
   return false;
 }
 
@@ -205,10 +224,7 @@ void handle_position(Board& board, Engine& engine, std::string_view args) {
   }
 
   while (stream >> token) {
-    if (!apply_uci_move(board, engine, token)) {
-      exit(1);
-      // break;
-    }
+    apply_uci_move(board, engine, token);
   }
 }
 
@@ -328,6 +344,45 @@ void run_uci_loop(Engine& engine, int default_depth,
       const auto elapsed_ms = std::max<std::uint64_t>(
           1, result.elapsed_ms); // avoid division by zero in nps calculation
       const bool has_move = result.best_move.moving_pc != OccupancyType::empty;
+      uint16_t legal_count = 0;
+      auto legal_moves =
+          generate_legal_moves(board, board.side_to_move, legal_count);
+
+      auto encode_move_if_present = [](const Move& m) {
+        if (m.moving_pc == OccupancyType::empty) {
+          return uint32_t{0};
+        }
+        return encode_move(m.from, m.to, m.moving_pc, m.captured_pc, m.promo_pc,
+                           m.flags);
+      };
+
+      const uint32_t encoded_best = encode_move_if_present(result.best_move);
+      const bool best_found = [&]() {
+        if (!has_move) {
+          return false;
+        }
+        for (uint16_t idx = 0; idx < legal_count; ++idx) {
+          if (legal_moves[idx] == encoded_best) {
+            return true;
+          }
+        }
+        return false;
+      }();
+
+      if (has_move && !best_found) {
+        std::ostringstream detail;
+        detail << "search produced illegal bestmove='"
+               << move_to_uci(result.best_move) << "' depth=" << depth
+               << " legal_count=" << legal_count;
+        fatal_uci_violation(board, detail.str());
+      }
+
+      if (!has_move && legal_count > 0) {
+        std::ostringstream detail;
+        detail << "search failed to return move but legal_count=" << legal_count;
+        fatal_uci_violation(board, detail.str());
+      }
+
       const std::string bestmove =
           has_move ? move_to_uci(result.best_move) : "0000";
       const std::uint64_t nodes = result.nodes;

@@ -4,88 +4,18 @@
 import argparse
 import csv
 import os
-from dataclasses import dataclass
 import select
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
 import chess
+import chess.pgn
 
 DEFAULT_PUZZLE_FILE = Path(__file__).resolve().with_name("puzzles.csv")
 DEFAULT_ENGINE = "skaks"
-
-
-@dataclass
-class Puzzle:
-    identifier: str
-    fen: str
-    moves: List[str]
-
-    @classmethod
-    def from_row(cls, row: dict):
-        moves = [
-            token.strip().lower() for token in row["Moves"].split() if token.strip()
-        ]
-        return cls(identifier=row["PuzzleId"], fen=row["FEN"], moves=moves)
-
-
-def load_puzzles(path: Path, limit: Optional[int]) -> List[Puzzle]:
-    suffix = path.suffix.lower()
-    if suffix == ".epd":
-        return load_puzzles_epd(path, limit)
-    return load_puzzles_csv(path, limit)
-
-
-def load_puzzles_csv(path: Path, limit: Optional[int]) -> List[Puzzle]:
-    with path.open("r", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        puzzles: List[Puzzle] = []
-        for row in reader:
-            if limit is not None and len(puzzles) >= limit:
-                break
-            puzzles.append(Puzzle.from_row(row))
-    return puzzles
-
-
-def parse_epd_line(line: str) -> Optional[Puzzle]:
-    stripped = line.split("#", 1)[0].strip()
-    if not stripped or chess is None:
-        return None
-
-    segments = [segment.strip() for segment in stripped.split(";") if segment.strip()]
-    if not segments:
-        return None
-
-    epd_fragment = segments[0]
-
-    board = chess.Board()
-    try:
-        operations = board.set_epd(epd_fragment)
-    except ValueError:
-        return None
-
-    best_moves = operations.get("bm")
-    move_list = [move.uci().lower() for move in (best_moves or []) if move is not None]
-    if not move_list:
-        return None
-
-    identifier = epd_fragment
-    for segment in segments[1:]:
-        if segment.lower().startswith("id "):
-            candidate = segment[3:].strip()
-            if (
-                candidate.startswith('"')
-                and candidate.endswith('"')
-                and len(candidate) >= 2
-            ):
-                candidate = candidate[1:-1]
-            identifier = candidate or identifier
-            break
-
-    fen = board.fen()
-    return Puzzle(identifier=identifier, fen=fen, moves=move_list)
 
 
 class UciEngine:
@@ -148,7 +78,13 @@ class UciEngine:
             if line.startswith("info "):
                 continue
             if line.startswith("bestmove "):
-                return line.split()[1].strip().lower()
+                parts = line.split()
+                if len(parts) >= 2:
+                    token = parts[1].strip().lower()
+                    if token == "(none)":
+                        return "0000"
+                    return token
+                return "0000"
 
     def close(self) -> None:
         if self._proc.poll() is None:
@@ -165,34 +101,55 @@ class UciEngine:
             pass
 
 
+def _print_game_pgn(game: chess.pgn.Game) -> None:
+    exporter = chess.pgn.StringExporter(headers=True, variations=False, comments=False)
+    print("PGN:")
+    print(game.accept(exporter))
+
+
 def run_game(depth: int, limit: int) -> int:
     stock_path = "stockfish"
     skaks_path = DEFAULT_ENGINE
 
     l_depth = depth
+    white_name = Path(skaks_path).name
+    black_name = Path(stock_path).name
+
+    board = chess.Board(chess.STARTING_FEN)
+    game = chess.pgn.Game()
+    game.headers["Event"] = "Skaks Validation"
+    game.headers["Site"] = "Local"
+    game.headers["Date"] = datetime.now(timezone.utc).strftime("%Y.%m.%d")
+    game.headers["Round"] = "1"
+    game.headers["White"] = white_name
+    game.headers["Black"] = black_name
+    game.headers["Result"] = "*"
+    game.setup(board.copy(stack=False))
+    node = game
+    moves: List[str] = []
+    final_fen_printed = False
+    result_code = 0
 
     try:
         with (
             UciEngine(stock_path, timeout=10.0) as stockfish,
             UciEngine(skaks_path, timeout=30.0) as skaks,
         ):
-            fen = chess.STARTING_FEN
-            moves = []
-            for turn in range(limit):  # Limit to 20 moves for brevity
+            for turn in range(limit):
                 engine = skaks if turn % 2 == 0 else stockfish
                 if engine == stockfish:
                     depth = max(
-                        1, l_depth - 3
+                        1, l_depth - 5
                     )  # Stockfish plays better, need it to last longer
                 else:
                     depth = l_depth
                 try:
-                    best_move = engine.bestmove(fen, depth=depth, moves=moves)
+                    best_move = engine.bestmove(board.fen(), depth=depth, moves=moves)
                 except Exception as e:
                     print(f"Engine error: {e}", file=sys.stderr)
-                    print("Final position FEN:", fen)
+                    print("Final position FEN:", board.fen())
+                    _print_game_pgn(game)
                     return 3
-                board = chess.Board(fen)
                 if best_move == "0000":
                     if board.is_checkmate():
                         print(
@@ -206,24 +163,51 @@ def run_game(depth: int, limit: int) -> int:
                         print(
                             f"Turn {turn + 1}: {'Stockfish' if turn % 2 == 0 else 'Skaks'} reports no legal moves."
                         )
-                    print("Final position FEN:", fen)
-                    return 0
+                    print("Final position FEN:", board.fen())
+                    final_fen_printed = True
+                    break
 
                 moves.append(best_move)
-                board.push_uci(best_move)
-                fen = board.fen()
+                move_obj = chess.Move.from_uci(best_move)
+                if move_obj not in board.legal_moves:
+                    print(
+                        f"Turn {turn + 1}: Illegal move produced: {best_move}",
+                        file=sys.stderr,
+                    )
+                    print("Final position FEN:", board.fen())
+                    _print_game_pgn(game)
+                    return 3
+                node = node.add_variation(move_obj)
+                board.push(move_obj)
                 print(
                     f"Turn {turn + 1}: {'Stockfish' if turn % 2 == 0 else 'Skaks'} plays {best_move}"
                 )
-            print("Final position FEN:", fen)
     except FileNotFoundError:
         print("Engine binary not found", file=sys.stderr)
+        print("Final position FEN:", board.fen())
+        _print_game_pgn(game)
         return 2
     except TimeoutError as exc:
         print(f"Engine timed out: {exc}", file=sys.stderr)
+        print("Final position FEN:", board.fen())
+        _print_game_pgn(game)
         return 3
     except RuntimeError as exc:
         print(f"Engine error: {exc}", file=sys.stderr)
+        print("Final position FEN:", board.fen())
+        _print_game_pgn(game)
+        return 3
+
+    if not final_fen_printed:
+        print("Final position FEN:", board.fen())
+
+    result_str = board.result(claim_draw=True)
+    if not result_str:
+        result_str = "*"
+    game.headers["Result"] = result_str
+
+    _print_game_pgn(game)
+    return result_code
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:

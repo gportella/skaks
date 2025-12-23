@@ -89,6 +89,116 @@ int main(int argc, char** argv) {
     return run_perf_mode(engine, cli.options);
   }
 
+  if (cli.options.best_move) {
+    chess::Board board{};
+    try {
+      board = chess::initial_board(cli.options.fen);
+    } catch (const std::exception& ex) {
+      std::cerr << "Failed to load FEN: " << ex.what() << "\n";
+      return EXIT_FAILURE;
+    }
+    engine.reset_history(board);
+
+    auto move_to_uci = [](const chess::Move& move) -> std::string {
+      if (move.moving_pc == chess::OccupancyType::empty) {
+        return "0000";
+      }
+      std::string result = chess::square_to_string(move.from);
+      result += chess::square_to_string(move.to);
+      const auto promo = move.promo_pc;
+      char promo_char = '\0';
+      switch (promo) {
+      case chess::OccupancyType::wQ:
+      case chess::OccupancyType::bQ:
+        promo_char = 'q';
+        break;
+      case chess::OccupancyType::wR:
+      case chess::OccupancyType::bR:
+        promo_char = 'r';
+        break;
+      case chess::OccupancyType::wB:
+      case chess::OccupancyType::bB:
+        promo_char = 'b';
+        break;
+      case chess::OccupancyType::wN:
+      case chess::OccupancyType::bN:
+        promo_char = 'n';
+        break;
+      default:
+        break;
+      }
+      if (promo_char != '\0') {
+        result.push_back(promo_char);
+      }
+      return result;
+    };
+
+    std::optional<chess::Move> best_move;
+    bool move_from_book = false;
+    if (opening_book_ready) {
+      auto encoded_book_move = chess::polyglot::choose_move(
+          opening_book, board, use_weighted_book,
+          static_cast<uint64_t>(
+              std::chrono::steady_clock::now().time_since_epoch().count()));
+      if (encoded_book_move) {
+        best_move = chess::decode_move(*encoded_book_move);
+        move_from_book = true;
+      }
+    }
+
+    chess::SearchResult search_result{};
+    if (!best_move) {
+      chess::SearchParameters params{};
+      params.depth = cli.options.search_depth;
+      params.alpha = -chess::INF;
+      params.beta = chess::INF;
+      search_result = engine.search(board, params);
+      if (search_result.best_move.moving_pc != chess::OccupancyType::empty) {
+        best_move = search_result.best_move;
+      }
+    }
+
+    uint16_t legal_count = 0;
+    auto legal_moves =
+        chess::generate_legal_moves(board, board.side_to_move, legal_count);
+
+    const auto encode_move_if_present = [](const chess::Move& move) {
+      if (move.moving_pc == chess::OccupancyType::empty) {
+        return uint32_t{0};
+      }
+      return chess::encode_move(move.from, move.to, move.moving_pc,
+                                move.captured_pc, move.promo_pc, move.flags);
+    };
+
+    if (best_move) {
+      const uint32_t encoded_best = encode_move_if_present(*best_move);
+      bool found = false;
+      for (uint16_t idx = 0; idx < legal_count; ++idx) {
+        if (legal_moves[idx] == encoded_best) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        std::cerr << "Best move is illegal for provided FEN." << std::endl;
+        return EXIT_FAILURE;
+      }
+    } else if (legal_count > 0) {
+      std::cerr << "Engine did not find a move despite legal options."
+                << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    const std::string output =
+        best_move ? move_to_uci(*best_move) : std::string("0000");
+    std::cout << output << "\n";
+    if (move_from_book) {
+      std::cout << "info string move sourced from polyglot book" << std::endl;
+    }
+
+    return EXIT_SUCCESS;
+  }
+
   if (cli.options.use_uci) {
     std::optional<chess::UciPolyglotContext> ctx;
     if (opening_book_ready) {

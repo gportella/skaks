@@ -16,8 +16,8 @@
 namespace chess {
 
 constexpr int CHECK_PENALTY = 100;     // penalty/bonus for king in check
-constexpr int PAWN_SHIELD_BONUS = 15;  // small bonus per nearby pawn to own king
-constexpr int CASTLING_BONUS = 40;     // modest bonus if castled
+constexpr int PAWN_SHIELD_BONUS = 25;  // small bonus per nearby pawn to own king
+constexpr int CASTLING_BONUS = 50;     // modest bonus if castled
 constexpr int TEMPO_BONUS = 14;        // nudge for having the move
 constexpr int THREAT_WEIGHT = 4;       // scales attacked-piece pressure
 constexpr int PASSED_PAWN_BASE = 20;   // baseline reward for a passed pawn
