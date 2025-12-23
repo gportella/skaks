@@ -4,7 +4,52 @@
 #include "chess/attack_masks.hpp"
 #include "chess/piece_values.hpp"
 
+#include <algorithm>
+
+namespace {
+constexpr std::size_t kSEECacheCapacity = 128;
+}
+
 namespace chess {
+void reset_see_cache(SEECache& cache, std::uint64_t position_key) {
+  if (cache.key != position_key) {
+    cache.key = position_key;
+    cache.size = 0;
+    cache.next = 0;
+  }
+}
+
+bool see_cache_lookup(const SEECache& cache, uint32_t code, int& value_out) {
+  if (cache.size == 0) {
+    return false;
+  }
+  const std::size_t capacity =
+      std::min<std::size_t>(cache.entries.size(), kSEECacheCapacity);
+  const std::size_t limit = std::min(cache.size, capacity);
+  for (std::size_t idx = 0; idx < limit; ++idx) {
+    if (cache.entries[idx].code == code) {
+      value_out = cache.entries[idx].value;
+      return true;
+    }
+  }
+  return false;
+}
+
+void see_cache_store(SEECache& cache, uint32_t code, int value) {
+  const std::size_t capacity =
+      std::min<std::size_t>(cache.entries.size(), kSEECacheCapacity);
+  if (capacity == 0) {
+    return;
+  }
+  const std::size_t idx = cache.next % capacity;
+  cache.entries[idx].code = code;
+  cache.entries[idx].value = value;
+  if (cache.size < capacity) {
+    ++cache.size;
+  }
+  cache.next = (idx + 1) % capacity;
+}
+
 inline int SEE_sq(Board& b, int sq) {
   int value = 0;
   auto attacker =
@@ -32,5 +77,26 @@ int static_exchange_eval(Board b, const Move& move) {
     return SEE_sq(b, target_sq);
   }
   return 0;
+}
+
+int static_exchange_eval_cached(const Board& board, const Move& move,
+                                SEECache* cache) {
+  if (cache == nullptr) {
+    return static_exchange_eval(board, move);
+  }
+
+  reset_see_cache(*cache, board.position_key);
+
+  const uint32_t code = encode_move(move.from, move.to, move.moving_pc,
+                                    move.captured_pc, move.promo_pc,
+                                    move.flags);
+  int cached_value = 0;
+  if (see_cache_lookup(*cache, code, cached_value)) {
+    return cached_value;
+  }
+
+  const int value = static_exchange_eval(board, move);
+  see_cache_store(*cache, code, value);
+  return value;
 }
 } // namespace chess

@@ -10,6 +10,8 @@
 
 namespace chess {
 
+struct SEECache;
+
 constexpr uint8_t kFlagEnPassant = 1u << 0;
 constexpr uint8_t kFlagDoublePush = 1u << 1;
 constexpr uint8_t kFlagCastle = 1u << 2;
@@ -182,8 +184,9 @@ generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count);
 std::array<uint32_t, kMaxMovementCount>
 generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count);
 void sort_moves(
-    std::array<uint32_t, kMaxMovementCount>& moves, uint16_t move_count,
-    uint32_t tt_code = 0, const KillerTable* killers = nullptr,
+    const Board& board, std::array<uint32_t, kMaxMovementCount>& moves,
+    uint16_t move_count, uint32_t tt_code = 0,
+    const KillerTable* killers = nullptr,
     const std::array<std::array<int, 64>, 64>* history_heuristic = nullptr,
-    int ply = -1);
+  int ply = -1, SEECache* see_cache = nullptr);
 } // namespace chess

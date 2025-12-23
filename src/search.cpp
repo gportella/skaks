@@ -251,7 +251,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
                             cached_move.promo_pc, cached_move.flags);
     }
   }
-  sort_moves(moves, move_count, tt_code, scratch.killers,
+  sort_moves(board, moves, move_count, tt_code, scratch.killers,
              &scratch.history_heuristic, ply);
 
   SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{},

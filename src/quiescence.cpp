@@ -1,5 +1,6 @@
 #include "chess/quiescence.hpp"
 
+// #include "chess/exchange.hpp"
 #include "chess/moves.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
@@ -16,8 +17,8 @@ inline int capture_gain(const Move& move) {
     gain += piece_material_magnitude(move.captured_pc);
   }
   if (move.promo_pc != OccupancyType::empty) {
-    const int promo_gain =
-        piece_material_magnitude(move.promo_pc) - piece_material_magnitude(move.moving_pc);
+    const int promo_gain = piece_material_magnitude(move.promo_pc) -
+                           piece_material_magnitude(move.moving_pc);
     gain += std::max(promo_gain, 0);
   }
   return gain;
@@ -25,8 +26,9 @@ inline int capture_gain(const Move& move) {
 
 } // namespace
 
-int quiescence(Board& board, int alpha, int beta, SideToMove stm, const EvaluatorFn& evaluator,
-               std::uint64_t& nodes, TranspositionTable* tt, int ply) {
+int quiescence(Board& board, int alpha, int beta, SideToMove stm,
+               const EvaluatorFn& evaluator, std::uint64_t& nodes,
+               TranspositionTable* tt, int ply) {
   ++nodes;
 
   if (ply >= QUIESCENCE_MAX_PLY) {
@@ -64,7 +66,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     if (maximizing) {
       if (stand_pat >= beta) {
         if (tt)
-          tt->store(board.position_key, 0, stand_pat, TranspositionFlag::LowerBound, Move{}, ply);
+          tt->store(board.position_key, 0, stand_pat,
+                    TranspositionFlag::LowerBound, Move{}, ply);
         return stand_pat;
       }
       if (stand_pat > alpha) {
@@ -73,7 +76,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     } else {
       if (stand_pat <= alpha) {
         if (tt)
-          tt->store(board.position_key, 0, stand_pat, TranspositionFlag::UpperBound, Move{}, ply);
+          tt->store(board.position_key, 0, stand_pat,
+                    TranspositionFlag::UpperBound, Move{}, ply);
         return stand_pat;
       }
       if (stand_pat < beta) {
@@ -99,8 +103,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     move_count = w;
   }
 
-  // Sort captures/promotions; you can use MVV-LVA inside sort_moves
-  sort_moves(moves, move_count, 0);
+  // Sort captures/promotions
+  sort_moves(board, moves, move_count, 0);
 
   // Hard cap noisy moves per node when not in check to avoid explosion
   if (!in_check && move_count > QUIESCENCE_MAX_NOISY_MOVES) {
@@ -111,11 +115,13 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     if (in_check) {
       const int mate = (stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE;
       if (tt)
-        tt->store(board.position_key, 0, mate, TranspositionFlag::Exact, Move{}, ply);
+        tt->store(board.position_key, 0, mate, TranspositionFlag::Exact, Move{},
+                  ply);
       return mate;
     }
     if (tt)
-      tt->store(board.position_key, 0, stand_pat, TranspositionFlag::Exact, Move{}, ply);
+      tt->store(board.position_key, 0, stand_pat, TranspositionFlag::Exact,
+                Move{}, ply);
     return stand_pat;
   }
 
@@ -127,14 +133,22 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     Move move = decode_move(moves[i]);
 
     if (!in_check) {
+      // found that the simple capture gain helps a lot in pruning
+      // more that SEE. We still drop moves with negative SEE though.
       const int delta_gain = capture_gain(move);
+      // const int see_gain = static_exchange_eval(board, move);
+
+      // if (see_gain <= 0) {
+      //   continue;
+      // }
 
       if (i >= QUIESCENCE_ZERO_GAIN_SKIP_INDEX && delta_gain == 0) {
         continue;
       }
 
       const bool non_promo_pawn_capture =
-          (move.moving_pc == OccupancyType::wP || move.moving_pc == OccupancyType::bP) &&
+          (move.moving_pc == OccupancyType::wP ||
+           move.moving_pc == OccupancyType::bP) &&
           move.promo_pc == OccupancyType::empty;
       if (non_promo_pawn_capture) {
         const int pawn_value = piece_material_magnitude(move.moving_pc);
@@ -155,13 +169,15 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     }
 
     Undo undo = make_move(board, move);
-    const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator, nodes, tt, ply + 1);
+    const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
+                                 nodes, tt, ply + 1);
     undo_move(board, undo);
 
     if (maximizing) {
       if (score >= beta) {
         if (tt)
-          tt->store(board.position_key, 0, score, TranspositionFlag::LowerBound, move, ply);
+          tt->store(board.position_key, 0, score, TranspositionFlag::LowerBound,
+                    move, ply);
         return score;
       }
       if (!has_best || score > best_score) {
@@ -175,7 +191,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     } else {
       if (score <= alpha) {
         if (tt)
-          tt->store(board.position_key, 0, score, TranspositionFlag::UpperBound, move, ply);
+          tt->store(board.position_key, 0, score, TranspositionFlag::UpperBound,
+                    move, ply);
         return score;
       }
       if (!has_best || score < best_score) {
@@ -197,7 +214,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm, const Evaluato
     } else if (normalized_best >= beta_origin) {
       flag = TranspositionFlag::LowerBound;
     }
-    tt->store(board.position_key, 0, normalized_best, flag, has_best ? best_move : Move{}, ply);
+    tt->store(board.position_key, 0, normalized_best, flag,
+              has_best ? best_move : Move{}, ply);
     return normalized_best;
   }
 

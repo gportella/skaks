@@ -3,6 +3,7 @@
 #include "chess/attack_masks.hpp"
 #include "chess/board.hpp"
 #include "chess/casteling.hpp"
+#include "chess/exchange.hpp"
 #include "chess/history.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/types.hpp"
@@ -46,13 +47,14 @@ inline int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
          scores[static_cast<size_t>(piece)];
 }
 
-// Order: ttMove first, then captures by MVV-LVA, then quiets (killer quiets
-// boosted)
-void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves,
+// Order: ttMove first, then captures by MVV-LVA + SEE, then quiets (killer
+// quiets boosted)
+void sort_moves(const Board& board,
+                std::array<uint32_t, kMaxMovementCount>& moves,
                 uint16_t move_count, uint32_t tt_code,
                 const KillerTable* killers,
                 const std::array<std::array<int, 64>, 64>* history_heuristic,
-                int ply) {
+                int ply, SEECache* see_cache) {
   std::array<MoveKey, kMaxMovementCount> keys;
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -69,6 +71,14 @@ void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves,
         auto cap = static_cast<OccupancyType>(cap_raw);
         auto pc = static_cast<OccupancyType>(move_piece(m));
         key = 1'000'000 + mvv_lva_score(cap, pc);
+        const Move decoded = decode_move(m);
+        const int see_gain =
+            static_exchange_eval_cached(board, decoded, see_cache);
+        if (see_gain < 0) {
+          key -= 10;
+        } else {
+          key += see_gain * 100;
+        }
       } else {
         key = 100'000;
         key += killer_priority(m, killers,
