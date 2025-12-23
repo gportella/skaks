@@ -16,9 +16,9 @@
 namespace chess {
 
 constexpr int CHECK_PENALTY = 100;     // penalty/bonus for king in check
-constexpr int PAWN_SHIELD_BONUS = 5;   // small bonus per nearby pawn to own king
-constexpr int CASTLING_BONUS = 15;     // modest bonus if castled
-constexpr int TEMPO_BONUS = 12;        // nudge for having the move
+constexpr int PAWN_SHIELD_BONUS = 15;  // small bonus per nearby pawn to own king
+constexpr int CASTLING_BONUS = 40;     // modest bonus if castled
+constexpr int TEMPO_BONUS = 14;        // nudge for having the move
 constexpr int THREAT_WEIGHT = 4;       // scales attacked-piece pressure
 constexpr int PASSED_PAWN_BASE = 20;   // baseline reward for a passed pawn
 constexpr int PASSED_PAWN_ADVANCE = 8; // scaled bonus per rank of advancement
@@ -40,11 +40,12 @@ int evaluate_material(const Board& board) {
   return material_score;
 }
 
-// Simple center presence (placeholder), White-centric and summed (no early return)
+// Simple center presence (placeholder), White-centric and summed (no early
+// return)
 int evaluate_pawn_center_control(const Board& board) {
   int score = 0;
-  for (auto sq :
-       {to_index(Square::D4), to_index(Square::D5), to_index(Square::E4), to_index(Square::E5)}) {
+  for (auto sq : {to_index(Square::D4), to_index(Square::D5),
+                  to_index(Square::E4), to_index(Square::E5)}) {
     OccupancyType piece = board.pieces[sq];
     if (piece == OccupancyType::wP)
       score += 10;
@@ -56,12 +57,12 @@ int evaluate_pawn_center_control(const Board& board) {
 
 int evaluate_center_control(const Board& board) {
   int score = 0;
-  for (auto sq :
-       {to_index(Square::D4), to_index(Square::D5), to_index(Square::E4), to_index(Square::E5)}) {
+  for (auto sq : {to_index(Square::D4), to_index(Square::D5),
+                  to_index(Square::E4), to_index(Square::E5)}) {
     OccupancyType piece = board.pieces[sq];
     if (piece != OccupancyType::empty) {
-      const bool is_white_piece =
-          static_cast<std::size_t>(piece) < static_cast<std::size_t>(OccupancyType::bP);
+      const bool is_white_piece = static_cast<std::size_t>(piece) <
+                                  static_cast<std::size_t>(OccupancyType::bP);
       score += is_white_piece ? 5 : -5;
     }
   }
@@ -76,9 +77,12 @@ int evaluate_king_safety(const Board& board) {
   {
     const int wking_sq = board.king_positions[to_index(PieceColor::White)];
     if (wking_sq != -1) {
-      for (std::uint8_t i = 0; i < board.pawn_list[to_index(PieceColor::White)].count; ++i) {
-        const auto pawn_sq = board.pawn_list[to_index(PieceColor::White)].squares[i];
-        if (chebyshev_dist(to_index(pawn_sq), static_cast<std::size_t>(wking_sq)) <= 2) {
+      for (std::uint8_t i = 0;
+           i < board.pawn_list[to_index(PieceColor::White)].count; ++i) {
+        const auto pawn_sq =
+            board.pawn_list[to_index(PieceColor::White)].squares[i];
+        if (chebyshev_dist(to_index(pawn_sq),
+                           static_cast<std::size_t>(wking_sq)) <= 2) {
           score += PAWN_SHIELD_BONUS;
         }
       }
@@ -89,9 +93,12 @@ int evaluate_king_safety(const Board& board) {
   {
     const int bking_sq = board.king_positions[to_index(PieceColor::Black)];
     if (bking_sq != -1) {
-      for (std::uint8_t i = 0; i < board.pawn_list[to_index(PieceColor::Black)].count; ++i) {
-        const auto pawn_sq = board.pawn_list[to_index(PieceColor::Black)].squares[i];
-        if (chebyshev_dist(to_index(pawn_sq), static_cast<std::size_t>(bking_sq)) <= 2) {
+      for (std::uint8_t i = 0;
+           i < board.pawn_list[to_index(PieceColor::Black)].count; ++i) {
+        const auto pawn_sq =
+            board.pawn_list[to_index(PieceColor::Black)].squares[i];
+        if (chebyshev_dist(to_index(pawn_sq),
+                           static_cast<std::size_t>(bking_sq)) <= 2) {
           score -= PAWN_SHIELD_BONUS;
         }
       }
@@ -119,26 +126,26 @@ int evaluate_king_mobility(const Board& board) {
 
   const int wking_sq = board.king_positions[to_index(PieceColor::White)];
   if (wking_sq != -1) {
-    const int moves = popcount_bitboard(
-        king_attack_bm(board, static_cast<u_int8_t>(wking_sq), SideToMove::White));
+    const int moves = popcount_bitboard(king_attack_bm(
+        board, static_cast<u_int8_t>(wking_sq), SideToMove::White));
     score += MOBILITY_SCALING * moves;
   }
 
   const int bking_sq = board.king_positions[to_index(PieceColor::Black)];
   if (bking_sq != -1) {
-    const int moves = popcount_bitboard(
-        king_attack_bm(board, static_cast<u_int8_t>(bking_sq), SideToMove::Black));
+    const int moves = popcount_bitboard(king_attack_bm(
+        board, static_cast<u_int8_t>(bking_sq), SideToMove::Black));
     score -= MOBILITY_SCALING * moves;
   }
 
   return score;
 }
 
-// Attacking pieces: if a piece is attacked by the opponent, penalize for White pieces, reward for
-// Black
+// Attacking pieces: if a piece is attacked by the opponent, penalize for White
+// pieces, reward for Black
 int evaluate_attacking_pieces(const Board& board) {
-  constexpr std::array<int, static_cast<std::size_t>(OccupancyType::bK) + 1> kThreatBase = {
-      0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540};
+  constexpr std::array<int, static_cast<std::size_t>(OccupancyType::bK) + 1>
+      kThreatBase = {0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540};
 
   int attack_score = 0;
 
@@ -147,15 +154,16 @@ int evaluate_attacking_pieces(const Board& board) {
     if (piece == OccupancyType::empty)
       continue;
 
-    const bool white_piece =
-        static_cast<std::size_t>(piece) < static_cast<std::size_t>(OccupancyType::bP);
+    const bool white_piece = static_cast<std::size_t>(piece) <
+                             static_cast<std::size_t>(OccupancyType::bP);
 
     const int base_weight = kThreatBase[static_cast<std::size_t>(piece)];
     if (base_weight == 0)
       continue;
 
     // If this square is attacked by the opponent
-    const SideToMove attacker = white_piece ? SideToMove::Black : SideToMove::White;
+    const SideToMove attacker =
+        white_piece ? SideToMove::Black : SideToMove::White;
     if (!is_square_attacked(board, static_cast<u_int8_t>(sq), attacker))
       continue;
 
@@ -221,10 +229,10 @@ int evaluate_pst(const Board& board) {
     const int type_index = (static_cast<int>(piece) - 1) % 6;
     const int oriented_sq = white_piece ? sq : mirror_rank(sq);
 
-    const int mg_entry =
-        kMidgamePst[static_cast<std::size_t>(type_index)][static_cast<std::size_t>(oriented_sq)];
-    const int eg_entry =
-        kEndgamePst[static_cast<std::size_t>(type_index)][static_cast<std::size_t>(oriented_sq)];
+    const int mg_entry = kMidgamePst[static_cast<std::size_t>(type_index)]
+                                    [static_cast<std::size_t>(oriented_sq)];
+    const int eg_entry = kEndgamePst[static_cast<std::size_t>(type_index)]
+                                    [static_cast<std::size_t>(oriented_sq)];
 
     midgame_score += white_piece ? mg_entry : -mg_entry;
     endgame_score += white_piece ? eg_entry : -eg_entry;
@@ -234,7 +242,8 @@ int evaluate_pst(const Board& board) {
 
   const int mg_phase = std::min(phase, kPstPhaseMax);
   const int eg_phase = kPstPhaseMax - mg_phase;
-  const int tapered = (midgame_score * mg_phase + endgame_score * eg_phase) / kPstPhaseMax;
+  const int tapered =
+      (midgame_score * mg_phase + endgame_score * eg_phase) / kPstPhaseMax;
   return tapered;
 }
 
@@ -283,8 +292,9 @@ int evaluate_pins(const Board& board) {
   int score = 0;
   auto pin_white = build_pinned_map(board, SideToMove::White);
   auto pin_black = build_pinned_map(board, SideToMove::Black);
-  auto apply_penalty = [&](const PinnedBitBoardDirections& entry, int base_penalty,
-                           int mobility_penalty, int side_sign) {
+  auto apply_penalty = [&](const PinnedBitBoardDirections& entry,
+                           int base_penalty, int mobility_penalty,
+                           int side_sign) {
     if (entry.mask == 0) {
       return;
     }
@@ -325,9 +335,10 @@ int evaluate_pins(const Board& board) {
     case OccupancyType::wP:
     case OccupancyType::bP: {
       const auto entry = pin_map.pawn_pins[sq];
-      const bool is_diagonal_pin =
-          entry.direction == MoveDirection::NE || entry.direction == MoveDirection::NW ||
-          entry.direction == MoveDirection::SE || entry.direction == MoveDirection::SW;
+      const bool is_diagonal_pin = entry.direction == MoveDirection::NE ||
+                                   entry.direction == MoveDirection::NW ||
+                                   entry.direction == MoveDirection::SE ||
+                                   entry.direction == MoveDirection::SW;
       const int base = is_diagonal_pin ? 10 : 6;
       apply_penalty(entry, base, 2, side_sign);
       break;
@@ -414,11 +425,13 @@ int evaluate_opening_principles(const Board& board) {
 
     // Back-rank blockers prevent connected rooks bonus
     if (rank_of(sq) == 0) {
-      if (pc == OccupancyType::wN || pc == OccupancyType::wB || pc == OccupancyType::wQ) {
+      if (pc == OccupancyType::wN || pc == OccupancyType::wB ||
+          pc == OccupancyType::wQ) {
         w_back_blocked = true;
       }
     } else if (rank_of(sq) == 7) {
-      if (pc == OccupancyType::bN || pc == OccupancyType::bB || pc == OccupancyType::bQ) {
+      if (pc == OccupancyType::bN || pc == OccupancyType::bB ||
+          pc == OccupancyType::bQ) {
         b_back_blocked = true;
       }
     }

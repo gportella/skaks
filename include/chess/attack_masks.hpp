@@ -70,7 +70,8 @@ inline std::array<Bitboard, 64> build_king_attack_patterns() {
   return attacks;
 }
 
-inline const std::array<Bitboard, 64> KING_ATTACKS = build_king_attack_patterns();
+inline const std::array<Bitboard, 64> KING_ATTACKS =
+    build_king_attack_patterns();
 
 inline Bitboard rook_attacks_from(u_int8_t sq, Bitboard b_occupancy) {
 
@@ -80,7 +81,8 @@ inline Bitboard rook_attacks_from(u_int8_t sq, Bitboard b_occupancy) {
   auto blocker = north & b_occupancy;
   if (blocker) {
     int b = lsb_index(blocker);
-    const Bitboard mask_inclusive = (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
+    const Bitboard mask_inclusive =
+        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
     north &= mask_inclusive;
   }
   // East
@@ -88,7 +90,8 @@ inline Bitboard rook_attacks_from(u_int8_t sq, Bitboard b_occupancy) {
   Bitboard east_blockers = east & b_occupancy;
   if (east_blockers) {
     int b = lsb_index(east_blockers); // nearest east blocker
-    const Bitboard mask_inclusive = (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
+    const Bitboard mask_inclusive =
+        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
     east &= mask_inclusive;
   }
 
@@ -120,7 +123,8 @@ inline Bitboard bishop_attacks_from(u_int8_t sq, Bitboard b_occupancy) {
   auto ne_blocker = northeast & b_occupancy;
   if (ne_blocker) {
     int b = lsb_index(ne_blocker);
-    const Bitboard mask_inclusive = (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
+    const Bitboard mask_inclusive =
+        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
     northeast &= mask_inclusive;
   }
   auto southeast = rays.southeast;
@@ -134,7 +138,8 @@ inline Bitboard bishop_attacks_from(u_int8_t sq, Bitboard b_occupancy) {
   auto nw_blocker = northwest & b_occupancy;
   if (nw_blocker) {
     int b = lsb_index(nw_blocker);
-    const Bitboard mask_inclusive = (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
+    const Bitboard mask_inclusive =
+        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
     northwest &= mask_inclusive;
   }
   auto southwest = rays.southwest;
@@ -187,7 +192,8 @@ struct PawnMoves {
   Bitboard ep_caps;
 };
 
-inline PawnMoves gen_white_pawn_moves(Bitboard wp, Bitboard occ, Bitboard black_occ, Bitboard ep) {
+inline PawnMoves gen_white_pawn_moves(Bitboard wp, Bitboard occ,
+                                      Bitboard black_occ, Bitboard ep) {
   Bitboard empty = ~occ;
 
   Bitboard single = (wp << 8) & empty;
@@ -203,9 +209,11 @@ inline PawnMoves gen_white_pawn_moves(Bitboard wp, Bitboard occ, Bitboard black_
   Bitboard promo_caps = (capL | capR) & RANK_8;
   Bitboard nonpromo_caps = (capL | capR) & ~RANK_8;
 
-  Bitboard ep_caps = ((((wp & NOT_FILE_A) << 7) | ((wp & NOT_FILE_H) << 9)) & ep);
+  Bitboard ep_caps =
+      ((((wp & NOT_FILE_A) << 7) | ((wp & NOT_FILE_H) << 9)) & ep);
 
-  return {nonpromo_push, doubles, nonpromo_caps, promo_push, promo_caps, ep_caps};
+  return {nonpromo_push, doubles,    nonpromo_caps,
+          promo_push,    promo_caps, ep_caps};
 }
 struct PawnMasks {
   Bitboard single_push;    // non-promo single pushes
@@ -216,9 +224,15 @@ struct PawnMasks {
   Bitboard ep_captures;    // en passant captures
 };
 
+struct SmallestAttacker {
+  Piece piece;
+  u_int8_t square;
+};
+
 // Declarations
 
-bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_side);
+bool is_square_attacked(const Board& board, u_int8_t sq,
+                        SideToMove attacker_side);
 
 PawnMasks gen_pawn_masks(const Board& board, SideToMove stm);
 Bitboard knight_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
@@ -228,24 +242,37 @@ Bitboard queen_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
 Bitboard king_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
 
 void emit_white_pawn_moves(const Board& board, const PawnMasks& masks,
-                           std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                           std::array<uint32_t, kMaxMovementCount>& out,
+                           std::uint16_t& move_count);
 void emit_black_pawn_moves(const Board& board, const PawnMasks& masks,
-                           std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                           std::array<uint32_t, kMaxMovementCount>& out,
+                           std::uint16_t& move_count);
 
 void emit_knight_moves(const Board& board, SideToMove stm,
-                       std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                       std::array<uint32_t, kMaxMovementCount>& out,
+                       std::uint16_t& move_count);
 void emit_bishop_moves(const Board& board, SideToMove stm,
-                       std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                       std::array<uint32_t, kMaxMovementCount>& out,
+                       std::uint16_t& move_count);
 void emit_rook_moves(const Board& board, SideToMove stm,
-                     std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                     std::array<uint32_t, kMaxMovementCount>& out,
+                     std::uint16_t& move_count);
 void emit_queen_moves(const Board& board, SideToMove stm,
-                      std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                      std::array<uint32_t, kMaxMovementCount>& out,
+                      std::uint16_t& move_count);
 void emit_king_moves(const Board& board, SideToMove stm,
-                     std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                     std::array<uint32_t, kMaxMovementCount>& out,
+                     std::uint16_t& move_count);
 
 void emit_all_moves(const Board& board, SideToMove stm,
-                    std::array<uint32_t, kMaxMovementCount>& out, std::uint16_t& move_count);
+                    std::array<uint32_t, kMaxMovementCount>& out,
+                    std::uint16_t& move_count);
 CastlingRights king_castle_rights(const Board& board, SideToMove stm);
-bool is_square_attacked(const Board& board, u_int8_t sq, SideToMove attacker_side);
+bool is_square_attacked(const Board& board, u_int8_t sq,
+                        SideToMove attacker_side);
+
+std::optional<SmallestAttacker> find_smallest_attacker(const Board& board,
+                                                       u_int8_t sq,
+                                                       SideToMove attacker_side);
 
 } // namespace chess

@@ -134,6 +134,24 @@ struct UndoNull {
   int fifty_move_counter_before;
 };
 
+struct UndoSEE {
+  uint16_t from;
+  uint16_t to;
+  uint16_t captured_sq;
+  Bitboard moving_bb_before{0};
+  Bitboard captured_bb_before{0};
+  Bitboard promo_bb_before{0};
+  Bitboard occupancy_before[3]{};
+  std::array<PieceList, 2> rook_list_before;
+  std::array<PieceList, 2> king_list_before;
+  std::array<PieceList, 2> pawn_list_before;
+  std::array<int, 2> king_positions_before;
+  PieceColor king_captured_before{PieceColor::None};
+  OccupancyType captured_pc{OccupancyType::empty};
+  OccupancyType moving_pc{OccupancyType::empty};
+  OccupancyType promo_pc{OccupancyType::empty};
+};
+
 struct ThreadState {
   Board board; // mutated in-place
   MoveHistory move_history;
@@ -157,6 +175,8 @@ bool allow_null_move(Board& b, int depth);
 Undo make_move(Board& b, const Move& m);
 int update_castling_rights(Board& b, const Move&);
 void undo_move(Board& b, const Undo& u);
+UndoSEE make_see_move(Board& b, const Move& m);
+void undo_see_move(Board& b, const UndoSEE& u);
 std::array<uint32_t, kMaxMovementCount>
 generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count);
 std::array<uint32_t, kMaxMovementCount>

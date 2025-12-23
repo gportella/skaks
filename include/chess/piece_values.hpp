@@ -4,6 +4,33 @@
 
 namespace chess {
 
+inline constexpr int piece_material_value(Piece piece) {
+  switch (piece) {
+  case Piece::wP:
+    return 100;
+  case Piece::wN:
+    return 320;
+  case Piece::wB:
+    return 330;
+  case Piece::wR:
+    return 500;
+  case Piece::wQ:
+    return 900;
+  case Piece::bP:
+    return -100;
+  case Piece::bN:
+    return -320;
+  case Piece::bB:
+    return -330;
+  case Piece::bR:
+    return -500;
+  case Piece::bQ:
+    return -900;
+  default:
+    return 0;
+  }
+}
+
 inline constexpr int piece_material_value(OccupancyType piece) {
   switch (piece) {
   case OccupancyType::wP:

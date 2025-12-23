@@ -117,6 +117,171 @@ generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count) {
   return legal_moves;
 }
 
+// mostly copied from make_move but only for captures and minimal state tracking
+UndoSEE make_see_move(Board& b, const Move& m) {
+  UndoSEE undo;
+  undo.captured_pc = m.captured_pc;
+  undo.moving_pc = m.moving_pc;
+  undo.promo_pc = m.promo_pc;
+  undo.from = m.from;
+  undo.to = m.to;
+  undo.captured_sq = m.to;
+
+  undo.occupancy_before[0] = b.occupancy[0];
+  undo.occupancy_before[1] = b.occupancy[1];
+  undo.occupancy_before[2] = b.occupancy[2];
+  undo.rook_list_before = {b.rook_list[0], b.rook_list[1]};
+  undo.king_list_before = {b.king_list[0], b.king_list[1]};
+  undo.pawn_list_before = {b.pawn_list[0], b.pawn_list[1]};
+  undo.king_positions_before = b.king_positions;
+  undo.king_captured_before = b.king_captured;
+
+  const auto mover_index = to_index(b.side_to_move);
+  const auto enemy_index = to_index(flip_side(b.side_to_move));
+  const Square from_sq = static_cast<Square>(m.from);
+  const Square to_sq = static_cast<Square>(m.to);
+  const auto from_idx = to_index(m.from);
+  const auto to_idx = to_index(m.to);
+
+  const auto moving_bb_index = static_cast<std::size_t>(m.moving_pc) - 1;
+  undo.moving_bb_before = b.pieces_bb[moving_bb_index];
+
+  if (undo.captured_pc != OccupancyType::empty) {
+    const auto captured_index = static_cast<std::size_t>(undo.captured_pc) - 1;
+    undo.captured_bb_before = b.pieces_bb[captured_index];
+    clear_bit(b.pieces_bb[captured_index], m.to);
+  }
+
+  if (m.promo_pc != OccupancyType::empty) {
+    const auto promo_index = static_cast<std::size_t>(m.promo_pc) - 1;
+    undo.promo_bb_before = b.pieces_bb[promo_index];
+  }
+
+  auto update_piece_square = [](PieceList& list, Square from, Square to) {
+    for (std::uint8_t i = 0; i < list.count; ++i) {
+      if (list.squares[i] == from) {
+        list.squares[i] = to;
+        return;
+      }
+    }
+  };
+
+  auto remove_piece_square = [](PieceList& list, Square sq) {
+    for (std::uint8_t i = 0; i < list.count; ++i) {
+      if (list.squares[i] == sq) {
+        list.squares[i] = list.squares[list.count - 1];
+        --list.count;
+        return;
+      }
+    }
+  };
+
+  auto add_piece_square = [](PieceList& list, Square sq) {
+    if (list.count < list.squares.size()) {
+      list.squares[list.count++] = sq;
+    }
+  };
+
+  // Update movers
+  if (m.moving_pc == OccupancyType::wK || m.moving_pc == OccupancyType::bK) {
+    b.king_positions[mover_index] = m.to;
+    update_piece_square(b.king_list[mover_index], from_sq, to_sq);
+  }
+  if (m.moving_pc == OccupancyType::wR || m.moving_pc == OccupancyType::bR) {
+    update_piece_square(b.rook_list[mover_index], from_sq, to_sq);
+  }
+  if (m.moving_pc == OccupancyType::wP || m.moving_pc == OccupancyType::bP) {
+    if (m.promo_pc == OccupancyType::empty) {
+      update_piece_square(b.pawn_list[mover_index], from_sq, to_sq);
+    } else {
+      remove_piece_square(b.pawn_list[mover_index], from_sq);
+      if (m.promo_pc == OccupancyType::wR || m.promo_pc == OccupancyType::bR) {
+        add_piece_square(b.rook_list[mover_index], to_sq);
+      }
+    }
+  }
+
+  // Update defenders if capture happened
+  if (undo.captured_pc != OccupancyType::empty) {
+    if (undo.captured_pc == OccupancyType::wK ||
+        undo.captured_pc == OccupancyType::bK) {
+      remove_piece_square(b.king_list[enemy_index], to_sq);
+      b.king_positions[enemy_index] = -1;
+      b.king_captured = (undo.captured_pc == OccupancyType::wK)
+                            ? PieceColor::White
+                            : PieceColor::Black;
+    } else if (undo.captured_pc == OccupancyType::wR ||
+               undo.captured_pc == OccupancyType::bR) {
+      remove_piece_square(b.rook_list[enemy_index], to_sq);
+    } else if (undo.captured_pc == OccupancyType::wP ||
+               undo.captured_pc == OccupancyType::bP) {
+      remove_piece_square(b.pawn_list[enemy_index], to_sq);
+    }
+  }
+
+  // Update bitboards for mover (promotion handled separately)
+  clear_bit(b.pieces_bb[moving_bb_index], m.from);
+  if (m.promo_pc == OccupancyType::empty) {
+    set_bit(b.pieces_bb[moving_bb_index], m.to);
+  } else {
+    const auto promo_index = static_cast<std::size_t>(m.promo_pc) - 1;
+    set_bit(b.pieces_bb[promo_index], m.to);
+  }
+
+  // Update mailbox representation
+  b.pieces[from_idx] = OccupancyType::empty;
+  if (undo.captured_pc != OccupancyType::empty) {
+    b.pieces[to_idx] = OccupancyType::empty;
+  }
+  const OccupancyType placed_piece =
+      (m.promo_pc != OccupancyType::empty) ? m.promo_pc : m.moving_pc;
+  b.pieces[to_idx] = placed_piece;
+
+  b.occupancy[to_index(PieceColor::White)] =
+      calculate_occupancy(b, PieceColor::White);
+  b.occupancy[to_index(PieceColor::Black)] =
+      calculate_occupancy(b, PieceColor::Black);
+  b.occupancy[to_index(PieceColor::Both)] =
+      b.occupancy[to_index(PieceColor::White)] |
+      b.occupancy[to_index(PieceColor::Black)];
+
+  return undo;
+}
+
+void undo_see_move(Board& b, const UndoSEE& u) {
+  const auto from_idx = static_cast<std::size_t>(u.from);
+  const auto to_idx = static_cast<std::size_t>(u.to);
+
+  if (u.moving_pc != OccupancyType::empty) {
+    const auto moving_index = static_cast<std::size_t>(u.moving_pc) - 1;
+    b.pieces_bb[moving_index] = u.moving_bb_before;
+  }
+  if (u.captured_pc != OccupancyType::empty) {
+    const auto captured_index = static_cast<std::size_t>(u.captured_pc) - 1;
+    b.pieces_bb[captured_index] = u.captured_bb_before;
+  }
+  if (u.promo_pc != OccupancyType::empty) {
+    const auto promo_index = static_cast<std::size_t>(u.promo_pc) - 1;
+    b.pieces_bb[promo_index] = u.promo_bb_before;
+  }
+
+  b.pieces[from_idx] = u.moving_pc;
+  b.pieces[to_idx] = u.captured_pc;
+
+  b.rook_list[0] = u.rook_list_before[0];
+  b.rook_list[1] = u.rook_list_before[1];
+  b.king_list[0] = u.king_list_before[0];
+  b.king_list[1] = u.king_list_before[1];
+  b.pawn_list[0] = u.pawn_list_before[0];
+  b.pawn_list[1] = u.pawn_list_before[1];
+  b.king_positions = u.king_positions_before;
+  b.king_captured = u.king_captured_before;
+
+  b.occupancy[0] = u.occupancy_before[0];
+  b.occupancy[1] = u.occupancy_before[1];
+  b.occupancy[2] = u.occupancy_before[2];
+}
+
 inline Undo make_move(Board& b, const Move& m) {
   const bool white = (b.side_to_move == SideToMove::White);
   const Square king_rook =

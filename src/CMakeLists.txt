@@ -3,6 +3,7 @@ add_library(chess_engine_core STATIC
   board.cpp
   demo_debug.cpp
   engine.cpp
+  exchange.cpp
   moves.cpp
   pins.cpp
   perf.cpp
