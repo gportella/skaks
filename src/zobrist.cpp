@@ -2,6 +2,7 @@
 #include "chess/zobrist.hpp"
 
 #include "chess/board.hpp"
+#include "chess/casteling.hpp"
 #include "chess/moves.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
@@ -65,71 +66,64 @@ const Zobrist& zobrist_table() {
   return Z;
 }
 
-void update_key_for_move(Board& b, const Move& m) {
-  std::uint64_t key = b.position_key;
+void update_key_for_move(Board& b, const Undo& undo, int castle_mask_after,
+                         bool ep_hash_before, bool ep_hash_after) {
+  const Zobrist& zob = zobrist_table();
+  std::uint64_t key = undo.position_key_before;
 
-  // Remove previous EP from hash if it was hashed
-  if (b.en_passant >= 0 && ep_capture_available(b)) {
-    key ^= Z.enPassantFile[file_of(b.en_passant)];
+  if (ep_hash_before && undo.en_passant_before >= 0) {
+    key ^= zob.enPassantFile[file_of(undo.en_passant_before)];
   }
 
-  // Moving piece out of 'from'
-  key ^= Z.piece[occ_to_zidx(m.moving_pc)][m.from];
+  key ^= zob.castle[to_mask(undo.castling_rights_before)];
 
-  // Captures
-  if (flag_is_ep(m.flags)) {
-    int capSq = (b.side_to_move == SideToMove::White) ? (m.to - 8) : (m.to + 8);
-    OccupancyType cap = b.pieces[to_index(capSq)];
-    key ^= Z.piece[occ_to_zidx(cap)][to_index(capSq)];
-  } else if (m.captured_pc != OccupancyType::empty) {
-    key ^= Z.piece[occ_to_zidx(m.captured_pc)][to_index(m.to)];
+  const auto from_idx = to_index(undo.from);
+  const auto captured_idx_sq = to_index(undo.captured_sq);
+  const auto to_idx = to_index(undo.to);
+
+  const int moving_idx = occ_to_zidx(undo.moving_pc);
+  if (moving_idx >= 0) {
+    key ^= zob.piece[moving_idx][from_idx];
   }
 
-  // Place the moving (or promoted) piece on 'to'
-  if (m.promo_pc != OccupancyType::empty) {
-    key ^= Z.piece[occ_to_zidx(m.promo_pc)][to_index(m.to)];
-  } else {
-    key ^= Z.piece[occ_to_zidx(m.moving_pc)][to_index(m.to)];
-  }
-
-  // Castling rook movement (XOR rook from/to)
-  if (flag_is_castle(m.flags)) {
-    // Before mutating rights:
-    const int oldCR = to_mask(b.castling_rights);
-
-    // ...apply board changes that don't affect rights yet...
-
-    // Update rights and hash them
-    const int newCR = update_castling_rights(b, m);
-    if (oldCR != newCR) {
-      b.position_key ^= Z.castle[oldCR];
-      b.position_key ^= Z.castle[newCR];
+  if (undo.captured_pc != OccupancyType::empty) {
+    const int captured_idx = occ_to_zidx(undo.captured_pc);
+    if (captured_idx >= 0) {
+      key ^= zob.piece[captured_idx][captured_idx_sq];
     }
   }
 
-  // Side to move
-  key ^= Z.sideToMove;
-
-  // Castling rights: XOR old and new masks if changed
-  int oldCR = to_mask(b.castling_rights);
-  // Update b.castling_rights according to the move before computing newCR
-  int newCR = to_mask(b.castling_rights);
-  if (oldCR != newCR) {
-    key ^= Z.castle[oldCR];
-    key ^= Z.castle[newCR];
-  }
-
-  // En passant: clear, then set if double push; hash only if capture available
-  b.ep_square = 0;
-  b.en_passant = -1;
-  if (flag_is_double_push(m.flags)) {
-    const int mid = (m.from + m.to) / 2;
-    b.en_passant = mid;
-    b.ep_square = 1ULL << mid;
-    if (ep_capture_available(b)) {
-      key ^= Z.enPassantFile[file_of(mid)];
+  const OccupancyType placed_piece = b.pieces[to_idx];
+  if (placed_piece != OccupancyType::empty) {
+    const int placed_idx = occ_to_zidx(placed_piece);
+    if (placed_idx >= 0) {
+      key ^= zob.piece[placed_idx][to_idx];
     }
   }
+
+  if (undo.was_castling) {
+    const bool white_king = (undo.moving_pc == OccupancyType::wK);
+    const auto& cfg = kCastlingSideConfigs[to_index(
+        white_king ? SideToMove::White : SideToMove::Black)];
+    const bool king_side = flag_is_castle(undo.flags);
+    const Square rook_from =
+        king_side ? cfg.rook_kingside_start : cfg.rook_queenside_start;
+    const Square rook_to =
+        king_side ? cfg.rook_kingside_target : cfg.rook_queenside_target;
+    const OccupancyType rook_pc =
+        white_king ? OccupancyType::wR : OccupancyType::bR;
+    const int rook_idx = occ_to_zidx(rook_pc);
+    key ^= zob.piece[rook_idx][to_index(rook_from)];
+    key ^= zob.piece[rook_idx][to_index(rook_to)];
+  }
+
+  key ^= zob.castle[castle_mask_after];
+
+  if (ep_hash_after && b.en_passant >= 0) {
+    key ^= zob.enPassantFile[file_of(b.en_passant)];
+  }
+
+  key ^= zob.sideToMove;
 
   b.position_key = key;
 }

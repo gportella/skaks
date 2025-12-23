@@ -30,7 +30,8 @@ struct Zobrist {
 };
 
 std::uint64_t compute_position_key(const Board& b);
-void update_key_for_move(Board& b, const Move& m);
+void update_key_for_move(Board& b, const Undo& undo, int castle_mask_after,
+                         bool ep_hash_before, bool ep_hash_after);
 void init_zobrist(std::uint64_t seed);
 const Zobrist& zobrist_table();
 

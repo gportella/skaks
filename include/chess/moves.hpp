@@ -125,6 +125,7 @@ struct Undo {
   uint8_t flags;
   bool was_en_passant;
   bool was_castling;
+  bool ep_hash_before;
 };
 
 struct UndoNull {
