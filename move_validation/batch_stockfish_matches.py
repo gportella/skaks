@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--depth",
         type=int,
-        default=4,
+        default=8,
         help="Depth passed to each skaks search (default: 4)",
     )
     parser.add_argument(

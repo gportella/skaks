@@ -16,6 +16,7 @@ import chess.pgn
 
 DEFAULT_PUZZLE_FILE = Path(__file__).resolve().with_name("puzzles.csv")
 DEFAULT_ENGINE = "skaks"
+STOCKFISH_TIME_FACTOR = 0.35
 
 
 class UciEngine:
@@ -66,13 +67,28 @@ class UciEngine:
             if line == token:
                 return
 
-    def bestmove(self, fen: str, depth: int, moves: Optional[List[str]] = None) -> str:
+    def bestmove(
+        self,
+        fen: str,
+        *,
+        depth: Optional[int] = None,
+        movetime_ms: Optional[int] = None,
+        moves: Optional[List[str]] = None,
+    ) -> str:
+        if depth is None and movetime_ms is None:
+            raise ValueError("either depth or movetime_ms must be provided")
+        if depth is not None and movetime_ms is not None:
+            raise ValueError("depth and movetime_ms are mutually exclusive")
         self._send("ucinewgame")
         if moves and fen == chess.STARTING_FEN:
             self._send("position startpos moves " + " ".join(moves))
         else:
             self._send(f"position fen {fen}")
-        self._send(f"go depth {depth}")
+        if movetime_ms is not None:
+            self._send(f"go movetime {movetime_ms}")
+        else:
+            assert depth is not None
+            self._send(f"go depth {depth}")
         while True:
             line = self._read_line()
             if line.startswith("info "):
@@ -107,11 +123,33 @@ def _print_game_pgn(game: chess.pgn.Game) -> None:
     print(game.accept(exporter))
 
 
-def run_game(depth: int, limit: int) -> int:
+def _to_millis(seconds: float) -> int:
+    millis = int(round(seconds * 1000.0))
+    return max(millis, 1)
+
+
+def _scale_stockfish_movetime(
+    skaks_ms: Optional[int], stockfish_ms: Optional[int], override: bool
+) -> Optional[int]:
+    if skaks_ms is None:
+        return stockfish_ms
+    if override:
+        return stockfish_ms
+    scaled = int(round(skaks_ms * STOCKFISH_TIME_FACTOR))
+    return max(scaled, 1)
+
+
+def run_game(
+    *,
+    depth: Optional[int],
+    limit: int,
+    time_per_move: Optional[float],
+    stockfish_time_per_move: Optional[float],
+    stockfish_time_overridden: bool,
+) -> int:
     stock_path = "stockfish"
     skaks_path = DEFAULT_ENGINE
 
-    l_depth = depth
     white_name = Path(skaks_path).name
     black_name = Path(stock_path).name
 
@@ -132,19 +170,37 @@ def run_game(depth: int, limit: int) -> int:
 
     try:
         with (
-            UciEngine(stock_path, timeout=10.0) as stockfish,
-            UciEngine(skaks_path, timeout=30.0) as skaks,
+            UciEngine(stock_path, timeout=30.0) as stockfish,
+            UciEngine(skaks_path, timeout=240.0) as skaks,
         ):
+            skaks_movetime_ms = (
+                _to_millis(time_per_move) if time_per_move is not None else None
+            )
+            stockfish_initial_ms = (
+                _to_millis(stockfish_time_per_move)
+                if stockfish_time_per_move is not None
+                else skaks_movetime_ms
+            )
+            stockfish_movetime_ms = _scale_stockfish_movetime(
+                skaks_movetime_ms, stockfish_initial_ms, stockfish_time_overridden
+            )
+
             for turn in range(limit):
                 engine = skaks if turn % 2 == 0 else stockfish
-                if engine == stockfish:
-                    depth = max(
-                        1, l_depth - 5
-                    )  # Stockfish plays better, need it to last longer
+                if skaks_movetime_ms is None:
+                    assert depth is not None
+                    chosen_depth = depth if engine == skaks else max(depth - 6, 1)
+                    go_kwargs = {"depth": chosen_depth}
                 else:
-                    depth = l_depth
+                    if engine == skaks:
+                        movetime_ms = skaks_movetime_ms
+                    else:
+                        movetime_ms = stockfish_movetime_ms
+                    if movetime_ms is None:
+                        raise RuntimeError("time control not configured for Stockfish")
+                    go_kwargs = {"movetime_ms": movetime_ms}
                 try:
-                    best_move = engine.bestmove(board.fen(), depth=depth, moves=moves)
+                    best_move = engine.bestmove(board.fen(), moves=moves, **go_kwargs)
                 except Exception as e:
                     print(f"Engine error: {e}", file=sys.stderr)
                     print("Final position FEN:", board.fen())
@@ -221,6 +277,13 @@ def run_game(depth: int, limit: int) -> int:
     return result_code
 
 
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
+
+
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run tactical puzzles against skaks.")
     parser.add_argument(
@@ -233,11 +296,21 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         action="store_true",
         help="Use stockfish (overrides --engine)",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--depth",
         type=int,
-        default=3,
-        help="Search depth in plies for each puzzle (default: 6)",
+        help="Search depth in plies per move (default: 9)",
+    )
+    group.add_argument(
+        "--time-per-move",
+        type=_positive_float,
+        help="Seconds per move for Skaks (enables time controls)",
+    )
+    parser.add_argument(
+        "--stockfish-time-per-move",
+        type=_positive_float,
+        help="Seconds per move for Stockfish when using time controls (default: match Skaks)",
     )
     parser.add_argument(
         "--limit", type=int, default=30, help="Limit number of puzzles (default: all)"
@@ -254,12 +327,25 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=10,
         help="Report progress every N puzzles (default: 10)",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    stockfish_time_explicit = args.stockfish_time_per_move is not None
+    if args.depth is None and args.time_per_move is None:
+        args.depth = 9
+    if args.time_per_move is not None and args.stockfish_time_per_move is None:
+        args.stockfish_time_per_move = args.time_per_move
+    args.stockfish_time_overridden = stockfish_time_explicit
+    return args
 
 
 def main(argv: List[str]) -> int:
     args = parse_args(argv)
-    run_game(depth=args.depth, limit=args.limit)
+    run_game(
+        depth=args.depth,
+        limit=args.limit,
+        time_per_move=args.time_per_move,
+        stockfish_time_per_move=args.stockfish_time_per_move,
+        stockfish_time_overridden=args.stockfish_time_overridden,
+    )
     return 0
 
 
