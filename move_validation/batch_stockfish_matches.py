@@ -5,7 +5,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 
 def run_single_match(
@@ -13,6 +13,34 @@ def run_single_match(
 ) -> subprocess.CompletedProcess:
     cmd = [sys.executable, str(fight_script)] + base_args
     return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def extract_outcome(stdout: str) -> str:
+    lowered = stdout.lower()
+    winner_marker = "winner:"
+    idx = lowered.find(winner_marker)
+    if idx != -1:
+        rest = lowered[idx + len(winner_marker) :].strip()
+        winner_line = rest.splitlines()[0].strip() if rest else ""
+        if "skaks" in winner_line:
+            return "skaks"
+        if "stockfish" in winner_line:
+            return "stockfish"
+        if winner_line.startswith("draw"):
+            return "draw"
+        if winner_line.startswith("unknown"):
+            return "unknown"
+    if 'result "1-0"' in lowered or "result: 1-0" in lowered:
+        return "skaks"
+    if 'result "0-1"' in lowered or "result: 0-1" in lowered:
+        return "stockfish"
+    if (
+        'result "1/2-1/2"' in lowered
+        or "result: 1/2-1/2" in lowered
+        or "result \u00bd-\u00bd" in lowered
+    ):
+        return "draw"
+    return "unknown"
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,13 +103,22 @@ def main() -> int:
         base_args.extend(["--timeout", str(args.timeout)])
 
     failures = 0
+    outcomes: Dict[str, int] = {"skaks": 0, "stockfish": 0, "draw": 0, "unknown": 0}
     for idx in range(1, args.games + 1):
         result = run_single_match(fight_script, base_args)
         success = result.returncode == 0
         marker = "OK" if success else "FAIL"
-        print(f"[{idx}/{args.games}] {marker}")
-        illegal_detected = "illegal" in result.stdout.lower() or "illegal" in result.stderr.lower()
+        header = f"[{idx}/{args.games}] {marker}"
+        outcome_label = extract_outcome(result.stdout)
+        illegal_detected = (
+            "illegal" in result.stdout.lower() or "illegal" in result.stderr.lower()
+        )
         if not success or illegal_detected:
+            outcome_label = "unknown"
+        outcomes[outcome_label] += 1
+        print(f"\r{header} winner={outcome_label:<9}", end="", flush=True)
+        if not success or illegal_detected:
+            print()
             failures += 1
             if not success:
                 print(f"  exit code: {result.returncode}")
@@ -97,6 +134,7 @@ def main() -> int:
                 print("--- stderr ---")
                 print(result.stderr)
 
+    print()
     if failures == 0:
         print(f"Completed {args.games} games. Failures detected: {failures}.")
     else:
@@ -104,6 +142,26 @@ def main() -> int:
             f"Completed {args.games} games. Failures detected: {failures}. "
             "Review output above for details."
         )
+
+    total_finished = sum(outcomes.values())
+    finished_results = total_finished - outcomes["unknown"]
+    if total_finished > 0:
+        print("Results summary:")
+        if finished_results > 0:
+            for label in ("skaks", "stockfish", "draw"):
+                count = outcomes[label]
+                pct = (count / finished_results) * 100.0
+                print(f"  {label:9}: {count:4d} ({pct:5.1f}%)")
+        else:
+            print("  no completed games to summarize")
+        if outcomes["unknown"]:
+            count = outcomes["unknown"]
+            pct = (count / total_finished) * 100.0
+            print(f"  unknown  : {count:4d} ({pct:5.1f}%)")
+        if finished_results > 0:
+            scored = outcomes["skaks"] + outcomes["draw"] * 0.5
+            avg_score = scored / finished_results
+            print(f"  skaks average score: {avg_score:.3f} / 1.000")
     return 0 if failures == 0 else 1
 
 

@@ -206,6 +206,17 @@ def run_game(depth: int, limit: int) -> int:
         result_str = "*"
     game.headers["Result"] = result_str
 
+    winner = "unknown"
+    if result_str == "1-0":
+        winner = white_name
+    elif result_str == "0-1":
+        winner = black_name
+    elif result_str == "1/2-1/2":
+        winner = "draw"
+
+    print(f"Result: {result_str}")
+    print(f"Winner: {winner}")
+
     _print_game_pgn(game)
     return result_code
 

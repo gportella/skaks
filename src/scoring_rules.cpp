@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 
 namespace chess {
 
@@ -22,6 +23,29 @@ constexpr int TEMPO_BONUS = 14;        // nudge for having the move
 constexpr int THREAT_WEIGHT = 4;       // scales attacked-piece pressure
 constexpr int PASSED_PAWN_BASE = 20;   // baseline reward for a passed pawn
 constexpr int PASSED_PAWN_ADVANCE = 8; // scaled bonus per rank of advancement
+constexpr int HANGING_DIVISOR = 4;     // scale piece value when hanging
+constexpr int HANGING_MIN_PENALTY = 18;
+constexpr int KING_RING_BASE = 6;
+constexpr int KING_RING_DEFENDED_SCALE = 2; // halve pressure when defended
+constexpr int KING_RING_ENEMY_OCCUPIER = 14;
+constexpr int BISHOP_PAIR_BONUS = 28;
+constexpr int ROOK_OPEN_FILE_BONUS = 34;
+constexpr int ROOK_SEMI_OPEN_FILE_BONUS = 18;
+
+constexpr std::array<int, kPieceCount> kKingAttackWeights = {
+    14, // wP
+    32, // wN
+    30, // wB
+    44, // wR
+    74, // wQ
+    20, // wK
+    14, // bP
+    32, // bN
+    30, // bB
+    44, // bR
+    74, // bQ
+    20  // bK
+};
 
 // Helper: White-centric check queries
 inline bool white_in_check(const Board& board) {
@@ -177,6 +201,87 @@ int evaluate_attacking_pieces(const Board& board) {
   }
 
   return attack_score;
+}
+
+int evaluate_hanging_pieces(const Board& board) {
+  int score = 0;
+
+  for (std::size_t sq = 0; sq < 64; ++sq) {
+    const OccupancyType piece = board.pieces[sq];
+    if (piece == OccupancyType::empty)
+      continue;
+    if (piece == OccupancyType::wK || piece == OccupancyType::bK)
+      continue;
+
+    const bool white_piece = is_white(piece);
+    const SideToMove enemy = white_piece ? SideToMove::Black : SideToMove::White;
+    const SideToMove friendly =
+        white_piece ? SideToMove::White : SideToMove::Black;
+
+    if (!is_square_attacked(board, static_cast<u_int8_t>(sq), enemy))
+      continue;
+
+    if (is_square_attacked(board, static_cast<u_int8_t>(sq), friendly))
+      continue;
+
+    int penalty = piece_material_magnitude(piece) / HANGING_DIVISOR;
+    penalty = std::max(HANGING_MIN_PENALTY, penalty);
+    score += white_piece ? -penalty : +penalty;
+  }
+
+  return score;
+}
+
+int evaluate_king_ring_pressure(const Board& board) {
+  auto pressure_for = [&](PieceColor color) {
+    const int king_sq = board.king_positions[to_index(color)];
+    if (king_sq < 0)
+      return 0;
+
+    const Bitboard ring = KING_ATTACKS[static_cast<std::size_t>(king_sq)];
+    const SideToMove enemy =
+        (color == PieceColor::White) ? SideToMove::Black : SideToMove::White;
+    const SideToMove friendly = flip_side(enemy);
+
+    int danger = 0;
+    Bitboard mask = ring;
+    while (mask) {
+      const int sq = lsb_index(mask);
+      mask &= mask - 1;
+
+      if (!is_square_attacked(board, static_cast<u_int8_t>(sq), enemy))
+        continue;
+
+      int weight = KING_RING_BASE;
+      if (const auto attacker =
+              find_smallest_attacker(board, static_cast<u_int8_t>(sq), enemy)) {
+        weight += kKingAttackWeights[static_cast<std::size_t>(attacker->piece)];
+      }
+
+      if (is_square_attacked(board, static_cast<u_int8_t>(sq), friendly)) {
+        weight /= KING_RING_DEFENDED_SCALE;
+        weight = std::max(weight, 0);
+      }
+
+      const OccupancyType occupant = board.pieces[static_cast<std::size_t>(sq)];
+      if (occupant != OccupancyType::empty) {
+        const bool enemy_piece =
+            is_white(occupant) != (color == PieceColor::White);
+        if (enemy_piece) {
+          weight += KING_RING_ENEMY_OCCUPIER;
+          weight += piece_material_magnitude(occupant) / 14;
+        }
+      }
+
+      danger += weight;
+    }
+    return danger;
+  };
+
+  const int white_pressure = pressure_for(PieceColor::White);
+  const int black_pressure = pressure_for(PieceColor::Black);
+
+  return black_pressure - white_pressure;
 }
 
 int compute_threat_pressure(const Board& board, SideToMove attacker) {
@@ -381,6 +486,82 @@ int opening_phase(const Board& board) {
   return opening; // [0..64], larger at start, shrinks as material/phase declines
 }
 
+int evaluate_bishop_pair(const Board& board) {
+  int white_bishops = 0;
+  int black_bishops = 0;
+  for (const auto& piece : board.pieces) {
+    if (piece == OccupancyType::wB) {
+      ++white_bishops;
+    } else if (piece == OccupancyType::bB) {
+      ++black_bishops;
+    }
+  }
+
+  if (white_bishops < 2 && black_bishops < 2) {
+    return 0;
+  }
+
+  const int phase = opening_phase(board);
+  const int endgame_emphasis = (64 - phase) / 4;
+  const int bonus = BISHOP_PAIR_BONUS + endgame_emphasis;
+  int score = 0;
+  if (white_bishops >= 2) {
+    score += bonus;
+  }
+  if (black_bishops >= 2) {
+    score -= bonus;
+  }
+  return score;
+}
+
+int evaluate_rook_file_control(const Board& board) {
+  std::array<bool, 8> white_pawn_on_file{};
+  std::array<bool, 8> black_pawn_on_file{};
+
+  const auto& white_pawns = board.pawn_list[to_index(PieceColor::White)];
+  for (std::uint8_t i = 0; i < white_pawns.count; ++i) {
+    const int sq = static_cast<int>(white_pawns.squares[i]);
+    const std::size_t file_idx = static_cast<std::size_t>(file_of(sq));
+    white_pawn_on_file[file_idx] = true;
+  }
+  const auto& black_pawns = board.pawn_list[to_index(PieceColor::Black)];
+  for (std::uint8_t i = 0; i < black_pawns.count; ++i) {
+    const int sq = static_cast<int>(black_pawns.squares[i]);
+    const std::size_t file_idx = static_cast<std::size_t>(file_of(sq));
+    black_pawn_on_file[file_idx] = true;
+  }
+
+  const int phase = opening_phase(board);
+  const int endgame = 64 - phase;
+  const int open_bonus = ROOK_OPEN_FILE_BONUS + endgame / 2;
+  const int semi_bonus = ROOK_SEMI_OPEN_FILE_BONUS + endgame / 4;
+
+  int score = 0;
+  auto accumulate = [&](PieceColor color) {
+    const auto& rooks = board.rook_list[to_index(color)];
+    for (std::uint8_t i = 0; i < rooks.count; ++i) {
+      const int sq = static_cast<int>(rooks.squares[i]);
+      const std::size_t file = static_cast<std::size_t>(file_of(sq));
+      const bool friendly_pawn = (color == PieceColor::White)
+                                     ? white_pawn_on_file[file]
+                                     : black_pawn_on_file[file];
+      if (friendly_pawn) {
+        continue;
+      }
+      const bool enemy_pawn = (color == PieceColor::White)
+                                  ? black_pawn_on_file[file]
+                                  : white_pawn_on_file[file];
+      const int bonus = enemy_pawn ? semi_bonus : open_bonus;
+      score += (color == PieceColor::White) ? bonus : -bonus;
+    }
+  };
+
+  accumulate(PieceColor::White);
+  accumulate(PieceColor::Black);
+
+  return score;
+}
+
 int evaluate_opening_principles(const Board& board) {
   const int open_w = opening_phase(board);
   if (open_w == 0) {
@@ -542,6 +723,10 @@ int evaluate_board(const Board& board) {
   total_eval += evaluate_pst(board);
   total_eval += evaluate_passed_pawns(board);
   total_eval += evaluate_initiative(board);
+  total_eval += evaluate_hanging_pieces(board);
+  total_eval += evaluate_king_ring_pressure(board);
+  total_eval += evaluate_bishop_pair(board);
+  total_eval += evaluate_rook_file_control(board);
 
   return total_eval;
 }
