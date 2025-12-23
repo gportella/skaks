@@ -11,7 +11,6 @@
 #include <iostream>
 
 namespace chess {
-
 namespace {
 
 constexpr int kMaxAspirationAttempts = 24;
