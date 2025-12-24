@@ -1,6 +1,6 @@
 import unittest
 
-from move_validation.fight_against_engine import (
+from validation_moves.fight_against_engine import (
     DEFAULT_HANDICAP_DEPTH,
     DEFAULT_HANDICAP_FACTOR,
     MIN_CLOCK_MS,

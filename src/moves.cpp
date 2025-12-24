@@ -5,6 +5,8 @@
 #include "chess/casteling.hpp"
 #include "chess/exchange.hpp"
 #include "chess/history.hpp"
+#include "chess/piece_values.hpp"
+#include "chess/pst_tables.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
@@ -74,7 +76,7 @@ void sort_moves(const Board& board,
         key = 1'000'000 + mvv_lva_score(cap, pc);
         auto see_gain = static_exchange_eval(board, decode_move(m));
         if (see_gain < 0) {
-          key = 10'000 + see_gain;
+          key -= 10;
         } else {
           key += see_gain * 100;
         }
@@ -343,6 +345,55 @@ inline Undo make_move(Board& b, const Move& m) {
   undo.king_captured_before = b.king_captured;
 
   undo.ep_hash_before = (b.en_passant >= 0 && ep_capture_available(b));
+
+  // Incremental score updates
+  undo.material_score_before = b.material_score;
+  undo.pst_midgame_score_before = b.pst_midgame_score;
+  undo.pst_endgame_score_before = b.pst_endgame_score;
+  undo.phase_before = b.phase;
+
+  auto update_score = [&](OccupancyType pc, int sq, bool add) {
+    int sign = add ? 1 : -1;
+    b.material_score += sign * piece_material_value(pc);
+
+    const bool white_piece = is_white(pc);
+    const int type_index = (static_cast<int>(pc) - 1) % 6;
+    const int oriented_sq = white_piece ? sq : mirror_rank(sq);
+
+    const int mg = kMidgamePst[static_cast<std::size_t>(type_index)]
+                              [static_cast<std::size_t>(oriented_sq)];
+    const int eg = kEndgamePst[static_cast<std::size_t>(type_index)]
+                              [static_cast<std::size_t>(oriented_sq)];
+
+    b.pst_midgame_score += sign * (white_piece ? mg : -mg);
+    b.pst_endgame_score += sign * (white_piece ? eg : -eg);
+
+    b.phase += sign * kPstPhaseWeights[static_cast<std::size_t>(type_index)];
+  };
+
+  // 1. Remove moving piece from 'from'
+  update_score(m.moving_pc, m.from, false);
+
+  // 2. Add moving piece to 'to' (or promoted piece)
+  OccupancyType placed_pc =
+      (m.promo_pc != OccupancyType::empty) ? m.promo_pc : m.moving_pc;
+  update_score(placed_pc, m.to, true);
+
+  // 3. Handle Capture
+  if (undo.captured_pc != OccupancyType::empty) {
+    update_score(undo.captured_pc, undo.captured_sq, false);
+  }
+
+  // 4. Handle Castling (Rook move)
+  if (undo.was_castling) {
+    Square rook_from = flag_is_castle(m.flags) ? king_rook : queen_rook;
+    Square rook_to =
+        flag_is_castle(m.flags) ? rook_kingside_target : rook_queenside_target;
+    OccupancyType rook = white ? OccupancyType::wR : OccupancyType::bR;
+
+    update_score(rook, static_cast<int>(to_index(rook_from)), false);
+    update_score(rook, static_cast<int>(to_index(rook_to)), true);
+  }
 
   const auto mover_index = to_index(b.side_to_move);
   const auto enemy_index = to_index(flip_side(b.side_to_move));
@@ -731,6 +782,13 @@ inline void undo_move(Board& b, const Undo& u) {
   b.ep_square = u.ep_square_before;
   b.castling_rights = u.castling_rights_before;
   b.has_castled = u.castled_before;
+
+  // Restore incremental scores
+  b.material_score = u.material_score_before;
+  b.pst_midgame_score = u.pst_midgame_score_before;
+  b.pst_endgame_score = u.pst_endgame_score_before;
+  b.phase = u.phase_before;
+
   std::copy(std::begin(u.occupancy), std::end(u.occupancy),
             std::begin(b.occupancy));
   b.rook_list[0] = u.rook_list_before[0];

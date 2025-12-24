@@ -8,6 +8,7 @@
 #include "chess/transposition_table.hpp"
 #include "chess/types.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -35,6 +36,7 @@ struct SearchParameters {
   std::size_t root_excluded_count = 0;
   SearchLimits limits;
   TimeManager* time_manager = nullptr;
+  std::atomic<bool>* abort_flag = nullptr;
 };
 
 struct SearchResult {
@@ -59,3 +61,4 @@ SearchResult search_position(Board& board, SideToMove stm,
                              const SearchParameters& params);
 
 } // namespace chess
+

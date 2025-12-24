@@ -16,6 +16,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(chess_engine_tests
   board_tests.cpp
   engine_tests.cpp
+  incremental_tests.cpp
   move_tests.cpp
   scoring_tests.cpp
   attack_tests.cpp
@@ -24,6 +25,7 @@ add_executable(chess_engine_tests
   polyglot_tests.cpp
   cli_tests.cpp
   time_manager_tests.cpp
+  zobrist_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests

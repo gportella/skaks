@@ -6,9 +6,9 @@
 namespace chess {
 
 inline constexpr std::string_view kEngineName = "skaks";
-inline constexpr std::string_view kEngineVersion = "0.8";
+inline constexpr std::string_view kEngineVersion = "0.9";
 
-inline constexpr std::array<std::string_view, 12> kOptimizationFeatures{
+inline constexpr std::array<std::string_view, 13> kOptimizationFeatures{
     "Bitboard move generation with precomputed attack masks",
     "Alpha-beta search with transposition table caching",
     "Zobrist hashing for incremental board state keys",
@@ -20,6 +20,7 @@ inline constexpr std::array<std::string_view, 12> kOptimizationFeatures{
     "Killer move heuristic for quiet move ordering",
     "Support for polyglot book of moves",
     "Null move pruning, historical heuristic and SEE sorting",
-    "Time management for search limits"};
+    "Time management for search limits",
+    "Incremental evaluation with piece-square tables"};
 
 } // namespace chess

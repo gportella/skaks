@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdlib>
 #include <iostream>
 
@@ -23,14 +24,15 @@ struct SearchScratch {
   TranspositionTable* tt = nullptr;
   std::array<std::array<int, 64>, 64> history_heuristic = {};
   TimeManager* time_manager = nullptr;
-  bool* abort_requested = nullptr;
+  std::atomic<bool>* abort_requested = nullptr;
 };
 
 constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
 
 inline bool should_abort_due_to_time(SearchScratch& scratch,
                                      std::uint64_t nodes) {
-  if (scratch.abort_requested && *scratch.abort_requested) {
+  if (scratch.abort_requested &&
+      scratch.abort_requested->load(std::memory_order_relaxed)) {
     return true;
   }
   if (!scratch.time_manager || !scratch.time_manager->enabled()) {
@@ -43,7 +45,7 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
     return false;
   }
   if (scratch.abort_requested) {
-    *scratch.abort_requested = true;
+    scratch.abort_requested->store(true, std::memory_order_relaxed);
   }
   return true;
 }
@@ -470,13 +472,17 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
 
   KillerTable killers{};
-  bool abort_requested = false;
+  std::atomic<bool> abort_requested{false};
   SearchScratch scratch{};
   scratch.history = history;
   scratch.killers = &killers;
   scratch.tt = tt;
   scratch.time_manager = params.time_manager;
-  scratch.abort_requested = &abort_requested;
+  if (params.abort_flag) {
+    scratch.abort_requested = params.abort_flag;
+  } else {
+    scratch.abort_requested = &abort_requested;
+  }
 
   int max_root_moves = 0;
   uint16_t move_count = 0;
@@ -582,7 +588,7 @@ SearchResult search_position(Board& board, SideToMove stm,
         result.searched_depth = current_depth;
         result.selective_depth = current_depth;
         if (result.aborted) {
-          abort_requested = true;
+          abort_requested.store(true, std::memory_order_relaxed);
           break;
         }
         if (result.score <= alpha) {
@@ -682,7 +688,7 @@ SearchResult search_position(Board& board, SideToMove stm,
       break;
     }
 
-    if (abort_requested) {
+    if (abort_requested.load(std::memory_order_relaxed)) {
       break;
     }
 
@@ -706,7 +712,7 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
   final_result.score = normalize_mate_score(final_result.score, start_ply);
   final_result.nodes = nodes;
-  final_result.aborted = abort_requested;
+  final_result.aborted = abort_requested.load(std::memory_order_relaxed);
   return final_result;
 }
 

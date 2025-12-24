@@ -126,6 +126,12 @@ struct Undo {
   bool was_en_passant;
   bool was_castling;
   bool ep_hash_before;
+
+  // Incremental scores restoration
+  int material_score_before;
+  int pst_midgame_score_before;
+  int pst_endgame_score_before;
+  int phase_before;
 };
 
 struct UndoNull {

@@ -4,6 +4,8 @@
 #include "chess/attack_masks.hpp"
 #include "chess/defaults.hpp"
 #include "chess/moves.hpp"
+#include "chess/piece_values.hpp"
+#include "chess/pst_tables.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/zobrist.hpp"
@@ -40,8 +42,39 @@ constexpr std::array<OccupancyType, 128> kPieceFromChar = [] {
   return arr;
 }();
 
-constexpr std::array<std::string_view, 13> kPieceGlyph = {"·", "♙", "♘", "♗", "♖", "♕", "♔",
-                                                          "♟", "♞", "♝", "♜", "♛", "♚"};
+constexpr std::array<std::string_view, 13> kPieceGlyph = {
+    "·", "♙", "♘", "♗", "♖", "♕", "♔", "♟", "♞", "♝", "♜", "♛", "♚"};
+
+void initialize_incremental_scores(Board& board) {
+  board.material_score = 0;
+  board.pst_midgame_score = 0;
+  board.pst_endgame_score = 0;
+  board.phase = 0;
+
+  for (int sq = 0; sq < 64; ++sq) {
+    const auto piece = board.pieces[static_cast<std::size_t>(sq)];
+    if (piece == OccupancyType::empty)
+      continue;
+
+    // Material
+    board.material_score += piece_material_value(piece);
+
+    // PST
+    const bool white_piece = is_white(piece);
+    const int type_index = (static_cast<int>(piece) - 1) % 6;
+    const int oriented_sq = white_piece ? sq : mirror_rank(sq);
+
+    const int mg_entry = kMidgamePst[static_cast<std::size_t>(type_index)]
+                                    [static_cast<std::size_t>(oriented_sq)];
+    const int eg_entry = kEndgamePst[static_cast<std::size_t>(type_index)]
+                                    [static_cast<std::size_t>(oriented_sq)];
+
+    board.pst_midgame_score += white_piece ? mg_entry : -mg_entry;
+    board.pst_endgame_score += white_piece ? eg_entry : -eg_entry;
+
+    board.phase += kPstPhaseWeights[static_cast<std::size_t>(type_index)];
+  }
+}
 
 Board parse_fen_string(std::string_view fen) {
   Board board{};
@@ -67,18 +100,24 @@ Board parse_fen_string(std::string_view fen) {
       board.pieces[pos] = kPieceFromChar[static_cast<unsigned char>(c)];
       // piece list
       if (board.pieces[pos] == OccupancyType::wP) {
-        board.pawn_list[0].squares[board.pawn_list[0].count++] = static_cast<Square>(pos);
+        board.pawn_list[0].squares[board.pawn_list[0].count++] =
+            static_cast<Square>(pos);
       } else if (board.pieces[pos] == OccupancyType::bP) {
-        board.pawn_list[1].squares[board.pawn_list[1].count++] = static_cast<Square>(pos);
+        board.pawn_list[1].squares[board.pawn_list[1].count++] =
+            static_cast<Square>(pos);
       } else if (board.pieces[pos] == OccupancyType::wR) {
-        board.rook_list[0].squares[board.rook_list[0].count++] = static_cast<Square>(pos);
+        board.rook_list[0].squares[board.rook_list[0].count++] =
+            static_cast<Square>(pos);
       } else if (board.pieces[pos] == OccupancyType::bR) {
-        board.rook_list[1].squares[board.rook_list[1].count++] = static_cast<Square>(pos);
+        board.rook_list[1].squares[board.rook_list[1].count++] =
+            static_cast<Square>(pos);
       } else if (board.pieces[pos] == OccupancyType::wK) {
-        board.king_list[0].squares[board.king_list[0].count++] = static_cast<Square>(pos);
+        board.king_list[0].squares[board.king_list[0].count++] =
+            static_cast<Square>(pos);
         board.king_positions[0] = static_cast<int>(pos);
       } else if (board.pieces[pos] == OccupancyType::bK) {
-        board.king_list[1].squares[board.king_list[1].count++] = static_cast<Square>(pos);
+        board.king_list[1].squares[board.king_list[1].count++] =
+            static_cast<Square>(pos);
         board.king_positions[1] = static_cast<int>(pos);
       }
 
@@ -86,21 +125,28 @@ Board parse_fen_string(std::string_view fen) {
     }
   }
 
-  board.castling_rights = fields.castling.empty()
-                              ? CastlingRights::NoCastling
-                              : static_cast<CastlingRights>(
-                                    (fields.castling.find('K') != std::string_view::npos ? 1 : 0) +
-                                    (fields.castling.find('Q') != std::string_view::npos ? 2 : 0) +
-                                    (fields.castling.find('k') != std::string_view::npos ? 4 : 0) +
-                                    (fields.castling.find('q') != std::string_view::npos ? 8 : 0));
-  board.en_passant = (fields.en_passant == "-")
-                         ? -1
-                         : (fields.en_passant[0] - 'a') + (fields.en_passant[1] - '1') * 8;
-  board.ply_count =
-      fields.fullmove_number.empty() ? 1 : std::stoi(std::string(fields.fullmove_number));
-  board.fifty_move_counter =
-      fields.halfmove_clock.empty() ? 0 : std::stoi(std::string(fields.halfmove_clock));
-  board.side_to_move = (fields.side_to_move == "w") ? SideToMove::White : SideToMove::Black;
+  board.castling_rights =
+      fields.castling.empty()
+          ? CastlingRights::NoCastling
+          : static_cast<CastlingRights>(
+                (fields.castling.find('K') != std::string_view::npos ? 1 : 0) +
+                (fields.castling.find('Q') != std::string_view::npos ? 2 : 0) +
+                (fields.castling.find('k') != std::string_view::npos ? 4 : 0) +
+                (fields.castling.find('q') != std::string_view::npos ? 8 : 0));
+  board.en_passant =
+      (fields.en_passant == "-")
+          ? -1
+          : (fields.en_passant[0] - 'a') + (fields.en_passant[1] - '1') * 8;
+  board.ply_count = fields.fullmove_number.empty()
+                        ? 1
+                        : std::stoi(std::string(fields.fullmove_number));
+  board.fifty_move_counter = fields.halfmove_clock.empty()
+                                 ? 0
+                                 : std::stoi(std::string(fields.halfmove_clock));
+  board.side_to_move =
+      (fields.side_to_move == "w") ? SideToMove::White : SideToMove::Black;
+
+  initialize_incremental_scores(board);
 
   // Minimal FEN parsing logic can be added here
   return board;
@@ -154,8 +200,8 @@ Bitboard calculate_occupancy(const Board& board, PieceColor color) {
     const OccupancyType piece = board.pieces[sq];
     if (piece != OccupancyType::empty) {
       bool is_W = is_white(piece);
-      if ((color == PieceColor::White && is_W) || (color == PieceColor::Black && !is_W) ||
-          (color == PieceColor::Both)) {
+      if ((color == PieceColor::White && is_W) ||
+          (color == PieceColor::Black && !is_W) || (color == PieceColor::Both)) {
         occ |= (Bitboard(1) << sq);
       }
     }
@@ -281,7 +327,8 @@ std::string board_to_fen(const Board& board) {
 
 // Set EP square after a legal double pawn push; clear otherwise.
 // Call this once per make_move, after you've decided the move is legal.
-inline void set_or_clear_en_passant(Board& b, int from, int to, bool is_pawn_move) {
+inline void set_or_clear_en_passant(Board& b, int from, int to,
+                                    bool is_pawn_move) {
   b.ep_square = 0;
   b.en_passant = -1;
 
@@ -300,8 +347,9 @@ inline void set_or_clear_en_passant(Board& b, int from, int to, bool is_pawn_mov
   b.ep_square = bb_of(mid);
 }
 
-// True if the side to move has at least one pawn that could capture EP right now.
-// This uses only ranks/files, so it doesn't depend on your internal square numbering direction.
+// True if the side to move has at least one pawn that could capture EP right
+// now. This uses only ranks/files, so it doesn't depend on your internal square
+// numbering direction.
 bool ep_capture_available(const Board& b) {
   const int ep = b.en_passant;
   if (ep < 0)
@@ -311,7 +359,8 @@ bool ep_capture_available(const Board& b) {
   const int epRank = rank_of(ep);
 
   if (b.side_to_move == SideToMove::White) {
-    // White would capture up to epRank; their pawn must be on epRank - 1 and adjacent file.
+    // White would capture up to epRank; their pawn must be on epRank - 1 and
+    // adjacent file.
     const int reqRank = epRank - 1;
     if (reqRank < 0)
       return false;
@@ -330,7 +379,8 @@ bool ep_capture_available(const Board& b) {
     }
     return false;
   } else {
-    // Black would capture down to epRank; their pawn must be on epRank + 1 and adjacent file.
+    // Black would capture down to epRank; their pawn must be on epRank + 1 and
+    // adjacent file.
     const int reqRank = epRank + 1;
     if (reqRank > 7)
       return false;
@@ -351,8 +401,10 @@ bool ep_capture_available(const Board& b) {
 
 bool is_check(const Board& b, SideToMove stm) {
 
-  const int king_sq = b.king_positions[static_cast<std::size_t>(stm == SideToMove::White ? 0 : 1)];
-  return is_square_attacked(b, static_cast<std::uint8_t>(king_sq), flip_side(stm));
+  const int king_sq = b.king_positions[static_cast<std::size_t>(
+      stm == SideToMove::White ? 0 : 1)];
+  return is_square_attacked(b, static_cast<std::uint8_t>(king_sq),
+                            flip_side(stm));
 }
 
 bool has_legal_moves(Board& b, SideToMove stm) {
