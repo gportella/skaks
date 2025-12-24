@@ -17,7 +17,8 @@ import chess.pgn
 
 DEFAULT_PUZZLE_FILE = Path(__file__).resolve().with_name("puzzles.csv")
 DEFAULT_ENGINE = "skaks"
-STOCKFISH_TIME_FACTOR = 0.35
+DEFAULT_HANDICAP_FACTOR = 0.35
+DEFAULT_HANDICAP_DEPTH = 6
 MIN_CLOCK_MS = 1
 
 
@@ -131,10 +132,16 @@ class UciEngine:
                 "exactly one of depth, movetime_ms, or clock must be provided"
             )
         self._send("ucinewgame")
-        if moves and fen == chess.STARTING_FEN:
-            self._send("position startpos moves " + " ".join(moves))
+        if moves:
+            if fen == chess.STARTING_FEN:
+                self._send("position startpos moves " + " ".join(moves))
+            else:
+                self._send(f"position fen {fen} moves " + " ".join(moves))
         else:
-            self._send(f"position fen {fen}")
+            if fen == chess.STARTING_FEN:
+                self._send("position startpos")
+            else:
+                self._send(f"position fen {fen}")
         if movetime_ms is not None:
             self._send(f"go movetime {movetime_ms}")
         elif depth is not None:
@@ -192,15 +199,16 @@ def _to_millis(seconds: float) -> int:
     return max(millis, 1)
 
 
-def _scale_stockfish_movetime(
-    skaks_ms: Optional[int], stockfish_ms: Optional[int], override: bool
-) -> Optional[int]:
-    if skaks_ms is None:
-        return stockfish_ms
-    if override:
-        return stockfish_ms
-    scaled = int(round(skaks_ms * STOCKFISH_TIME_FACTOR))
-    return max(scaled, 1)
+def _scale_handicapped_time(base_ms: int, factor: float) -> int:
+    scaled = int(round(base_ms * factor))
+    return max(scaled, MIN_CLOCK_MS)
+
+
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
 
 
 def run_game(
@@ -208,21 +216,26 @@ def run_game(
     depth: Optional[int],
     limit: int,
     time_per_move: Optional[float],
-    stockfish_time_per_move: Optional[float],
+    opponent_time_per_move: Optional[float],
     clock_seconds: Optional[float],
-    stockfish_clock_seconds: Optional[float],
+    opponent_clock_seconds: Optional[float],
     increment_seconds: Optional[float],
-    stockfish_increment_seconds: Optional[float],
+    opponent_increment_seconds: Optional[float],
     moves_to_go: Optional[int],
-    stockfish_time_overridden: bool,
+    reference_engine: str,
+    opponent_engine: str,
+    handicap_factor: float,
+    handicap_depth: int,
+    handicap_enabled: bool,
 ) -> int:
-    stock_path = "stockfish"
-    skaks_path = DEFAULT_ENGINE
+    reference_path = reference_engine
+    opponent_path = opponent_engine
 
-    white_name = Path(skaks_path).name
-    black_name = Path(stock_path).name
+    white_name = Path(reference_path).name
+    black_name = Path(opponent_path).name
 
     board = chess.Board(chess.STARTING_FEN)
+    root_fen = board.fen()
     game = chess.pgn.Game()
     game.headers["Event"] = "Skaks Validation"
     game.headers["Site"] = "Local"
@@ -239,50 +252,45 @@ def run_game(
 
     try:
         with (
-            UciEngine(stock_path, timeout=30.0) as stockfish,
-            UciEngine(skaks_path, timeout=240.0) as skaks,
+            UciEngine(opponent_path, timeout=30.0) as opponent,
+            UciEngine(reference_path, timeout=240.0) as reference,
         ):
-            skaks_movetime_ms: Optional[int]
-            stockfish_movetime_ms: Optional[int]
-            clock: Optional[MatchClock]
-
-            clock = None
-            skaks_movetime_ms = None
-            stockfish_movetime_ms = None
+            clock: Optional[MatchClock] = None
+            reference_movetime_ms: Optional[int] = None
+            opponent_movetime_ms: Optional[int] = None
 
             if time_per_move is not None:
-                skaks_movetime_ms = _to_millis(time_per_move)
-                stockfish_initial_ms = (
-                    _to_millis(stockfish_time_per_move)
-                    if stockfish_time_per_move is not None
-                    else skaks_movetime_ms
-                )
-                stockfish_movetime_ms = _scale_stockfish_movetime(
-                    skaks_movetime_ms, stockfish_initial_ms, stockfish_time_overridden
-                )
+                reference_movetime_ms = _to_millis(time_per_move)
+                if opponent_time_per_move is not None:
+                    opponent_movetime_ms = _to_millis(opponent_time_per_move)
+                else:
+                    opponent_movetime_ms = reference_movetime_ms
+                    if handicap_enabled:
+                        opponent_movetime_ms = _scale_handicapped_time(
+                            reference_movetime_ms, handicap_factor
+                        )
             elif clock_seconds is not None:
                 white_base = max(_to_millis(clock_seconds), MIN_CLOCK_MS)
-                if stockfish_clock_seconds is not None:
-                    black_base = max(_to_millis(stockfish_clock_seconds), MIN_CLOCK_MS)
+                if opponent_clock_seconds is not None:
+                    black_base = max(_to_millis(opponent_clock_seconds), MIN_CLOCK_MS)
                 else:
-                    black_base = max(
-                        int(round(white_base * STOCKFISH_TIME_FACTOR)), MIN_CLOCK_MS
-                    )
+                    black_base = white_base
+                    if handicap_enabled:
+                        black_base = _scale_handicapped_time(
+                            white_base, handicap_factor
+                        )
 
                 white_inc = (
                     _to_millis(increment_seconds)
                     if increment_seconds is not None
                     else 0
                 )
-                if stockfish_increment_seconds is not None:
-                    black_inc = _to_millis(stockfish_increment_seconds)
+                if opponent_increment_seconds is not None:
+                    black_inc = _to_millis(opponent_increment_seconds)
                 else:
-                    if white_inc:
-                        black_inc = max(
-                            int(round(white_inc * STOCKFISH_TIME_FACTOR)), MIN_CLOCK_MS
-                        )
-                    else:
-                        black_inc = 0
+                    black_inc = white_inc
+                    if handicap_enabled and white_inc:
+                        black_inc = _scale_handicapped_time(white_inc, handicap_factor)
 
                 clock = MatchClock(
                     white_ms=white_base,
@@ -292,60 +300,59 @@ def run_game(
                     white_moves_to_go=moves_to_go,
                     black_moves_to_go=moves_to_go,
                 )
-            else:
-                skaks_movetime_ms = None
+
+            depth_penalty = handicap_depth if handicap_enabled else 0
 
             for turn in range(limit):
-                engine = skaks if turn % 2 == 0 else stockfish
+                mover_color = board.turn
+                engine = reference if mover_color == chess.WHITE else opponent
+                engine_name = white_name if mover_color == chess.WHITE else black_name
                 try:
                     if clock is not None:
-                        go_clock = clock.snapshot(board.turn)
+                        go_clock = clock.snapshot(mover_color)
                         search_start = time.perf_counter()
                         best_move = engine.bestmove(
-                            board.fen(), moves=moves, clock=go_clock
+                            root_fen, moves=moves, clock=go_clock
                         )
                         search_end = time.perf_counter()
-                    elif skaks_movetime_ms is not None:
+                    elif reference_movetime_ms is not None:
                         movetime_ms = (
-                            skaks_movetime_ms
-                            if engine == skaks
-                            else stockfish_movetime_ms
+                            reference_movetime_ms
+                            if mover_color == chess.WHITE
+                            else opponent_movetime_ms
                         )
                         if movetime_ms is None:
                             raise RuntimeError(
-                                "time control not configured for Stockfish"
+                                "time control not configured for opponent engine"
                             )
                         search_start = None
                         search_end = None
                         best_move = engine.bestmove(
-                            board.fen(), moves=moves, movetime_ms=movetime_ms
+                            root_fen, moves=moves, movetime_ms=movetime_ms
                         )
                     else:
                         assert depth is not None
-                        chosen_depth = depth if engine == skaks else max(depth - 6, 1)
+                        if mover_color == chess.WHITE or depth_penalty == 0:
+                            chosen_depth = depth
+                        else:
+                            chosen_depth = max(depth - depth_penalty, 1)
                         search_start = None
                         search_end = None
                         best_move = engine.bestmove(
-                            board.fen(), moves=moves, depth=chosen_depth
+                            root_fen, moves=moves, depth=chosen_depth
                         )
                 except Exception as e:
-                    print(f"Engine error: {e}", file=sys.stderr)
+                    print(f"Engine error for {engine_name}: {e}", file=sys.stderr)
                     print("Final position FEN:", board.fen())
                     _print_game_pgn(game)
                     return 3
                 if best_move == "0000":
                     if board.is_checkmate():
-                        print(
-                            f"Turn {turn + 1}: {'Stockfish' if turn % 2 == 0 else 'Skaks'} reports checkmate."
-                        )
+                        print(f"Turn {turn + 1}: {engine_name} reports checkmate.")
                     elif board.is_stalemate():
-                        print(
-                            f"Turn {turn + 1}: {'Stockfish' if turn % 2 == 0 else 'Skaks'} reports stalemate."
-                        )
+                        print(f"Turn {turn + 1}: {engine_name} reports stalemate.")
                     else:
-                        print(
-                            f"Turn {turn + 1}: {'Stockfish' if turn % 2 == 0 else 'Skaks'} reports no legal moves."
-                        )
+                        print(f"Turn {turn + 1}: {engine_name} reports no legal moves.")
                     print("Final position FEN:", board.fen())
                     final_fen_printed = True
                     break
@@ -362,19 +369,21 @@ def run_game(
                     return 3
                 node = node.add_variation(move_obj)
                 board.push(move_obj)
-                print(
-                    f"Turn {turn + 1}: {'Stockfish' if turn % 2 == 0 else 'Skaks'} plays {best_move}"
-                )
+                print(f"Turn {turn + 1}: {engine_name} plays {best_move}")
                 if (
                     clock is not None
                     and search_start is not None
                     and search_end is not None
                 ):
                     elapsed_ms = int(round((search_end - search_start) * 1000.0))
-                    mover = chess.BLACK if engine == stockfish else chess.WHITE
-                    clock.apply_elapsed(mover, elapsed_ms)
-    except FileNotFoundError:
-        print("Engine binary not found", file=sys.stderr)
+                    clock.apply_elapsed(mover_color, elapsed_ms)
+            else:
+                print(
+                    f"Warning: reached move limit ({limit}); terminating early.",
+                    file=sys.stderr,
+                )
+    except FileNotFoundError as exc:
+        print(f"Engine binary not found: {exc}", file=sys.stderr)
         print("Final position FEN:", board.fen())
         _print_game_pgn(game)
         return 2
@@ -424,12 +433,17 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--engine",
         default=DEFAULT_ENGINE,
-        help="Engine binary to execute (default: skaks)",
+        help="Reference engine binary to execute (default: skaks)",
+    )
+    parser.add_argument(
+        "--opponent",
+        default="stockfish",
+        help="Opponent engine binary to execute (default: stockfish)",
     )
     parser.add_argument(
         "--stockfish",
         action="store_true",
-        help="Use stockfish (overrides --engine)",
+        help="Shortcut to set the opponent to Stockfish",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -448,14 +462,18 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Primary clock time in seconds for Skaks (enables clock controls)",
     )
     parser.add_argument(
+        "--opponent-time-per-move",
         "--stockfish-time-per-move",
+        dest="opponent_time_per_move",
         type=_positive_float,
-        help="Seconds per move for Stockfish when using time controls (default: match Skaks)",
+        help="Seconds per move for the opponent when using time controls",
     )
     parser.add_argument(
+        "--opponent-clock",
         "--stockfish-clock",
+        dest="opponent_clock",
         type=_positive_float,
-        help="Clock time in seconds for Stockfish (default: scaled from --clock)",
+        help="Clock time in seconds for the opponent (default: handicapped from --clock)",
     )
     parser.add_argument(
         "--increment",
@@ -463,9 +481,11 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Increment in seconds added to Skaks after each move",
     )
     parser.add_argument(
+        "--opponent-increment",
         "--stockfish-increment",
+        dest="opponent_increment",
         type=_positive_float,
-        help="Increment in seconds added to Stockfish after each move",
+        help="Increment in seconds added to the opponent after each move",
     )
     parser.add_argument(
         "--moves-to-go",
@@ -482,14 +502,34 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Seconds to wait for engine replies (default: 30)",
     )
     parser.add_argument(
+        "--no-handicap",
+        action="store_true",
+        help="Disable time/depth handicap for the opponent",
+    )
+    parser.add_argument(
+        "--handicap-factor",
+        type=_positive_float,
+        default=DEFAULT_HANDICAP_FACTOR,
+        help="Scaling factor applied to opponent time when handicap is enabled",
+    )
+    parser.add_argument(
+        "--handicap-depth",
+        type=_non_negative_int,
+        default=DEFAULT_HANDICAP_DEPTH,
+        help="Depth advantage in plies retained by the reference engine when handicap is enabled",
+    )
+    parser.add_argument(
         "--progress-interval",
         type=int,
         default=10,
         help="Report progress every N puzzles (default: 10)",
     )
     args = parser.parse_args(argv)
-    stockfish_time_explicit = args.stockfish_time_per_move is not None
-    stockfish_clock_explicit = args.stockfish_clock is not None
+
+    if args.stockfish and args.opponent != "stockfish":
+        parser.error("--stockfish cannot be combined with --opponent")
+    if args.stockfish:
+        args.opponent = "stockfish"
 
     mode_count = sum(
         flag is not None for flag in (args.depth, args.time_per_move, args.clock)
@@ -499,22 +539,22 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     elif mode_count > 1:
         parser.error("choose exactly one of --depth, --time-per-move, or --clock")
 
-    if args.time_per_move is None and args.stockfish_time_per_move is not None:
-        parser.error("--stockfish-time-per-move requires --time-per-move")
-    if args.clock is None and args.stockfish_clock is not None:
-        parser.error("--stockfish-clock requires --clock")
+    if args.time_per_move is None and args.opponent_time_per_move is not None:
+        parser.error("--opponent-time-per-move requires --time-per-move")
+    if args.clock is None and args.opponent_clock is not None:
+        parser.error("--opponent-clock requires --clock")
     if args.clock is None and (
-        args.increment is not None or args.stockfish_increment is not None
+        args.increment is not None or args.opponent_increment is not None
     ):
         parser.error("increments require --clock")
     if args.moves_to_go is not None and args.moves_to_go <= 0:
         parser.error("--moves-to-go must be positive")
 
-    if args.time_per_move is not None and args.stockfish_time_per_move is None:
-        args.stockfish_time_per_move = args.time_per_move
+    if args.no_handicap:
+        args.handicap_factor = 1.0
+        args.handicap_depth = 0
 
-    args.stockfish_time_overridden = stockfish_time_explicit
-    args.stockfish_clock_overridden = stockfish_clock_explicit
+    args.handicap_enabled = not args.no_handicap
     return args
 
 
@@ -524,13 +564,17 @@ def main(argv: List[str]) -> int:
         depth=args.depth,
         limit=args.limit,
         time_per_move=args.time_per_move,
-        stockfish_time_per_move=args.stockfish_time_per_move,
+        opponent_time_per_move=args.opponent_time_per_move,
         clock_seconds=args.clock,
-        stockfish_clock_seconds=args.stockfish_clock,
+        opponent_clock_seconds=args.opponent_clock,
         increment_seconds=args.increment,
-        stockfish_increment_seconds=args.stockfish_increment,
+        opponent_increment_seconds=args.opponent_increment,
         moves_to_go=args.moves_to_go,
-        stockfish_time_overridden=args.stockfish_time_overridden,
+        reference_engine=args.engine,
+        opponent_engine=args.opponent,
+        handicap_factor=args.handicap_factor,
+        handicap_depth=args.handicap_depth,
+        handicap_enabled=args.handicap_enabled,
     )
     return 0
 

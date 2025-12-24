@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run repeated Skaks vs Stockfish matches to stress move validation."""
+"""Run repeated Skaks matches to stress move validation."""
 
 import argparse
 import subprocess
@@ -57,37 +57,37 @@ def parse_args() -> argparse.Namespace:
     group.add_argument(
         "--depth",
         type=int,
-        help="Depth passed to each skaks search (default: 8)",
+        help="Depth passed to the reference engine (default: 8)",
     )
     group.add_argument(
         "--time-per-move",
         type=float,
-        help="Seconds per move for Skaks",
+        help="Seconds per move for the reference engine",
     )
     group.add_argument(
         "--clock",
         type=float,
-        help="Primary clock time in seconds for Skaks",
+        help="Primary clock time in seconds for the reference engine",
     )
     parser.add_argument(
-        "--stockfish-time-per-move",
+        "--opponent-time-per-move",
         type=float,
-        help="Seconds per move for Stockfish",
+        help="Seconds per move for the opponent engine",
     )
     parser.add_argument(
-        "--stockfish-clock",
+        "--opponent-clock",
         type=float,
-        help="Clock time in seconds for Stockfish",
+        help="Clock time in seconds for the opponent engine",
     )
     parser.add_argument(
         "--increment",
         type=float,
-        help="Increment in seconds added to Skaks after each move",
+        help="Increment in seconds added to the reference engine after each move",
     )
     parser.add_argument(
-        "--stockfish-increment",
+        "--opponent-increment",
         type=float,
-        help="Increment in seconds added to Stockfish after each move",
+        help="Increment in seconds added to the opponent engine after each move",
     )
     parser.add_argument(
         "--moves-to-go",
@@ -104,18 +104,41 @@ def parse_args() -> argparse.Namespace:
         "--engine",
         type=str,
         default=None,
-        help="Path to skaks binary; forwarded to fight script if provided",
+        help="Reference engine binary; forwarded to fight script",
+    )
+    parser.add_argument(
+        "--opponent",
+        type=str,
+        default=None,
+        help="Opponent engine binary; forwarded to fight script",
     )
     parser.add_argument(
         "--stockfish",
         action="store_true",
-        help="Forward --stockfish flag to fight script",
+        help="Shortcut for --opponent stockfish",
     )
     parser.add_argument(
         "--timeout",
         type=float,
         default=None,
         help="Optional timeout override forwarded to fight script",
+    )
+    parser.add_argument(
+        "--no-handicap",
+        action="store_true",
+        help="Disable opponent handicap when forwarding to fight script",
+    )
+    parser.add_argument(
+        "--handicap-factor",
+        type=float,
+        default=None,
+        help="Override handicap factor forwarded to fight script",
+    )
+    parser.add_argument(
+        "--handicap-depth",
+        type=int,
+        default=None,
+        help="Override handicap depth forwarded to fight script",
     )
     parser.add_argument(
         "--verbose",
@@ -127,19 +150,26 @@ def parse_args() -> argparse.Namespace:
     if args.depth is None and args.time_per_move is None and args.clock is None:
         args.depth = 8
 
-    if args.time_per_move is None and args.stockfish_time_per_move is not None:
-        parser.error("--stockfish-time-per-move requires --time-per-move")
-    if args.clock is None and args.stockfish_clock is not None:
-        parser.error("--stockfish-clock requires --clock")
+    if args.stockfish and args.opponent:
+        parser.error("--stockfish cannot be combined with --opponent")
+    if args.stockfish:
+        args.opponent = "stockfish"
+
+    if args.time_per_move is None and args.opponent_time_per_move is not None:
+        parser.error("--opponent-time-per-move requires --time-per-move")
+    if args.clock is None and args.opponent_clock is not None:
+        parser.error("--opponent-clock requires --clock")
     if args.clock is None and (
-        args.increment is not None or args.stockfish_increment is not None
+        args.increment is not None or args.opponent_increment is not None
     ):
         parser.error("increments require --clock")
     if args.moves_to_go is not None and args.moves_to_go <= 0:
         parser.error("--moves-to-go must be positive")
 
-    if args.time_per_move is not None and args.stockfish_time_per_move is None:
-        args.stockfish_time_per_move = args.time_per_move
+    if args.handicap_factor is not None and args.handicap_factor <= 0:
+        parser.error("--handicap-factor must be positive")
+    if args.handicap_depth is not None and args.handicap_depth < 0:
+        parser.error("--handicap-depth must be non-negative")
 
     return args
 
@@ -152,30 +182,31 @@ def main() -> int:
         base_args.extend(["--depth", str(args.depth)])
     elif args.time_per_move is not None:
         base_args.extend(["--time-per-move", str(args.time_per_move)])
-        if args.stockfish_time_per_move is not None:
+        if args.opponent_time_per_move is not None:
             base_args.extend(
-                ["--stockfish-time-per-move", str(args.stockfish_time_per_move)]
+                ["--opponent-time-per-move", str(args.opponent_time_per_move)]
             )
     elif args.clock is not None:
         base_args.extend(["--clock", str(args.clock)])
-        if args.stockfish_clock is not None:
-            base_args.extend(["--stockfish-clock", str(args.stockfish_clock)])
+        if args.opponent_clock is not None:
+            base_args.extend(["--opponent-clock", str(args.opponent_clock)])
         if args.increment is not None:
             base_args.extend(["--increment", str(args.increment)])
-        if args.stockfish_increment is not None:
-            base_args.extend(["--stockfish-increment", str(args.stockfish_increment)])
+        if args.opponent_increment is not None:
+            base_args.extend(["--opponent-increment", str(args.opponent_increment)])
         if args.moves_to_go is not None:
             base_args.extend(["--moves-to-go", str(args.moves_to_go)])
-    if args.time_per_move is None and args.stockfish_time_per_move is not None:
-        # defensive: should be prevented by validation
-        base_args.extend(
-            ["--stockfish-time-per-move", str(args.stockfish_time_per_move)]
-        )
 
     if args.engine:
         base_args.extend(["--engine", args.engine])
-    if args.stockfish:
-        base_args.append("--stockfish")
+    if args.opponent:
+        base_args.extend(["--opponent", args.opponent])
+    if args.no_handicap:
+        base_args.append("--no-handicap")
+    if args.handicap_factor is not None:
+        base_args.extend(["--handicap-factor", str(args.handicap_factor)])
+    if args.handicap_depth is not None:
+        base_args.extend(["--handicap-depth", str(args.handicap_depth)])
     if args.timeout is not None:
         base_args.extend(["--timeout", str(args.timeout)])
 

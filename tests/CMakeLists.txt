@@ -46,7 +46,7 @@ gtest_discover_tests(chess_engine_tests)
 if(Python3_Interpreter_FOUND)
   add_test(
     NAME fight_against_engine_cli
-    COMMAND ${Python3_EXECUTABLE} -m unittest move_validation.tests.test_fight_cli
+    COMMAND ${Python3_EXECUTABLE} -m unittest validation_moves.tests.test_fight_cli
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
 endif()
