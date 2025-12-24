@@ -337,3 +337,27 @@ Optimizations:
 [wacknew.epd] Solved 7/10 puzzles at depth 7 (70.0%)
 [puzzles.csv] Solved 0/10 puzzles at depth 7 (0.0%)
 Overall solved 10/60 puzzles at depth 7
+=== perf snapshot 2025-12-24T12:33:56 ===
+binary: skaks
+--- version ---
+skaks version 0.7
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 1/10 puzzles at depth 9 (10.0%)
+[brakto_kopec.epd] Solved 0/10 puzzles at depth 9 (0.0%)
+[eigennmann_rapid_engine.epd] Solved 0/10 puzzles at depth 9 (0.0%)
+[lct_2.epd] Solved 0/10 puzzles at depth 9 (0.0%)
+[wacknew.epd] Solved 0/10 puzzles at depth 9 (0.0%)
+[puzzles.csv] Solved 0/10 puzzles at depth 9 (0.0%)
+Overall solved 1/60 puzzles at depth 9

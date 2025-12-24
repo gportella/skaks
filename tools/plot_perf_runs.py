@@ -122,9 +122,7 @@ def plot_metric(
         {(row.version, row.timestamp) for row in rows},
         key=lambda pair: (version_index.get(pair[0], sys.maxsize), pair[1]),
     )
-    snapshot_index = {
-        entry: idx for idx, entry in enumerate(snapshot_entries)
-    }
+    snapshot_index = {entry: idx for idx, entry in enumerate(snapshot_entries)}
     version_totals = Counter(version for version, _ in snapshot_entries)
     cases = sorted(case_map)
     fig, axes = plt.subplots(len(cases), 1, sharex=True, figsize=(11, 3 * len(cases)))
