@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -92,6 +92,19 @@ def group_by_case(rows: Iterable[PerfRow]) -> dict[str, list[PerfRow]]:
     return by_case
 
 
+def _version_sort_key(version: str) -> tuple[object, ...]:
+    parts = re.split(r"([0-9]+)", version)
+    key: list[object] = []
+    for part in parts:
+        if not part:
+            continue
+        if part.isdigit():
+            key.append(int(part))
+        else:
+            key.append(part.lower())
+    return tuple(key)
+
+
 def plot_metric(
     rows: Iterable[PerfRow],
     metric: str,
@@ -103,6 +116,16 @@ def plot_metric(
     if not case_map:
         print("no perf data found", file=sys.stderr)
         return
+    ordered_versions = sorted({row.version for row in rows}, key=_version_sort_key)
+    version_index = {version: idx for idx, version in enumerate(ordered_versions)}
+    snapshot_entries = sorted(
+        {(row.version, row.timestamp) for row in rows},
+        key=lambda pair: (version_index.get(pair[0], sys.maxsize), pair[1]),
+    )
+    snapshot_index = {
+        entry: idx for idx, entry in enumerate(snapshot_entries)
+    }
+    version_totals = Counter(version for version, _ in snapshot_entries)
     cases = sorted(case_map)
     fig, axes = plt.subplots(len(cases), 1, sharex=True, figsize=(11, 3 * len(cases)))
     if len(cases) == 1:
@@ -113,8 +136,8 @@ def plot_metric(
         for row in case_rows:
             depth_groups[row.depth].append(row)
         for depth, items in sorted(depth_groups.items()):
-            items.sort(key=lambda r: (r.timestamp, r.version))
-            xs = [r.timestamp for r in items]
+            items.sort(key=lambda r: snapshot_index[(r.version, r.timestamp)])
+            xs = [snapshot_index[(r.version, r.timestamp)] for r in items]
             ys_raw = [getattr(r, metric) for r in items]
             ys = [max(value, 1) for value in ys_raw]
             ax.plot(xs, ys, marker="o", label=f"depth={depth}")
@@ -129,16 +152,22 @@ def plot_metric(
                 )
         ax.set_yscale("log", nonpositive="clip")
         ax.set_ylim(bottom=1)
-        tick_entries = sorted({(r.timestamp, r.version) for r in case_rows})
-        tick_positions = [ts for ts, _ in tick_entries]
-        tick_labels = [f"{ts:%y-%m-%d}" for ts, _ in tick_entries]
+        tick_positions = [snapshot_index[entry] for entry in snapshot_entries]
+        occurrence_counts: Counter[str] = Counter()
+        tick_labels: list[str] = []
+        for version, _ in snapshot_entries:
+            occurrence_counts[version] += 1
+            if version_totals[version] > 1:
+                tick_labels.append(f"{version} ({occurrence_counts[version]})")
+            else:
+                tick_labels.append(version)
         ax.set_xticks(tick_positions)
         ax.set_xticklabels(tick_labels, rotation=40, ha="right")
         ax.set_ylabel(ylabel)
         ax.set_title(case)
         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.4)
         ax.legend(loc="best", fontsize="small")
-    axes[-1].set_xlabel("snapshot time (version)")
+    axes[-1].set_xlabel("engine version order")
     fig.tight_layout()
     if show:
         return

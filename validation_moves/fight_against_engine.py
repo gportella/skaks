@@ -252,7 +252,7 @@ def run_game(
 
     try:
         with (
-            UciEngine(opponent_path, timeout=30.0) as opponent,
+            UciEngine(opponent_path, timeout=240.0) as opponent,
             UciEngine(reference_path, timeout=240.0) as reference,
         ):
             clock: Optional[MatchClock] = None
