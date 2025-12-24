@@ -21,6 +21,26 @@
 #include <optional>
 #include <vector>
 
+namespace {
+
+chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options) {
+  chess::SearchLimits limits{};
+  if (!options.enabled) {
+    return limits;
+  }
+  limits.use_time = true;
+  limits.per_move = options.per_move;
+  limits.move_time_ms = options.move_time_ms;
+  limits.white_time_ms = options.white_time_ms;
+  limits.black_time_ms = options.black_time_ms;
+  limits.white_increment_ms = options.white_increment_ms;
+  limits.black_increment_ms = options.black_increment_ms;
+  limits.moves_to_go = options.moves_to_go;
+  return limits;
+}
+
+} // namespace
+
 int main(int argc, char** argv) {
   const auto cli = chess::parse_cli(argc, argv);
   if (cli.parse_error) {
@@ -149,7 +169,12 @@ int main(int argc, char** argv) {
     chess::SearchResult search_result{};
     if (!best_move) {
       chess::SearchParameters params{};
-      params.depth = cli.options.search_depth;
+      if (cli.options.time_control.enabled) {
+        params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        params.limits = to_search_limits(cli.options.time_control);
+      } else {
+        params.depth = cli.options.search_depth;
+      }
       params.alpha = -chess::INF;
       params.beta = chess::INF;
       search_result = engine.search(board, params);
@@ -251,7 +276,12 @@ int main(int argc, char** argv) {
                 << ", " << board.side_to_move << " to move.\n";
     }
     chess::SearchParameters params{};
-    params.depth = cli.options.search_depth;
+    if (cli.options.time_control.enabled) {
+      params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+      params.limits = to_search_limits(cli.options.time_control);
+    } else {
+      params.depth = cli.options.search_depth;
+    }
     params.alpha = -10000;
     params.beta = 10000;
 

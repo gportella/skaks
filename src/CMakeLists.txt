@@ -4,6 +4,7 @@ add_library(chess_engine_core STATIC
   demo_debug.cpp
   engine.cpp
   exchange.cpp
+  cli.cpp
   moves.cpp
   pins.cpp
   perf.cpp
@@ -11,6 +12,7 @@ add_library(chess_engine_core STATIC
   quiescence.cpp
   scoring_rules.cpp
   search.cpp
+  time_manager.cpp
   zobrist.cpp
 )
 
@@ -26,7 +28,6 @@ chess_set_default_warnings(chess_engine_core)
 chess_enable_sanitizers(chess_engine_core)
 
 add_executable(skaks
-  cli.cpp
   main.cpp
   uci.cpp
 )

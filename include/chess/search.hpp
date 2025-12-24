@@ -13,6 +13,19 @@
 
 namespace chess {
 
+class TimeManager;
+
+struct SearchLimits {
+  bool use_time = false;
+  bool per_move = false;
+  std::uint64_t move_time_ms = 0;
+  std::uint64_t white_time_ms = 0;
+  std::uint64_t black_time_ms = 0;
+  std::uint64_t white_increment_ms = 0;
+  std::uint64_t black_increment_ms = 0;
+  std::uint32_t moves_to_go = 0;
+};
+
 struct SearchParameters {
   int depth = 0;
   int alpha = -INF;
@@ -20,6 +33,8 @@ struct SearchParameters {
   int pv_count = 1;
   const uint32_t* root_excluded_moves = nullptr;
   std::size_t root_excluded_count = 0;
+  SearchLimits limits;
+  TimeManager* time_manager = nullptr;
 };
 
 struct SearchResult {
@@ -30,12 +45,17 @@ struct SearchResult {
   Outcome outcome = Outcome::InProgress;
   std::uint64_t nodes = 0;
   std::uint64_t elapsed_ms = 0;
+  int searched_depth = 0;
+  int selective_depth = 0;
+  bool aborted = false;
 };
 
-SearchResult search_position(Board& board, SideToMove stm, const SearchParameters& params,
-                             const EvaluatorFn& evaluator, MoveHistory* history = nullptr,
-                             TranspositionTable* tt = nullptr, int repetition_start = 0);
+SearchResult
+search_position(Board& board, SideToMove stm, const SearchParameters& params,
+                const EvaluatorFn& evaluator, MoveHistory* history = nullptr,
+                TranspositionTable* tt = nullptr, int repetition_start = 0);
 
-SearchResult search_position(Board& board, SideToMove stm, const SearchParameters& params);
+SearchResult search_position(Board& board, SideToMove stm,
+                             const SearchParameters& params);
 
 } // namespace chess

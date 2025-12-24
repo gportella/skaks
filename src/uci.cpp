@@ -228,19 +228,95 @@ void handle_position(Board& board, Engine& engine, std::string_view args) {
   }
 }
 
-int extract_go_depth(std::string_view args, int fallback) {
+struct GoParameters {
+  int depth = 0;
+  chess::SearchLimits limits;
+};
+
+GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
+  GoParameters parsed{};
+  parsed.depth = fallback_depth;
+
   auto stream = std::istringstream{std::string(args)};
   std::string token;
-  int depth = fallback;
+
+  bool have_depth = false;
+  bool have_wtime = false;
+  bool have_btime = false;
+  bool have_increment = false;
+  bool have_movetime = false;
+
   while (stream >> token) {
     if (token == "depth") {
-      if (stream >> depth) {
+      int depth_override = fallback_depth;
+      if (stream >> depth_override) {
+        parsed.depth = depth_override;
+        have_depth = true;
+      }
+    } else if (token == "movetime") {
+      std::uint64_t movetime_ms = 0;
+      if (stream >> movetime_ms) {
+        parsed.limits.use_time = true;
+        parsed.limits.per_move = true;
+        parsed.limits.move_time_ms = movetime_ms;
+        have_movetime = true;
+      }
+    } else if (token == "wtime") {
+      std::uint64_t wtime = 0;
+      if (stream >> wtime) {
+        parsed.limits.white_time_ms = wtime;
+        have_wtime = true;
+      }
+    } else if (token == "btime") {
+      std::uint64_t btime = 0;
+      if (stream >> btime) {
+        parsed.limits.black_time_ms = btime;
+        have_btime = true;
+      }
+    } else if (token == "winc") {
+      std::uint64_t winc = 0;
+      if (stream >> winc) {
+        parsed.limits.white_increment_ms = winc;
+        have_increment = true;
+      }
+    } else if (token == "binc") {
+      std::uint64_t binc = 0;
+      if (stream >> binc) {
+        parsed.limits.black_increment_ms = binc;
+        have_increment = true;
+      }
+    } else if (token == "movestogo") {
+      std::uint32_t mtg = 0;
+      if (stream >> mtg) {
+        parsed.limits.moves_to_go = mtg;
+      }
+    } else if (token == "infinite") {
+      parsed.depth = fallback_depth;
+      have_depth = true;
+    } else if (token == "ponder") {
+      // Not currently supported; ignore.
+    } else if (token == "nodes") {
+      // Node limits are not implemented; ignore the token and its value.
+      std::uint64_t dummy = 0;
+      if (stream >> dummy) {
         continue;
       }
-      depth = fallback;
     }
   }
-  return depth;
+
+  if (have_movetime) {
+    parsed.limits.use_time = true;
+  } else if (have_wtime || have_btime || have_increment ||
+             parsed.limits.moves_to_go > 0) {
+    parsed.limits.use_time = true;
+    parsed.limits.per_move = false;
+  }
+
+  if (!have_depth && !parsed.limits.use_time) {
+    parsed.depth = fallback_depth;
+  }
+
+  return parsed;
 }
 
 } // namespace
@@ -309,8 +385,9 @@ void run_uci_loop(Engine& engine, int default_depth,
       } else {
         remainder.clear();
       }
-      const int depth =
-          extract_go_depth(remainder, default_depth > 0 ? default_depth : 4);
+      const int fallback_depth = default_depth > 0 ? default_depth : 4;
+      const GoParameters go_params =
+          parse_go_arguments(remainder, fallback_depth);
       std::optional<uint32_t> book_move;
       if (opening_book != nullptr) {
         book_move = polyglot::choose_move(
@@ -337,9 +414,14 @@ void run_uci_loop(Engine& engine, int default_depth,
         continue;
       }
       SearchParameters params{};
-      params.depth = depth;
+      if (go_params.limits.use_time) {
+        params.depth = static_cast<int>(MAX_PLY) - 1;
+      } else {
+        params.depth = std::max(go_params.depth, 1);
+      }
       params.alpha = -INF;
       params.beta = INF;
+      params.limits = go_params.limits;
       const auto result = engine.search(board, params);
       const auto elapsed_ms = std::max<std::uint64_t>(
           1, result.elapsed_ms); // avoid division by zero in nps calculation
@@ -369,10 +451,19 @@ void run_uci_loop(Engine& engine, int default_depth,
         return false;
       }();
 
+      const int reported_depth = std::max(result.searched_depth, 0);
+      const int reported_seldepth =
+          std::max(result.selective_depth, reported_depth);
+      const int printed_depth =
+          has_move ? std::max(reported_depth, 1) : reported_depth;
+      const int printed_sel_depth =
+          has_move ? std::max(reported_seldepth, printed_depth)
+                   : reported_seldepth;
+
       if (has_move && !best_found) {
         std::ostringstream detail;
         detail << "search produced illegal bestmove='"
-               << move_to_uci(result.best_move) << "' depth=" << depth
+               << move_to_uci(result.best_move) << "' depth=" << printed_depth
                << " legal_count=" << legal_count;
         fatal_uci_violation(board, detail.str());
       }
@@ -390,7 +481,8 @@ void run_uci_loop(Engine& engine, int default_depth,
           (nodes * 1000ULL) / std::max<std::uint64_t>(1, elapsed_ms);
 
       std::ostringstream info_line;
-      info_line << "info depth " << depth << " seldepth " << depth << " score ";
+      info_line << "info depth " << printed_depth << " seldepth "
+                << printed_sel_depth << " score ";
       if (is_mate_score(result.score)) {
         const int mate_moves = mate_moves_from_score(result.score);
         info_line << "mate ";

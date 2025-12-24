@@ -53,11 +53,46 @@ def parse_args() -> argparse.Namespace:
         default=100,
         help="Number of games to play (default: 100)",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--depth",
         type=int,
-        default=8,
-        help="Depth passed to each skaks search (default: 4)",
+        help="Depth passed to each skaks search (default: 8)",
+    )
+    group.add_argument(
+        "--time-per-move",
+        type=float,
+        help="Seconds per move for Skaks",
+    )
+    group.add_argument(
+        "--clock",
+        type=float,
+        help="Primary clock time in seconds for Skaks",
+    )
+    parser.add_argument(
+        "--stockfish-time-per-move",
+        type=float,
+        help="Seconds per move for Stockfish",
+    )
+    parser.add_argument(
+        "--stockfish-clock",
+        type=float,
+        help="Clock time in seconds for Stockfish",
+    )
+    parser.add_argument(
+        "--increment",
+        type=float,
+        help="Increment in seconds added to Skaks after each move",
+    )
+    parser.add_argument(
+        "--stockfish-increment",
+        type=float,
+        help="Increment in seconds added to Stockfish after each move",
+    )
+    parser.add_argument(
+        "--moves-to-go",
+        type=int,
+        help="Approximate moves remaining to next time control",
     )
     parser.add_argument(
         "--limit",
@@ -87,13 +122,55 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print full stdout/stderr for every game (default: only failures)",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.depth is None and args.time_per_move is None and args.clock is None:
+        args.depth = 8
+
+    if args.time_per_move is None and args.stockfish_time_per_move is not None:
+        parser.error("--stockfish-time-per-move requires --time-per-move")
+    if args.clock is None and args.stockfish_clock is not None:
+        parser.error("--stockfish-clock requires --clock")
+    if args.clock is None and (
+        args.increment is not None or args.stockfish_increment is not None
+    ):
+        parser.error("increments require --clock")
+    if args.moves_to_go is not None and args.moves_to_go <= 0:
+        parser.error("--moves-to-go must be positive")
+
+    if args.time_per_move is not None and args.stockfish_time_per_move is None:
+        args.stockfish_time_per_move = args.time_per_move
+
+    return args
 
 
 def main() -> int:
     args = parse_args()
     fight_script = Path(__file__).resolve().with_name("fight_against_engine.py")
-    base_args: List[str] = ["--depth", str(args.depth), "--limit", str(args.limit)]
+    base_args: List[str] = ["--limit", str(args.limit)]
+    if args.depth is not None:
+        base_args.extend(["--depth", str(args.depth)])
+    elif args.time_per_move is not None:
+        base_args.extend(["--time-per-move", str(args.time_per_move)])
+        if args.stockfish_time_per_move is not None:
+            base_args.extend(
+                ["--stockfish-time-per-move", str(args.stockfish_time_per_move)]
+            )
+    elif args.clock is not None:
+        base_args.extend(["--clock", str(args.clock)])
+        if args.stockfish_clock is not None:
+            base_args.extend(["--stockfish-clock", str(args.stockfish_clock)])
+        if args.increment is not None:
+            base_args.extend(["--increment", str(args.increment)])
+        if args.stockfish_increment is not None:
+            base_args.extend(["--stockfish-increment", str(args.stockfish_increment)])
+        if args.moves_to_go is not None:
+            base_args.extend(["--moves-to-go", str(args.moves_to_go)])
+    if args.time_per_move is None and args.stockfish_time_per_move is not None:
+        # defensive: should be prevented by validation
+        base_args.extend(
+            ["--stockfish-time-per-move", str(args.stockfish_time_per_move)]
+        )
 
     if args.engine:
         base_args.extend(["--engine", args.engine])

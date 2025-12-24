@@ -4,6 +4,7 @@
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
+#include "chess/time_manager.hpp"
 
 #include <algorithm>
 #include <array>
@@ -21,7 +22,37 @@ struct SearchScratch {
   KillerTable* killers = nullptr;
   TranspositionTable* tt = nullptr;
   std::array<std::array<int, 64>, 64> history_heuristic = {};
+  TimeManager* time_manager = nullptr;
+  bool* abort_requested = nullptr;
 };
+
+constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
+
+inline bool should_abort_due_to_time(SearchScratch& scratch,
+                                     std::uint64_t nodes) {
+  if (scratch.abort_requested && *scratch.abort_requested) {
+    return true;
+  }
+  if (!scratch.time_manager || !scratch.time_manager->enabled()) {
+    return false;
+  }
+  if ((nodes & kTimeCheckMask) != 0) {
+    return false;
+  }
+  if (!scratch.time_manager->hard_limit_reached()) {
+    return false;
+  }
+  if (scratch.abort_requested) {
+    *scratch.abort_requested = true;
+  }
+  return true;
+}
+
+inline SearchResult make_aborted_result() {
+  SearchResult aborted{};
+  aborted.aborted = true;
+  return aborted;
+}
 
 inline void store_heuristic(SearchScratch& scratch, const Move& move,
                             int depth) {
@@ -77,6 +108,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
                                const uint32_t* excluded_root_moves,
                                std::size_t excluded_root_count) {
   ++nodes;
+
+  if (should_abort_due_to_time(scratch, nodes)) {
+    return make_aborted_result();
+  }
 
   MoveHistory* history = scratch.history;
   TranspositionTable* tt = scratch.tt;
@@ -169,10 +204,13 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   if (allow_null_move(board, depth)) {
     UndoNull undo_null = make_null_move(board);
     const int null_move_reduction = NULL_MOVE_REDUCTION;
-    const SearchResult null_result = alphabeta_minimax(
+    SearchResult null_result = alphabeta_minimax(
         board, depth - 1 - null_move_reduction, beta - 1, beta, flip_side(stm),
         evaluator, scratch, ply + 1, repetition_start, ply_from_root + 1, false,
         nodes, nullptr, 0);
+    if (null_result.aborted) {
+      return null_result;
+    }
     const int score_after_null = normalize_mate_score(null_result.score, ply);
     undo_null_move(board, undo_null);
     if (score_after_null >= beta) {
@@ -300,6 +338,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     if (reduction > 0) {
       const int reduced_depth = std::max(0, search_depth - reduction);
       child = run_search(reduced_depth, alpha, beta, false);
+      if (child.aborted) {
+        undo_move(board, undo);
+        return child;
+      }
       if (stm == SideToMove::White) {
         need_full_search = child.score > alpha;
       } else {
@@ -323,11 +365,23 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       }
       if (use_pvs) {
         child = run_search(search_depth, narrow_alpha, narrow_beta, true);
+        if (child.aborted) {
+          undo_move(board, undo);
+          return child;
+        }
         if (child.score >= narrow_beta) {
           child = run_search(search_depth, alpha, beta, is_pv);
+          if (child.aborted) {
+            undo_move(board, undo);
+            return child;
+          }
         }
       } else {
         child = run_search(search_depth, alpha, beta, is_pv && is_first_move);
+        if (child.aborted) {
+          undo_move(board, undo);
+          return child;
+        }
       }
     }
 
@@ -368,6 +422,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         break;
       }
     }
+  }
+
+  if (best.aborted) {
+    return best;
   }
 
   if (tt) {
@@ -412,7 +470,13 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
 
   KillerTable killers{};
-  SearchScratch scratch{history, &killers, tt, {}};
+  bool abort_requested = false;
+  SearchScratch scratch{};
+  scratch.history = history;
+  scratch.killers = &killers;
+  scratch.tt = tt;
+  scratch.time_manager = params.time_manager;
+  scratch.abort_requested = &abort_requested;
 
   int max_root_moves = 0;
   uint16_t move_count = 0;
@@ -515,6 +579,12 @@ SearchResult search_position(Board& board, SideToMove stm,
             board, current_depth, alpha, beta, stm, evaluator, scratch,
             start_ply, repetition_start, 0, is_pv, nodes,
             excluded_count ? excluded_moves.data() : nullptr, excluded_count);
+        result.searched_depth = current_depth;
+        result.selective_depth = current_depth;
+        if (result.aborted) {
+          abort_requested = true;
+          break;
+        }
         if (result.score <= alpha) {
           if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
             alpha = -INF;
@@ -611,6 +681,14 @@ SearchResult search_position(Board& board, SideToMove stm,
       aspiration_window = window;
       break;
     }
+
+    if (abort_requested) {
+      break;
+    }
+
+    if (scratch.time_manager && scratch.time_manager->soft_limit_reached()) {
+      break;
+    }
   }
   if (history) {
     history->ply_count = base_ply;
@@ -619,8 +697,16 @@ SearchResult search_position(Board& board, SideToMove stm,
   SearchResult final_result =
       best_result.best_move.moving_pc != OccupancyType::empty ? best_result
                                                               : result;
+  if (final_result.best_move.moving_pc == OccupancyType::empty) {
+    uint16_t fallback_count = 0;
+    auto fallback_moves = generate_legal_moves(board, stm, fallback_count);
+    if (fallback_count > 0) {
+      final_result.best_move = decode_move(fallback_moves[0]);
+    }
+  }
   final_result.score = normalize_mate_score(final_result.score, start_ply);
   final_result.nodes = nodes;
+  final_result.aborted = abort_requested;
   return final_result;
 }
 

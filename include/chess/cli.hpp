@@ -2,9 +2,21 @@
 
 #include "chess/defaults.hpp"
 
+#include <cstdint>
 #include <string>
 
 namespace chess {
+
+struct TimeControlOptions {
+  bool enabled = false;
+  bool per_move = false;
+  std::uint64_t move_time_ms = 0;
+  std::uint64_t white_time_ms = 0;
+  std::uint64_t black_time_ms = 0;
+  std::uint64_t white_increment_ms = 0;
+  std::uint64_t black_increment_ms = 0;
+  std::uint32_t moves_to_go = 0;
+};
 
 struct CliOptions {
   int search_depth = 4;
@@ -25,6 +37,7 @@ struct CliOptions {
   bool show_extended_version = false;
   std::string executable_path;
   bool best_move = false;
+  TimeControlOptions time_control;
 };
 
 struct CliParseResult {

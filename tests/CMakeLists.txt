@@ -1,5 +1,7 @@
 include(FetchContent)
 
+find_package(Python3 COMPONENTS Interpreter)
+
 set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
@@ -20,6 +22,8 @@ add_executable(chess_engine_tests
   exchange_tests.cpp
   pin_tests.cpp
   polyglot_tests.cpp
+  cli_tests.cpp
+  time_manager_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests
@@ -38,3 +42,11 @@ chess_enable_sanitizers(chess_engine_tests)
 
 include(GoogleTest)
 gtest_discover_tests(chess_engine_tests)
+
+if(Python3_Interpreter_FOUND)
+  add_test(
+    NAME fight_against_engine_cli
+    COMMAND ${Python3_EXECUTABLE} -m unittest move_validation.tests.test_fight_cli
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+endif()

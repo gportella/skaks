@@ -1,6 +1,7 @@
 #include "chess/engine.hpp"
 
 #include "chess/scoring_rules.hpp"
+#include "chess/time_manager.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -50,11 +51,22 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
   const int base_ply = history.ply_count;
   const int repetition_start = history.repetition_start;
 
+  TimeManager time_manager;
+  SearchParameters work_params = params;
+  if (work_params.limits.use_time) {
+    time_manager.configure(board.side_to_move, work_params.limits);
+    time_manager.start();
+    if (time_manager.enabled()) {
+      work_params.time_manager = &time_manager;
+    }
+  }
+
   const auto start = std::chrono::steady_clock::now();
-  auto result = search_position(board, board.side_to_move, params, evaluator, &history, &tt,
-                                repetition_start);
+  auto result = search_position(board, board.side_to_move, work_params,
+                                evaluator, &history, &tt, repetition_start);
   const auto end = std::chrono::steady_clock::now();
-  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  const auto elapsed =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   result.elapsed_ms = static_cast<std::uint64_t>(elapsed);
   history.ply_count = base_ply;
   return result;

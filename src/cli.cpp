@@ -3,6 +3,7 @@
 #include "chess/defaults.hpp"
 #include "cxxopts.hpp"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,8 @@ CliParseResult parse_cli(int argc, char** argv) {
       ("f,fen", "Start position in FEN notation", cxxopts::value<std::string>())
       ("P,profile", "Enable profiling output")
       ("u,uci", "Force UCI protocol mode")
-      ("polyglot", "Enable Polyglot book usage")
+      ("polyglot", "Enable Polyglot book usage (default: enabled)")
+      ("no-polyglot", "Disable Polyglot book usage")
       ("polyglot-book", "Path to Polyglot opening book",
        cxxopts::value<std::string>())
       ("o,onlyfen", "Print FEN only in self-play mode")
@@ -33,7 +35,19 @@ CliParseResult parse_cli(int argc, char** argv) {
       ("v,version", "Show version information (repeat for extended details)")
       ("p,perf", "Run built-in performance benchmark")
       ("perf-iters", "Number of benchmark iterations",
-       cxxopts::value<int>()->default_value("3"))
+         cxxopts::value<int>()->default_value("3"))
+        ("move-time", "Time allowed per move in milliseconds",
+         cxxopts::value<std::uint64_t>())
+        ("wtime", "White remaining time in milliseconds",
+         cxxopts::value<std::uint64_t>())
+        ("btime", "Black remaining time in milliseconds",
+         cxxopts::value<std::uint64_t>())
+        ("winc", "White increment in milliseconds",
+         cxxopts::value<std::uint64_t>())
+        ("binc", "Black increment in milliseconds",
+         cxxopts::value<std::uint64_t>())
+        ("movestogo", "Estimated moves to the next time control",
+         cxxopts::value<std::uint32_t>())
       ("h,help", "Show this help message");
   // clang-format on
 
@@ -79,11 +93,32 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.enable_profile = parsed.count("profile") > 0;
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.best_move = parsed.count("bestmove") > 0;
-    result.options.polyglot = parsed.count("polyglot") > 0;
+
+    const bool request_polyglot = parsed.count("polyglot") > 0;
+    const bool request_no_polyglot = parsed.count("no-polyglot") > 0;
+
+    if (request_polyglot && request_no_polyglot) {
+      result.parse_error = true;
+      result.message = "--polyglot cannot be combined with --no-polyglot";
+      return result;
+    }
+
+    result.options.polyglot = !request_no_polyglot;
+
     if (parsed.count("polyglot-book") > 0) {
+      if (request_no_polyglot) {
+        result.parse_error = true;
+        result.message =
+            "--polyglot-book cannot be used when Polyglot is disabled";
+        return result;
+      }
       result.options.polyglot_book_path =
           parsed["polyglot-book"].as<std::string>();
       result.options.polyglot_book_override = true;
+      result.options.polyglot = true;
+    }
+
+    if (request_polyglot) {
       result.options.polyglot = true;
     }
     result.options.perf_mode = parsed.count("perf") > 0;
@@ -92,6 +127,68 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.version_requests = static_cast<int>(version_requests);
     result.options.show_version = version_requests > 0;
     result.options.show_extended_version = version_requests > 1;
+
+    const bool has_move_time = parsed.count("move-time") > 0;
+    const bool has_clock_fields =
+        (parsed.count("wtime") > 0) || (parsed.count("btime") > 0) ||
+        (parsed.count("winc") > 0) || (parsed.count("binc") > 0) ||
+        (parsed.count("movestogo") > 0);
+
+    if (has_move_time && has_clock_fields) {
+      result.parse_error = true;
+      result.message = "--move-time cannot be combined with clock options";
+      return result;
+    }
+
+    if (has_move_time) {
+      const auto move_time_val = parsed["move-time"].as<std::uint64_t>();
+      if (move_time_val == 0) {
+        result.parse_error = true;
+        result.message = "--move-time must be positive";
+        return result;
+      }
+      if (parsed.count("depth") > 0) {
+        result.parse_error = true;
+        result.message = "--depth cannot be combined with --move-time";
+        return result;
+      }
+      result.options.time_control.enabled = true;
+      result.options.time_control.per_move = true;
+      result.options.time_control.move_time_ms = move_time_val;
+    } else if (has_clock_fields) {
+      if (parsed.count("depth") > 0) {
+        result.parse_error = true;
+        result.message =
+            "--depth cannot be combined with explicit clock options";
+        return result;
+      }
+      const auto wtime =
+          parsed.count("wtime") ? parsed["wtime"].as<std::uint64_t>() : 0;
+      const auto btime =
+          parsed.count("btime") ? parsed["btime"].as<std::uint64_t>() : 0;
+      const auto winc =
+          parsed.count("winc") ? parsed["winc"].as<std::uint64_t>() : 0;
+      const auto binc =
+          parsed.count("binc") ? parsed["binc"].as<std::uint64_t>() : 0;
+      const auto moves_to_go = parsed.count("movestogo")
+                                   ? parsed["movestogo"].as<std::uint32_t>()
+                                   : 0U;
+
+      if (wtime == 0 && btime == 0) {
+        result.parse_error = true;
+        result.message =
+            "Clock options require --wtime or --btime to be greater than 0";
+        return result;
+      }
+
+      result.options.time_control.enabled = true;
+      result.options.time_control.per_move = false;
+      result.options.time_control.white_time_ms = wtime;
+      result.options.time_control.black_time_ms = btime;
+      result.options.time_control.white_increment_ms = winc;
+      result.options.time_control.black_increment_ms = binc;
+      result.options.time_control.moves_to_go = moves_to_go;
+    }
 
     const bool want_uci = parsed.count("uci") > 0;
     const bool want_self = parsed.count("self") > 0;
@@ -146,7 +243,7 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.use_uci = false;
     }
 
-    if (result.options.use_uci) {
+    if (result.options.use_uci && !request_no_polyglot) {
       result.options.polyglot = true;
     }
 
@@ -165,6 +262,12 @@ CliParseResult parse_cli(int argc, char** argv) {
     if (result.options.perf_iterations <= 0) {
       result.parse_error = true;
       result.message = "perf-iters must be positive";
+      return result;
+    }
+
+    if (result.options.time_control.enabled && result.options.perf_mode) {
+      result.parse_error = true;
+      result.message = "Time controls cannot be combined with --perf";
       return result;
     }
   } catch (const cxxopts::exceptions::exception& ex) {
