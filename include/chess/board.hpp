@@ -9,6 +9,7 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 namespace chess {
@@ -116,5 +117,6 @@ void terminal_mask_print(Bitboard mask, const Board& board);
 bool ep_capture_available(const Board& b);
 Bitboard calculate_occupancy(const Board& board, PieceColor color);
 std::string board_to_fen(const Board& board);
+bool validate_board(const Board& board, std::string* reason = nullptr);
 
 } // namespace chess

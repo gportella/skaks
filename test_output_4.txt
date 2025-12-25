@@ -1,0 +1,35 @@
+Warning: reached move limit (20); terminating early.
+Turn 1: skaks plays g1f3
+Turn 2: stockfish plays g8f6
+Turn 3: skaks plays c2c4
+Turn 4: stockfish plays c7c5
+Turn 5: skaks plays b1c3
+Turn 6: stockfish plays b8c6
+Turn 7: skaks plays d2d4
+Turn 8: stockfish plays c5d4
+Turn 9: skaks plays f3d4
+Turn 10: stockfish plays c6d4
+Turn 11: skaks plays d1d4
+Turn 12: stockfish plays g7g6
+Turn 13: skaks plays e2e4
+Turn 14: stockfish plays d7d6
+Turn 15: skaks plays c1g5
+Turn 16: stockfish plays f8g7
+Turn 17: skaks plays f1e2
+Turn 18: stockfish plays h7h6
+Turn 19: skaks plays g5e3
+Turn 20: stockfish plays e8g8
+Final position FEN: r1bq1rk1/pp2ppb1/3p1npp/8/2PQP3/2N1B3/PP2BPPP/R3K2R w KQ - 2 11
+Result: *
+Winner: unknown
+PGN:
+[Event "Skaks Validation"]
+[Site "Local"]
+[Date "2025.12.25"]
+[Round "1"]
+[White "skaks"]
+[Black "stockfish"]
+[Result "*"]
+
+1. Nf3 Nf6 2. c4 c5 3. Nc3 Nc6 4. d4 cxd4 5. Nxd4 Nxd4 6. Qxd4 g6 7. e4 d6 8.
+Bg5 Bg7 9. Be2 h6 10. Be3 O-O *

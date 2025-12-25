@@ -1,0 +1,24 @@
+Turn 1: skaks plays d2d4
+Turn 2: stockfish plays d7d5
+Turn 3: skaks plays c2c4
+Turn 4: stockfish plays c7c6
+Turn 5: skaks plays g1f3
+Turn 6: stockfish plays e7e6
+Turn 7: skaks plays b1d2
+Turn 8: stockfish plays a7a5
+Traceback (most recent call last):
+  File "/Users/ktxc111/work/repos/skaks/./validation_moves/fight_against_engine.py", line 583, in <module>
+    sys.exit(main(sys.argv[1:]))
+             ^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/./validation_moves/fight_against_engine.py", line 563, in main
+    run_game(
+  File "/Users/ktxc111/work/repos/skaks/./validation_moves/fight_against_engine.py", line 341, in run_game
+    best_move = engine.bestmove(
+                ^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/./validation_moves/fight_against_engine.py", line 164, in bestmove
+    line = self._read_line()
+           ^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/./validation_moves/fight_against_engine.py", line 105, in _read_line
+    ready, _, _ = select.select([fd], [], [], self._timeout)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

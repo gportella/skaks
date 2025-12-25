@@ -740,7 +740,7 @@ void emit_king_moves(const Board& b, SideToMove stm,
 
     CastlingRights castle_rights = king_castle_rights(b, stm);
     // Kingside castling --> remember to also move the rook in make_move()
-    if (castle_rights == (white ? WK : BK)) {
+    if (has_rights(castle_rights, castle_cfg.king_flag)) {
       int to = static_cast<int>(castle_cfg.king_kingside_target);
       assert(move_count < kMaxMovementCount);
       out[move_count++] =
@@ -751,7 +751,7 @@ void emit_king_moves(const Board& b, SideToMove stm,
                       /*flags=*/kFlagCastle); // kingside castle flag
     }
     // Queenside castling --> remember to also move the rook in make_move()
-    if (castle_rights == (white ? WQ : BQ)) {
+    if (has_rights(castle_rights, castle_cfg.queen_flag)) {
       int to = static_cast<int>(castle_cfg.king_queenside_target);
       assert(move_count < kMaxMovementCount);
       out[move_count++] =

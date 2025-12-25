@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <iostream>
 
 namespace chess {
 
@@ -130,6 +131,16 @@ generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count) {
     undo_move(board, u);
   }
   move_count = legal_move_count;
+#ifndef NDEBUG
+  {
+    std::string reason;
+    if (!validate_board(board, &reason)) {
+      std::cerr << "validate_board failed after generate_legal_moves: " << reason
+                << " fen=" << board_to_fen(board) << "\n";
+      std::abort();
+    }
+  }
+#endif
   return legal_moves;
 }
 
@@ -600,13 +611,23 @@ inline Undo make_move(Board& b, const Move& m) {
     b.en_passant = mid;
     b.ep_square = bb_of(mid);
   }
-  const int castle_mask_after = update_castling_rights(b, m);
+  update_castling_rights(b, m);
 
   // Switch side to move
   b.side_to_move = flip_side(b.side_to_move);
-  const bool ep_hash_after = (b.en_passant >= 0 && ep_capture_available(b));
-  update_key_for_move(b, undo, castle_mask_after, undo.ep_hash_before,
-                      ep_hash_after);
+  // Recompute Zobrist from scratch for correctness (slightly slower but safer)
+  b.position_key = compute_position_key(b);
+
+#ifndef NDEBUG
+  {
+    std::string reason;
+    if (!validate_board(b, &reason)) {
+      std::cerr << "validate_board failed after make_move: " << reason
+                << " fen=" << board_to_fen(b) << "\n";
+      std::abort();
+    }
+  }
+#endif
 
   return undo;
 }
@@ -895,5 +916,16 @@ inline void undo_move(Board& b, const Undo& u) {
     clear_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.to);
     set_bit(b.pieces_bb[static_cast<std::size_t>(u.moving_pc) - 1], u.from);
   }
+
+#ifndef NDEBUG
+  {
+    std::string reason;
+    if (!validate_board(b, &reason)) {
+      std::cerr << "validate_board failed after undo_move: " << reason
+                << " fen=" << board_to_fen(b) << "\n";
+      std::abort();
+    }
+  }
+#endif
 }
 } // namespace chess

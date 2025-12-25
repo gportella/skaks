@@ -36,5 +36,7 @@ struct DiagonalDir {
 };
 
 chess::PinnedMapByPiece build_pinned_map(const Board& board, SideToMove stm);
+void build_pinned_map_into(const Board& board, SideToMove stm,
+                           PinnedMapByPiece& out);
 
 } // namespace chess

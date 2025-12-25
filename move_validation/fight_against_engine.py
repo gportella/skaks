@@ -235,7 +235,6 @@ def run_game(
     black_name = Path(opponent_path).name
 
     board = chess.Board(chess.STARTING_FEN)
-    root_fen = board.fen()
     game = chess.pgn.Game()
     game.headers["Event"] = "Skaks Validation"
     game.headers["Site"] = "Local"
@@ -248,12 +247,12 @@ def run_game(
     node = game
     moves: List[str] = []
     final_fen_printed = False
+    reached_limit = False
     result_code = 0
 
-    move_limit_hit = False
     try:
         with (
-            UciEngine(opponent_path, timeout=240.0) as opponent,
+            UciEngine(opponent_path, timeout=30.0) as opponent,
             UciEngine(reference_path, timeout=240.0) as reference,
         ):
             clock: Optional[MatchClock] = None
@@ -309,12 +308,11 @@ def run_game(
                 engine = reference if mover_color == chess.WHITE else opponent
                 engine_name = white_name if mover_color == chess.WHITE else black_name
                 try:
+                    position_fen = board.fen()
                     if clock is not None:
                         go_clock = clock.snapshot(mover_color)
                         search_start = time.perf_counter()
-                        best_move = engine.bestmove(
-                            root_fen, moves=moves, clock=go_clock
-                        )
+                        best_move = engine.bestmove(position_fen, clock=go_clock)
                         search_end = time.perf_counter()
                     elif reference_movetime_ms is not None:
                         movetime_ms = (
@@ -329,7 +327,7 @@ def run_game(
                         search_start = None
                         search_end = None
                         best_move = engine.bestmove(
-                            root_fen, moves=moves, movetime_ms=movetime_ms
+                            position_fen, movetime_ms=movetime_ms
                         )
                     else:
                         assert depth is not None
@@ -339,9 +337,7 @@ def run_game(
                             chosen_depth = max(depth - depth_penalty, 1)
                         search_start = None
                         search_end = None
-                        best_move = engine.bestmove(
-                            root_fen, moves=moves, depth=chosen_depth
-                        )
+                        best_move = engine.bestmove(position_fen, depth=chosen_depth)
                 except Exception as e:
                     print(f"Engine error for {engine_name}: {e}", file=sys.stderr)
                     print("Final position FEN:", board.fen())
@@ -379,11 +375,7 @@ def run_game(
                     elapsed_ms = int(round((search_end - search_start) * 1000.0))
                     clock.apply_elapsed(mover_color, elapsed_ms)
             else:
-                print(
-                    f"Warning: reached move limit ({limit}); terminating early.",
-                    file=sys.stderr,
-                )
-            move_limit_hit = True
+                reached_limit = True
     except FileNotFoundError as exc:
         print(f"Engine binary not found: {exc}", file=sys.stderr)
         print("Final position FEN:", board.fen())
@@ -402,12 +394,14 @@ def run_game(
 
     if not final_fen_printed:
         print("Final position FEN:", board.fen())
+    if reached_limit:
+        print("|Warning: reached move limit; treating as draw.")
 
     result_str = board.result(claim_draw=True)
+    if reached_limit and result_str == "*":
+        result_str = "1/2-1/2"
     if not result_str:
         result_str = "*"
-    if move_limit_hit and result_str == "*":
-        result_str = "1/2-1/2"
     game.headers["Result"] = result_str
 
     winner = "unknown"
@@ -497,10 +491,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Approximate moves remaining to next time control",
     )
     parser.add_argument(
-        "--limit",
-        type=int,
-        default=500,
-        help="Limit number of plies in a match (default: 500)",
+        "--limit", type=int, default=200, help="Half-move limit (default: 200)"
     )
     parser.add_argument(
         "--timeout",
@@ -567,7 +558,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 def main(argv: List[str]) -> int:
     args = parse_args(argv)
-    return run_game(
+    run_game(
         depth=args.depth,
         limit=args.limit,
         time_per_move=args.time_per_move,
@@ -583,6 +574,7 @@ def main(argv: List[str]) -> int:
         handicap_depth=args.handicap_depth,
         handicap_enabled=args.handicap_enabled,
     )
+    return 0
 
 
 if __name__ == "__main__":

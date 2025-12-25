@@ -8,9 +8,12 @@
 #include "chess/transposition_table.hpp"
 #include "chess/types.hpp"
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace chess {
 
@@ -50,6 +53,14 @@ struct SearchResult {
   int searched_depth = 0;
   int selective_depth = 0;
   bool aborted = false;
+  std::vector<Move> principal_variation;
+  int pv_length = 0;
+
+  SearchResult() = default;
+  SearchResult(const SearchResult& other) = default;
+  SearchResult(SearchResult&& other) noexcept = default;
+  SearchResult& operator=(const SearchResult& other) = default;
+  SearchResult& operator=(SearchResult&& other) noexcept = default;
 };
 
 SearchResult
@@ -61,4 +72,3 @@ SearchResult search_position(Board& board, SideToMove stm,
                              const SearchParameters& params);
 
 } // namespace chess
-

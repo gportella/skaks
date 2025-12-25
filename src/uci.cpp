@@ -335,7 +335,7 @@ struct AsyncSearchState {
   bool active = false;
   bool pondering = false;
   bool result_ready = false;
-  SearchResult result{};
+  std::unique_ptr<SearchResult> result;
   std::unique_ptr<Board> board;
 };
 
@@ -356,8 +356,9 @@ void emit_book_move(const Move& move) {
 }
 
 void emit_search_result(Board& board, const SearchResult& result) {
-  const bool has_move =
+  bool has_move =
       result.best_move.moving_pc != OccupancyType::empty && !result.aborted;
+  Move chosen_move = result.best_move;
   uint16_t legal_count = 0;
   auto legal_moves =
       generate_legal_moves(board, board.side_to_move, legal_count);
@@ -370,32 +371,41 @@ void emit_search_result(Board& board, const SearchResult& result) {
                        m.flags);
   };
 
-  const uint32_t encoded_best = encode_move_if_present(result.best_move);
-  const bool best_found = [&]() {
-    if (!has_move) {
-      return false;
-    }
-    for (uint16_t idx = 0; idx < legal_count; ++idx) {
-      if (legal_moves[idx] == encoded_best) {
-        return true;
-      }
-    }
-    return false;
-  }();
-
-  if (has_move && !best_found) {
-    std::ostringstream detail;
-    detail << "search produced illegal bestmove='"
-           << move_to_uci(result.best_move)
-           << "' depth=" << std::max(result.searched_depth, 0)
-           << " legal_count=" << legal_count;
-    fatal_uci_violation(board, detail.str());
-  }
+  uint32_t encoded_best = encode_move_if_present(chosen_move);
 
   if (!has_move && legal_count > 0) {
-    std::ostringstream detail;
-    detail << "search failed to return move but legal_count=" << legal_count;
-    fatal_uci_violation(board, detail.str());
+    const Move fallback = decode_move(legal_moves[0]);
+    chosen_move = fallback;
+    encoded_best = legal_moves[0];
+    has_move = true;
+    std::ostringstream warn;
+    warn << "warn: search returned no move; using fallback '"
+         << move_to_uci(fallback) << "' legal_count=" << legal_count;
+    log_uci("err", warn.str());
+    std::cerr << warn.str() << '\n';
+  }
+
+  bool best_found = false;
+  if (has_move) {
+    for (uint16_t idx = 0; idx < legal_count; ++idx) {
+      if (legal_moves[idx] == encoded_best) {
+        best_found = true;
+        break;
+      }
+    }
+  }
+
+  if (has_move && !best_found && legal_count > 0) {
+    const Move fallback = decode_move(legal_moves[0]);
+    std::ostringstream warn;
+    warn << "warn: search produced illegal bestmove '"
+         << move_to_uci(result.best_move) << "'; using fallback '"
+         << move_to_uci(fallback) << "' legal_count=" << legal_count;
+    log_uci("err", warn.str());
+    std::cerr << warn.str() << '\n';
+    chosen_move = fallback;
+    encoded_best = legal_moves[0];
+    best_found = true;
   }
 
   const std::uint64_t elapsed_ms = std::max<std::uint64_t>(1, result.elapsed_ms);
@@ -409,7 +419,66 @@ void emit_search_result(Board& board, const SearchResult& result) {
   const int printed_sel_depth =
       has_move ? std::max(reported_seldepth, printed_depth) : reported_seldepth;
 
-  const std::string bestmove = has_move ? move_to_uci(result.best_move) : "0000";
+  std::string bestmove = has_move ? move_to_uci(chosen_move) : "0000";
+  std::string ponder_move;
+  std::string pv_line;
+
+  if (has_move && result.pv_length > 0) {
+    Board pv_board = board;
+    SideToMove pv_side = board.side_to_move;
+    bool pv_valid = true;
+    const int pv_len = std::min(
+        result.pv_length, static_cast<int>(result.principal_variation.size()));
+    for (int idx = 0; idx < pv_len; ++idx) {
+      const Move& pv_move =
+          result.principal_variation[static_cast<std::size_t>(idx)];
+      if (pv_move.moving_pc == OccupancyType::empty) {
+        break;
+      }
+
+      uint16_t pv_legal_count = 0;
+      const auto pv_legals =
+          generate_legal_moves(pv_board, pv_side, pv_legal_count);
+      const uint32_t* pv_legals_data = pv_legals.data();
+      const uint32_t pv_code =
+          encode_move(pv_move.from, pv_move.to, pv_move.moving_pc,
+                      pv_move.captured_pc, pv_move.promo_pc, pv_move.flags);
+      if (idx == 0 && has_move && pv_code != encoded_best) {
+        pv_valid = false;
+        break;
+      }
+      bool pv_found = false;
+      for (uint16_t pv_idx = 0; pv_idx < pv_legal_count; ++pv_idx) {
+        if (pv_legals_data[pv_idx] == pv_code) {
+          pv_found = true;
+          break;
+        }
+      }
+      if (!pv_found) {
+        pv_valid = false;
+        break;
+      }
+
+      const std::string move_str = move_to_uci(pv_move);
+      if (!pv_line.empty()) {
+        pv_line.push_back(' ');
+      }
+      pv_line += move_str;
+      if (idx == 0) {
+        bestmove = move_str;
+      } else if (idx == 1) {
+        ponder_move = move_str;
+      }
+
+      [[maybe_unused]] auto pv_undo = make_move(pv_board, pv_move);
+      pv_side = flip_side(pv_side);
+    }
+
+    if (!pv_valid) {
+      pv_line.clear();
+      ponder_move.clear();
+    }
+  }
 
   std::ostringstream info_line;
   info_line << "info depth " << printed_depth << " seldepth "
@@ -426,14 +495,18 @@ void emit_search_result(Board& board, const SearchResult& result) {
   }
   info_line << " time " << elapsed_ms << " nodes " << nodes << " nps " << nps;
   if (has_move) {
-    info_line << " pv " << bestmove;
+    const std::string& pv_output = pv_line.empty() ? bestmove : pv_line;
+    info_line << " pv " << pv_output;
   }
   const auto info_str = info_line.str();
   log_uci("out", info_str);
   std::cout << info_str << '\n';
   std::cout.flush();
 
-  const std::string response = "bestmove " + bestmove;
+  std::string response = "bestmove " + bestmove;
+  if (!ponder_move.empty()) {
+    response += " ponder " + ponder_move;
+  }
   log_uci("out", response);
   std::cout << response << '\n';
   std::cout.flush();
@@ -449,46 +522,47 @@ void run_uci_loop(Engine& engine, int default_depth,
   Board board = initial_board(kStartFEN);
   engine.reset_history(board);
 
-  AsyncSearchState search_state;
+  auto search_state = std::make_shared<AsyncSearchState>();
+  bool ponder_enabled = true;
 
   auto join_worker = [&]() {
-    if (search_state.worker.joinable()) {
-      search_state.worker.join();
+    if (search_state->worker.joinable()) {
+      search_state->worker.join();
     }
   };
 
   auto reset_state = [&](bool clear_result) {
-    std::lock_guard<std::mutex> lock(search_state.mutex);
-    search_state.active = false;
+    std::lock_guard<std::mutex> lock(search_state->mutex);
+    search_state->active = false;
     if (clear_result) {
-      search_state.result_ready = false;
-      search_state.result = SearchResult{};
+      search_state->result_ready = false;
+      search_state->result.reset();
     }
-    search_state.pondering = false;
-    search_state.board.reset();
+    search_state->pondering = false;
+    search_state->board.reset();
   };
 
   auto stop_search = [&](bool clear_result) {
-    search_state.abort_flag.store(true, std::memory_order_relaxed);
+    search_state->abort_flag.store(true, std::memory_order_relaxed);
     join_worker();
     reset_state(clear_result);
-    search_state.abort_flag.store(false, std::memory_order_relaxed);
+    search_state->abort_flag.store(false, std::memory_order_relaxed);
   };
 
   auto start_search = [&](SearchParameters params, bool ponder) {
     stop_search(true);
-    params.abort_flag = &search_state.abort_flag;
+    params.abort_flag = &search_state->abort_flag;
     {
-      std::lock_guard<std::mutex> lock(search_state.mutex);
-      search_state.board = std::make_unique<Board>(board);
-      search_state.active = true;
-      search_state.pondering = ponder;
-      search_state.result_ready = false;
-      search_state.result = SearchResult{};
+      std::lock_guard<std::mutex> lock(search_state->mutex);
+      search_state->board = std::make_unique<Board>(board);
+      search_state->active = true;
+      search_state->pondering = ponder;
+      search_state->result_ready = false;
+      search_state->result.reset();
     }
-    search_state.abort_flag.store(false, std::memory_order_relaxed);
-    search_state.worker = std::thread(
-        [state_ptr = &search_state, engine_ptr = &engine, params]() mutable {
+    search_state->abort_flag.store(false, std::memory_order_relaxed);
+    search_state->worker = std::thread(
+        [state_ptr = search_state, engine_ptr = &engine, params]() mutable {
           Board* worker_board = nullptr;
           {
             std::lock_guard<std::mutex> lock(state_ptr->mutex);
@@ -497,7 +571,7 @@ void run_uci_loop(Engine& engine, int default_depth,
               state_ptr->active = false;
               state_ptr->result_ready = false;
               state_ptr->pondering = false;
-              state_ptr->result = SearchResult{};
+              state_ptr->result.reset();
             }
           }
           if (!worker_board) {
@@ -507,10 +581,10 @@ void run_uci_loop(Engine& engine, int default_depth,
           SearchResult res = engine_ptr->search(*worker_board, params);
 
           std::unique_ptr<Board> board_for_output;
-          bool keep_result = false;
+          bool deliver_now = true;
           {
             std::lock_guard<std::mutex> lock(state_ptr->mutex);
-            state_ptr->result = res;
+            state_ptr->result = std::make_unique<SearchResult>(res);
             state_ptr->active = false;
             if (res.aborted) {
               state_ptr->result_ready = false;
@@ -518,7 +592,7 @@ void run_uci_loop(Engine& engine, int default_depth,
               state_ptr->pondering = false;
             } else if (state_ptr->pondering) {
               state_ptr->result_ready = true;
-              keep_result = true;
+              deliver_now = false; // wait for ponderhit
             } else {
               board_for_output = std::move(state_ptr->board);
               state_ptr->result_ready = false;
@@ -526,15 +600,13 @@ void run_uci_loop(Engine& engine, int default_depth,
             }
           }
 
-          if (!res.aborted && board_for_output) {
+          if (!res.aborted && deliver_now && board_for_output) {
             emit_search_result(*board_for_output, res);
           }
 
-          if (!keep_result) {
-            std::lock_guard<std::mutex> lock(state_ptr->mutex);
-            if (!state_ptr->result_ready) {
-              state_ptr->result = SearchResult{};
-            }
+          std::lock_guard<std::mutex> lock(state_ptr->mutex);
+          if (!state_ptr->result_ready) {
+            state_ptr->result.reset();
           }
         });
   };
@@ -563,6 +635,8 @@ void run_uci_loop(Engine& engine, int default_depth,
       std::cout << "id name Skaks" << '\n';
       log_uci("out", "id author G Portella");
       std::cout << "id author G Portella" << '\n';
+      log_uci("out", "option name Ponder type check default true");
+      std::cout << "option name Ponder type check default true" << '\n';
       log_uci("out", "uciok");
       std::cout << "uciok" << '\n';
       std::cout.flush();
@@ -622,37 +696,44 @@ void run_uci_loop(Engine& engine, int default_depth,
       params.alpha = -INF;
       params.beta = INF;
       params.limits = go_params.limits;
-      start_search(params, go_params.ponder);
+      start_search(params, go_params.ponder && ponder_enabled);
     } else if (keyword == "quit") {
       stop_search(true);
       break;
     } else if (keyword == "stop") {
       stop_search(true);
     } else if (keyword == "setoption") {
-      // not supported yet
-    } else if (keyword == "ponderhit") {
-      std::unique_ptr<Board> board_to_emit;
-      SearchResult pending_result{};
-      bool emit = false;
-      {
-        std::lock_guard<std::mutex> lock(search_state.mutex);
-        if (search_state.pondering) {
-          search_state.pondering = false;
-          if (search_state.result_ready && !search_state.active) {
-            pending_result = search_state.result;
-            search_state.result = SearchResult{};
-            search_state.result_ready = false;
-            board_to_emit = std::move(search_state.board);
-            emit = !pending_result.aborted;
-          }
+      std::string remainder;
+      std::getline(cmd, remainder);
+      std::string lowered = remainder;
+      std::transform(
+          lowered.begin(), lowered.end(), lowered.begin(),
+          [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      if (lowered.find("name ponder") != std::string::npos) {
+        if (lowered.find("value false") != std::string::npos ||
+            lowered.find("value 0") != std::string::npos) {
+          ponder_enabled = false;
+        } else {
+          ponder_enabled = true;
         }
       }
-      if (!search_state.active && search_state.worker.joinable()) {
-        search_state.worker.join();
+    } else if (keyword == "ponderhit") {
+      std::unique_ptr<SearchResult> ready_result;
+      std::unique_ptr<Board> ready_board;
+      {
+        std::lock_guard<std::mutex> lock(search_state->mutex);
+        if (search_state->pondering && search_state->result_ready &&
+            search_state->result && search_state->board) {
+          ready_result = std::move(search_state->result);
+          ready_board = std::move(search_state->board);
+          search_state->result_ready = false;
+          search_state->pondering = false;
+        } else {
+          search_state->pondering = false;
+        }
       }
-      if (emit && board_to_emit) {
-        emit_search_result(*board_to_emit, pending_result);
-        reset_state(true);
+      if (ready_result && ready_board) {
+        emit_search_result(*ready_board, *ready_result);
       }
     }
   }

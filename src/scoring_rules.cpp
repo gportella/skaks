@@ -344,12 +344,16 @@ int evaluate_passed_pawns(const Board& board) {
 int evaluate_pins(const Board& board) {
   const auto& params = evaluation_params();
   int score = 0;
-  auto pin_white = build_pinned_map(board, SideToMove::White);
-  auto pin_black = build_pinned_map(board, SideToMove::Black);
+  static thread_local PinnedMapByPiece pin_white_buffer;
+  static thread_local PinnedMapByPiece pin_black_buffer;
+  build_pinned_map_into(board, SideToMove::White, pin_white_buffer);
+  build_pinned_map_into(board, SideToMove::Black, pin_black_buffer);
+  const auto& pin_white = pin_white_buffer;
+  const auto& pin_black = pin_black_buffer;
   auto apply_penalty = [&](const PinnedBitBoardDirections& entry,
                            int base_penalty, int mobility_penalty,
                            int side_sign) {
-    if (entry.mask == 0) {
+    if (entry.mask == 0 || entry.mask == ~Bitboard{0}) {
       return;
     }
     const int mobility = popcount_bitboard(entry.mask);

@@ -1,0 +1,35 @@
+Engine error for skaks: engine terminated unexpectedly
+Turn 1: skaks plays e2e4
+Turn 2: stockfish plays e7e5
+Turn 3: skaks plays g1f3
+Turn 4: stockfish plays b8c6
+Turn 5: skaks plays f1b5
+Turn 6: stockfish plays g8f6
+Turn 7: skaks plays d2d3
+Turn 8: stockfish plays d7d6
+Turn 9: skaks plays d3d4
+Turn 10: stockfish plays e5d4
+Turn 11: skaks plays f3d4
+Turn 12: stockfish plays c8d7
+Turn 13: skaks plays e1g1
+Turn 14: stockfish plays c6d4
+Turn 15: skaks plays b5d7
+Turn 16: stockfish plays d8d7
+Turn 17: skaks plays d1d4
+Turn 18: stockfish plays f8e7
+Turn 19: skaks plays b1c3
+Turn 20: stockfish plays c7c5
+Turn 21: skaks plays d4d1
+Turn 22: stockfish plays e8g8
+Final position FEN: r4rk1/pp1qbppp/3p1n2/2p5/4P3/2N5/PPP2PPP/R1BQ1RK1 w - - 2 12
+PGN:
+[Event "Skaks Validation"]
+[Site "Local"]
+[Date "2025.12.25"]
+[Round "1"]
+[White "skaks"]
+[Black "stockfish"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. d3 d6 5. d4 exd4 6. Nxd4 Bd7 7. O-O Nxd4 8.
+Bxd7+ Qxd7 9. Qxd4 Be7 10. Nc3 c5 11. Qd1 O-O *

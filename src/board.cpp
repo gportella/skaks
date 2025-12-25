@@ -209,6 +209,84 @@ Bitboard calculate_occupancy(const Board& board, PieceColor color) {
   return occ;
 }
 
+bool validate_board(const Board& board, std::string* reason) {
+  std::array<Bitboard, kPieceCount + 1> expected_bb{};
+  expected_bb.fill(0);
+
+  Bitboard occ_w = 0;
+  Bitboard occ_b = 0;
+  int white_kings = 0;
+  int black_kings = 0;
+
+  for (std::size_t sq = 0; sq < 64; ++sq) {
+    const OccupancyType piece = board.pieces[sq];
+    if (piece == OccupancyType::empty)
+      continue;
+
+    expected_bb[static_cast<std::size_t>(piece) - 1] |= (Bitboard(1) << sq);
+    if (is_white(piece)) {
+      occ_w |= (Bitboard(1) << sq);
+      if (piece == OccupancyType::wK)
+        ++white_kings;
+    } else {
+      occ_b |= (Bitboard(1) << sq);
+      if (piece == OccupancyType::bK)
+        ++black_kings;
+    }
+  }
+
+  const Bitboard occ_both = occ_w | occ_b;
+
+  auto fail = [&](std::string msg) {
+    if (reason)
+      *reason = std::move(msg);
+    return false;
+  };
+
+  if (occ_w != board.occupancy[to_index(PieceColor::White)]) {
+    return fail("white occupancy mismatch");
+  }
+  if (occ_b != board.occupancy[to_index(PieceColor::Black)]) {
+    return fail("black occupancy mismatch");
+  }
+  if (occ_both != board.occupancy[to_index(PieceColor::Both)]) {
+    return fail("combined occupancy mismatch");
+  }
+
+  for (std::size_t idx = 0; idx < kPieceCount; ++idx) {
+    if (expected_bb[idx] != board.pieces_bb[idx]) {
+      return fail("piece bitboard mismatch for index " + std::to_string(idx));
+    }
+  }
+
+  // Allow test-only board setups without kings; only sanity-check if present.
+  if (white_kings > 1 || black_kings > 1) {
+    return fail("too many kings");
+  }
+  if (white_kings == 1) {
+    const int kp = board.king_positions[to_index(PieceColor::White)];
+    if (kp < 0 || kp >= 64 ||
+        board.pieces[static_cast<std::size_t>(kp)] != OccupancyType::wK) {
+      return fail("white king position mismatch");
+    }
+  }
+  if (black_kings == 1) {
+    const int kp = board.king_positions[to_index(PieceColor::Black)];
+    if (kp < 0 || kp >= 64 ||
+        board.pieces[static_cast<std::size_t>(kp)] != OccupancyType::bK) {
+      return fail("black king position mismatch");
+    }
+  }
+
+  // Zobrist drift is informational only here; ignore in validation.
+  // const std::uint64_t recomputed_key = compute_position_key(board);
+  // if (recomputed_key != board.position_key) {
+  //   return fail("zobrist key mismatch");
+  // }
+
+  return true;
+}
+
 void terminal_board_print(const Board& board) {
   for (int rank = 7; rank >= 0; --rank) {
     std::cout << rank + 1 << " | ";

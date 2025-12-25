@@ -25,6 +25,7 @@ struct SearchScratch {
   std::array<std::array<int, 64>, 64> history_heuristic = {};
   TimeManager* time_manager = nullptr;
   std::atomic<bool>* abort_requested = nullptr;
+  std::vector<Move> pv_table;
 };
 
 constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
@@ -53,6 +54,7 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
 inline SearchResult make_aborted_result() {
   SearchResult aborted{};
   aborted.aborted = true;
+  aborted.pv_length = 0;
   return aborted;
 }
 
@@ -161,8 +163,12 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         const int repetition_score = (stm == SideToMove::White)
                                          ? -REPETITION_PENALTY
                                          : REPETITION_PENALTY;
-        return {repetition_score, Move{},
-                SearchResult::Outcome::DrawByRepetition};
+        SearchResult repetition{};
+        repetition.score = repetition_score;
+        repetition.best_move = Move{};
+        repetition.outcome = SearchResult::Outcome::DrawByRepetition;
+        repetition.pv_length = 0;
+        return repetition;
       }
     }
   }
@@ -179,9 +185,23 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
           TranspositionTable::decode_score(cached_entry.score, ply), ply);
       if (cached_entry.depth >= depth) {
         switch (cached_entry.flag) {
-        case TranspositionFlag::Exact:
-          return {cached_score, cached_entry.best_move,
-                  SearchResult::Outcome::InProgress};
+        case TranspositionFlag::Exact: {
+          SearchResult tt_result{};
+          tt_result.score = cached_score;
+          tt_result.best_move = cached_entry.best_move;
+          tt_result.outcome = SearchResult::Outcome::InProgress;
+          if (tt_result.best_move.moving_pc != OccupancyType::empty) {
+            if (ply < MAX_PLY) {
+              const std::size_t pv_offset =
+                  static_cast<std::size_t>(ply) * MAX_PLY;
+              if (pv_offset < scratch.pv_table.size()) {
+                scratch.pv_table[pv_offset] = tt_result.best_move;
+              }
+            }
+            tt_result.pv_length = 1;
+          }
+          return tt_result;
+        }
         case TranspositionFlag::LowerBound:
           alpha = std::max(alpha, cached_score);
           break;
@@ -192,8 +212,21 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
           break;
         }
         if (alpha >= beta) {
-          return {cached_score, cached_entry.best_move,
-                  SearchResult::Outcome::InProgress};
+          SearchResult tt_cutoff{};
+          tt_cutoff.score = cached_score;
+          tt_cutoff.best_move = cached_entry.best_move;
+          tt_cutoff.outcome = SearchResult::Outcome::InProgress;
+          if (tt_cutoff.best_move.moving_pc != OccupancyType::empty) {
+            if (ply < MAX_PLY) {
+              const std::size_t pv_offset =
+                  static_cast<std::size_t>(ply) * MAX_PLY;
+              if (pv_offset < scratch.pv_table.size()) {
+                scratch.pv_table[pv_offset] = tt_cutoff.best_move;
+              }
+            }
+            tt_cutoff.pv_length = 1;
+          }
+          return tt_cutoff;
         }
       }
       if (cached_entry.best_move.moving_pc != OccupancyType::empty) {
@@ -216,7 +249,11 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     const int score_after_null = normalize_mate_score(null_result.score, ply);
     undo_null_move(board, undo_null);
     if (score_after_null >= beta) {
-      return {score_after_null, Move{}, SearchResult::Outcome::InProgress};
+      SearchResult cutoff{};
+      cutoff.score = score_after_null;
+      cutoff.outcome = SearchResult::Outcome::InProgress;
+      cutoff.pv_length = 0;
+      return cutoff;
     }
   }
   alpha_base = alpha;
@@ -244,7 +281,11 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
                   ply);
       }
     }
-    return {qs, Move{}, SearchResult::Outcome::InProgress};
+    SearchResult leaf{};
+    leaf.score = qs;
+    leaf.outcome = SearchResult::Outcome::InProgress;
+    leaf.pv_length = 0;
+    return leaf;
   }
 
   uint16_t move_count = 0;
@@ -270,14 +311,22 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         tt->store(board.position_key, depth, mate_score,
                   TranspositionFlag::Exact, Move{}, ply);
       }
-      return {mate_score, Move{}, SearchResult::Outcome::Mate};
+      SearchResult mate{};
+      mate.score = mate_score;
+      mate.outcome = SearchResult::Outcome::Mate;
+      mate.pv_length = 0;
+      return mate;
     }
     constexpr int draw_score = 0;
     if (tt) {
       tt->store(board.position_key, depth, draw_score, TranspositionFlag::Exact,
                 Move{}, ply);
     }
-    return {draw_score, Move{}, SearchResult::Outcome::DrawByStalemate};
+    SearchResult draw{};
+    draw.score = draw_score;
+    draw.outcome = SearchResult::Outcome::DrawByStalemate;
+    draw.pv_length = 0;
+    return draw;
   }
 
   uint32_t tt_code = 0;
@@ -293,8 +342,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   sort_moves(board, moves, move_count, tt_code, scratch.killers,
              &scratch.history_heuristic, ply);
 
-  SearchResult best = {(stm == SideToMove::White) ? -INF : INF, Move{},
-                       SearchResult::Outcome::InProgress};
+  SearchResult best{};
+  best.score = (stm == SideToMove::White) ? -INF : INF;
+  best.outcome = SearchResult::Outcome::InProgress;
+  best.pv_length = 0;
 
   int moves_tried = 0;
 
@@ -403,6 +454,31 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       best.score = score;
       best.best_move = move;
       best.outcome = child.outcome;
+
+      if (ply < MAX_PLY) {
+        const std::size_t pv_offset = static_cast<std::size_t>(ply) * MAX_PLY;
+        if (pv_offset < scratch.pv_table.size()) {
+          scratch.pv_table[pv_offset] = move;
+          if (child.pv_length > 0) {
+            const std::size_t child_offset =
+                static_cast<std::size_t>(ply + 1) * MAX_PLY;
+            if (child_offset < scratch.pv_table.size()) {
+              const int copy_len =
+                  std::min(child.pv_length, static_cast<int>(MAX_PLY) - 1);
+              for (std::size_t pv_idx = 0;
+                   pv_idx < static_cast<std::size_t>(copy_len); ++pv_idx) {
+                scratch.pv_table[pv_offset + 1 + pv_idx] =
+                    scratch.pv_table[child_offset + pv_idx];
+              }
+              best.pv_length = copy_len + 1;
+            } else {
+              best.pv_length = 1;
+            }
+          } else {
+            best.pv_length = 1;
+          }
+        }
+      }
     }
 
     if (stm == SideToMove::White) {
@@ -483,6 +559,7 @@ SearchResult search_position(Board& board, SideToMove stm,
   } else {
     scratch.abort_requested = &abort_requested;
   }
+  scratch.pv_table.resize(MAX_PLY * MAX_PLY);
 
   int max_root_moves = 0;
   uint16_t move_count = 0;
@@ -708,14 +785,33 @@ SearchResult search_position(Board& board, SideToMove stm,
     auto fallback_moves = generate_legal_moves(board, stm, fallback_count);
     if (fallback_count > 0) {
       final_result.best_move = decode_move(fallback_moves[0]);
+      final_result.principal_variation.resize(1);
+      final_result.principal_variation[0] = final_result.best_move;
+      final_result.pv_length = 1;
     }
   }
   final_result.score = normalize_mate_score(final_result.score, start_ply);
   final_result.nodes = nodes;
   final_result.aborted = abort_requested.load(std::memory_order_relaxed);
+
+  if (final_result.pv_length > 0 && final_result.principal_variation.empty()) {
+    if (!scratch.pv_table.empty()) {
+      const std::size_t pv_offset =
+          static_cast<std::size_t>(start_ply) * MAX_PLY;
+      if (pv_offset < scratch.pv_table.size()) {
+        final_result.principal_variation.resize(
+            static_cast<std::size_t>(final_result.pv_length));
+        for (std::size_t pv_idx = 0;
+             pv_idx < static_cast<std::size_t>(final_result.pv_length);
+             ++pv_idx) {
+          final_result.principal_variation[pv_idx] =
+              scratch.pv_table[pv_offset + pv_idx];
+        }
+      }
+    }
+  }
   return final_result;
 }
-
 namespace {
 int default_evaluator(const Board& board) {
   return evaluate_board(board);

@@ -1,0 +1,125 @@
+Test project /Users/ktxc111/work/repos/skaks/build/debug
+      Start  1: BoardFen.RoundTripStartPosition
+ 1/60 Test  #1: BoardFen.RoundTripStartPosition ...............................   Passed    0.09 sec
+      Start  2: BoardFen.RoundTripWithEnPassantAndNoCastling
+ 2/60 Test  #2: BoardFen.RoundTripWithEnPassantAndNoCastling ..................   Passed    0.03 sec
+      Start  3: BoardCheck.BlackKingNotInCheckInSamplePosition
+ 3/60 Test  #3: BoardCheck.BlackKingNotInCheckInSamplePosition ................   Passed    0.03 sec
+      Start  4: CastlingTests.AllowsBothSidesWhenPathClearAndSafe
+ 4/60 Test  #4: CastlingTests.AllowsBothSidesWhenPathClearAndSafe .............   Passed    0.03 sec
+      Start  5: CastlingTests.BlocksSideWhenPathOccupied
+ 5/60 Test  #5: CastlingTests.BlocksSideWhenPathOccupied ......................   Passed    0.03 sec
+      Start  6: CastlingTests.DisallowsKingsideWhenSquaresAttacked
+ 6/60 Test  #6: CastlingTests.DisallowsKingsideWhenSquaresAttacked ............   Passed    0.03 sec
+      Start  7: CastlingTests.DisallowsQueensideWhenSquaresAttacked
+ 7/60 Test  #7: CastlingTests.DisallowsQueensideWhenSquaresAttacked ...........   Passed    0.03 sec
+      Start  8: CastlingTests.MirrorsForBlackWhenAttacked
+ 8/60 Test  #8: CastlingTests.MirrorsForBlackWhenAttacked .....................   Passed    0.03 sec
+      Start  9: AttackMasksTests.KingAttackPatternsMatchReference
+ 9/60 Test  #9: AttackMasksTests.KingAttackPatternsMatchReference .............   Passed    0.03 sec
+      Start 10: IncrementalTest.StartPos
+10/60 Test #10: IncrementalTest.StartPos ......................................   Passed    0.03 sec
+      Start 11: IncrementalTest.RandomWalkStartPos
+11/60 Test #11: IncrementalTest.RandomWalkStartPos ............................   Passed    0.03 sec
+      Start 12: IncrementalTest.Kiwipete
+12/60 Test #12: IncrementalTest.Kiwipete ......................................   Passed    0.03 sec
+      Start 13: IncrementalTest.Castling
+13/60 Test #13: IncrementalTest.Castling ......................................   Passed    0.03 sec
+      Start 14: IncrementalTest.Promotion
+14/60 Test #14: IncrementalTest.Promotion .....................................   Passed    0.03 sec
+      Start 15: IncrementalTest.EnPassant
+15/60 Test #15: IncrementalTest.EnPassant .....................................   Passed    0.04 sec
+      Start 16: MoveApplication.KingsideCastleUpdatesOnlyMovingRook
+16/60 Test #16: MoveApplication.KingsideCastleUpdatesOnlyMovingRook ...........   Passed    0.03 sec
+      Start 17: MoveApplication.BlackKingsideCastleKeepsWhiteBackRankIntact
+17/60 Test #17: MoveApplication.BlackKingsideCastleKeepsWhiteBackRankIntact ...   Passed    0.03 sec
+      Start 18: MoveApplication.RookQuietMoveDoesNotCreateExtraQueen
+18/60 Test #18: MoveApplication.RookQuietMoveDoesNotCreateExtraQueen ..........   Passed    0.04 sec
+      Start 19: MoveApplication.QueenCaptureUpdatesBitboard
+19/60 Test #19: MoveApplication.QueenCaptureUpdatesBitboard ...................   Passed    0.03 sec
+      Start 20: MoveApplication.QueenCaptureAndUndoRestoresState
+20/60 Test #20: MoveApplication.QueenCaptureAndUndoRestoresState ..............   Passed    0.03 sec
+      Start 21: MoveApplication.DoublePushCreatesEnPassantTargetForOpponent
+21/60 Test #21: MoveApplication.DoublePushCreatesEnPassantTargetForOpponent ...   Passed    0.04 sec
+      Start 22: MoveApplication.CapturingKingMarksStateAndUndoesCleanly
+22/60 Test #22: MoveApplication.CapturingKingMarksStateAndUndoesCleanly .......   Passed    0.03 sec
+      Start 23: MoveApplication.QuietPromotionUndoRestoresState
+23/60 Test #23: MoveApplication.QuietPromotionUndoRestoresState ...............   Passed    0.03 sec
+      Start 24: MoveGeneration.WhitePawnEncodesQuietDoubleAndCapture
+24/60 Test #24: MoveGeneration.WhitePawnEncodesQuietDoubleAndCapture ..........   Passed    0.04 sec
+      Start 25: MoveGeneration.BlackPawnEncodesQuietDoubleAndCapture
+25/60 Test #25: MoveGeneration.BlackPawnEncodesQuietDoubleAndCapture ..........   Passed    0.03 sec
+      Start 26: MoveGeneration.WhiteKnightEncodesQuietAndCapture
+26/60 Test #26: MoveGeneration.WhiteKnightEncodesQuietAndCapture ..............   Passed    0.03 sec
+      Start 27: MoveGeneration.WhiteBishopEncodesQuietAndCapture
+27/60 Test #27: MoveGeneration.WhiteBishopEncodesQuietAndCapture ..............   Passed    0.03 sec
+      Start 28: MoveGeneration.WhiteRookEncodesQuietAndCapture
+28/60 Test #28: MoveGeneration.WhiteRookEncodesQuietAndCapture ................   Passed    0.03 sec
+      Start 29: MoveGeneration.WhiteQueenEncodesQuietAndCapture
+29/60 Test #29: MoveGeneration.WhiteQueenEncodesQuietAndCapture ...............   Passed    0.03 sec
+      Start 30: MoveGeneration.WhiteKingEncodesCapture
+30/60 Test #30: MoveGeneration.WhiteKingEncodesCapture ........................   Passed    0.03 sec
+      Start 31: MoveSEE.CaptureMakeAndUndoRestoresBoard
+31/60 Test #31: MoveSEE.CaptureMakeAndUndoRestoresBoard .......................   Passed    0.03 sec
+      Start 32: MoveSEE.PromotionCaptureMakeAndUndoRestoresBoard
+32/60 Test #32: MoveSEE.PromotionCaptureMakeAndUndoRestoresBoard ..............   Passed    0.03 sec
+      Start 33: ScoringRules.HeavierPiecesYieldLargerThreatPenalty
+33/60 Test #33: ScoringRules.HeavierPiecesYieldLargerThreatPenalty ............   Passed    0.03 sec
+      Start 34: ScoringRules.AdvancedTargetsArePenalizedMore
+34/60 Test #34: ScoringRules.AdvancedTargetsArePenalizedMore ..................   Passed    0.03 sec
+      Start 35: KingInCheckTest.DetectsCheck
+35/60 Test #35: KingInCheckTest.DetectsCheck ..................................   Passed    0.03 sec
+      Start 36: KingNotInCheckTest.DetectsNoCheck
+36/60 Test #36: KingNotInCheckTest.DetectsNoCheck .............................   Passed    0.03 sec
+      Start 37: ExchangeFindSmallestAttacker.PrefersLeastValuableAttacker
+37/60 Test #37: ExchangeFindSmallestAttacker.PrefersLeastValuableAttacker .....   Passed    0.03 sec
+      Start 38: ExchangeFindSmallestAttacker.ReturnsNulloptWhenNoAttacker
+38/60 Test #38: ExchangeFindSmallestAttacker.ReturnsNulloptWhenNoAttacker .....   Passed    0.03 sec
+      Start 39: ExchangeFindSmallestAttacker.FindsKnightAttacker
+39/60 Test #39: ExchangeFindSmallestAttacker.FindsKnightAttacker ..............   Passed    0.03 sec
+      Start 40: ExchangeFindSmallestAttacker.FindsBishopAttacker
+40/60 Test #40: ExchangeFindSmallestAttacker.FindsBishopAttacker ..............   Passed    0.03 sec
+      Start 41: ExchangeFindSmallestAttacker.FindsRookAttacker
+41/60 Test #41: ExchangeFindSmallestAttacker.FindsRookAttacker ................   Passed    0.03 sec
+      Start 42: ExchangeFindSmallestAttacker.FindsQueenAttacker
+42/60 Test #42: ExchangeFindSmallestAttacker.FindsQueenAttacker ...............   Passed    0.03 sec
+      Start 43: ExchangeFindSmallestAttacker.FindsKingAttacker
+43/60 Test #43: ExchangeFindSmallestAttacker.FindsKingAttacker ................   Passed    0.05 sec
+      Start 44: StaticExchangeEval.ReturnsPositiveGainForSimpleCapture
+44/60 Test #44: StaticExchangeEval.ReturnsPositiveGainForSimpleCapture ........   Passed    0.03 sec
+      Start 45: StaticExchangeEval.ReturnsZeroWhenCaptureIsLosing
+45/60 Test #45: StaticExchangeEval.ReturnsZeroWhenCaptureIsLosing .............   Passed    0.04 sec
+      Start 46: BishopPinTest.BlocksBishopWhenPinned
+46/60 Test #46: BishopPinTest.BlocksBishopWhenPinned ..........................   Passed    0.04 sec
+      Start 47: BishopPinTest.QueenPins
+47/60 Test #47: BishopPinTest.QueenPins .......................................   Passed    0.04 sec
+      Start 48: KnightPinTest.KnightCannotMove
+48/60 Test #48: KnightPinTest.KnightCannotMove ................................   Passed    0.04 sec
+      Start 49: Polyglot.MatchesReferenceHashes
+49/60 Test #49: Polyglot.MatchesReferenceHashes ...............................   Passed    0.04 sec
+      Start 50: CliParseTests.AcceptsMoveTimeOption
+50/60 Test #50: CliParseTests.AcceptsMoveTimeOption ...........................   Passed    0.05 sec
+      Start 51: CliParseTests.RejectsMoveTimeWithDepth
+51/60 Test #51: CliParseTests.RejectsMoveTimeWithDepth ........................   Passed    0.05 sec
+      Start 52: CliParseTests.RejectsCombinedClockAndMoveTime
+52/60 Test #52: CliParseTests.RejectsCombinedClockAndMoveTime .................   Passed    0.04 sec
+      Start 53: CliParseTests.AcceptsExplicitClockOptions
+53/60 Test #53: CliParseTests.AcceptsExplicitClockOptions .....................   Passed    0.04 sec
+      Start 54: CliParseTests.RejectsZeroClockConfiguration
+54/60 Test #54: CliParseTests.RejectsZeroClockConfiguration ...................   Passed    0.04 sec
+      Start 55: TimeManagerTests.PerMoveBudget
+55/60 Test #55: TimeManagerTests.PerMoveBudget ................................   Passed    0.03 sec
+      Start 56: TimeManagerTests.ClockBudgetIncludesIncrement
+56/60 Test #56: TimeManagerTests.ClockBudgetIncludesIncrement .................   Passed    0.03 sec
+      Start 57: TimeManagerTests.DisabledWhenNoTimeProvided
+57/60 Test #57: TimeManagerTests.DisabledWhenNoTimeProvided ...................   Passed    0.03 sec
+      Start 58: ZobristTests.MakeUndoKeepsKeyInSync
+58/60 Test #58: ZobristTests.MakeUndoKeepsKeyInSync ...........................   Passed    0.04 sec
+      Start 59: ZobristTests.RandomWalkMaintainsKey
+59/60 Test #59: ZobristTests.RandomWalkMaintainsKey ...........................   Passed    0.04 sec
+      Start 60: fight_against_engine_cli
+60/60 Test #60: fight_against_engine_cli ......................................   Passed    0.09 sec
+
+100% tests passed, 0 tests failed out of 60
+
+Total Test time (real) =   2.53 sec
