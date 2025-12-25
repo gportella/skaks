@@ -3,6 +3,7 @@
 #include "chess/moves.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
+#include "chess/search_params.hpp"
 
 #include <algorithm>
 
@@ -30,7 +31,9 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
                TranspositionTable* tt, int ply) {
   ++nodes;
 
-  if (ply >= QUIESCENCE_MAX_PLY) {
+  const auto& sparams = search_params();
+
+  if (ply >= sparams.quiescence_max_ply) {
     return evaluator(static_cast<const Board&>(board));
   }
 
@@ -106,8 +109,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   sort_moves(board, moves, move_count, 0);
 
   // Hard cap noisy moves per node when not in check to avoid explosion
-  if (!in_check && move_count > QUIESCENCE_MAX_NOISY_MOVES) {
-    move_count = static_cast<uint16_t>(QUIESCENCE_MAX_NOISY_MOVES);
+  if (!in_check && move_count > sparams.quiescence_max_noisy_moves) {
+    move_count = static_cast<uint16_t>(sparams.quiescence_max_noisy_moves);
   }
 
   if (move_count == 0) {
@@ -136,7 +139,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       // more that SEE, and seems like the quality is a tad better too...
       const int delta_gain = capture_gain(move);
 
-      if (i >= QUIESCENCE_ZERO_GAIN_SKIP_INDEX && delta_gain == 0) {
+      if (i >= sparams.quiescence_zero_gain_skip_index && delta_gain == 0) {
         continue;
       }
 
@@ -146,17 +149,17 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
           move.promo_pc == OccupancyType::empty;
       if (non_promo_pawn_capture) {
         const int pawn_value = piece_material_magnitude(move.moving_pc);
-        if (delta_gain + QUIESCENCE_DELTA_MARGIN < pawn_value) {
+        if (delta_gain + sparams.quiescence_delta_margin < pawn_value) {
           continue;
         }
       }
 
       if (maximizing) {
-        if (stand_pat + delta_gain + QUIESCENCE_DELTA_MARGIN <= alpha) {
+        if (stand_pat + delta_gain + sparams.quiescence_delta_margin <= alpha) {
           continue;
         }
       } else {
-        if (stand_pat - delta_gain - QUIESCENCE_DELTA_MARGIN >= beta) {
+        if (stand_pat - delta_gain - sparams.quiescence_delta_margin >= beta) {
           continue;
         }
       }

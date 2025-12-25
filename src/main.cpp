@@ -4,7 +4,9 @@
 #include "chess/defaults.hpp"
 #include "chess/demo_debug.hpp"
 #include "chess/engine.hpp"
+#include "chess/engine_params.hpp"
 #include "chess/moves.hpp"
+#include "chess/params_loader.hpp"
 #include "chess/perf.hpp"
 #include "chess/polyglot.hpp"
 #include "chess/search.hpp"
@@ -66,7 +68,40 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
   }
 
+  chess::reset_engine_params();
+  if (cli.options.params_override) {
+    auto params = chess::default_engine_params();
+    std::string error;
+    if (!chess::load_engine_params_from_file(cli.options.params_path, params,
+                                             error)) {
+      std::cerr << "Failed to load params: " << error << "\n";
+      return EXIT_FAILURE;
+    }
+    chess::set_engine_params(params);
+  }
+
   chess::Engine engine;
+
+  if (cli.options.static_eval) {
+    chess::Board board{};
+    try {
+      board = chess::initial_board(cli.options.fen);
+    } catch (const std::exception& ex) {
+      std::cerr << "Failed to load FEN: " << ex.what() << "\n";
+      return EXIT_FAILURE;
+    }
+
+    engine.reset_history(board);
+
+    const int white_eval = engine.evaluate(board);
+    const int stm_eval = (board.side_to_move == chess::SideToMove::White)
+                             ? white_eval
+                             : -white_eval;
+
+    std::cout << "static_eval_white " << white_eval << "\n";
+    std::cout << "static_eval_stm " << stm_eval << "\n";
+    return EXIT_SUCCESS;
+  }
 
   chess::polyglot::Book opening_book;
   bool opening_book_ready = false;

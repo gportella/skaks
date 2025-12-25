@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skaks-opt"
+version = "0.1.0"
+description = "Parameter optimization toolkit for skaks via skaks_eval"
+authors = [{ name = "skaks" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "pyyaml>=6.0.1",
+  "optuna>=3.6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+full = [
+  "pandas>=2.2",
+]
+
+[project.scripts]
+skaks-opt = "skaks_opt.cli:main"
+
+[tool.uv]
+# This project can be managed with uv; use `uv pip install -e .` or `uv run skaks-opt --help`.

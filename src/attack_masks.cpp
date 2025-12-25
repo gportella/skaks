@@ -898,6 +898,10 @@ bool is_square_attacked(const Board& board, u_int8_t sq,
 CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
   const SideToMove enemy = flip_side(stm);
   const auto& cfg = kCastlingSideConfigs[to_index(stm)];
+  // Only consider rights that remain set in the board state (e.g., from FEN
+  // or past rook/king moves). This prevents re-enabling castles just because
+  // the rook/king returned to its start square.
+  const CastlingRights allowed = board.castling_rights;
 
   const auto mask_from = [](const auto& squares) {
     Bitboard mask = 0;
@@ -948,12 +952,14 @@ CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
 
   CastlingRights rights = CastlingRights::NoCastling;
 
-  if (king_square_safe && clear_king_path && squares_are_safe(cfg.king_safe) &&
+  if (has_rights(allowed, cfg.king_flag) && king_square_safe &&
+      clear_king_path && squares_are_safe(cfg.king_safe) &&
       has_rook_at(cfg.rook_kingside_start)) {
     rights |= cfg.king_flag;
   }
 
-  if (king_square_safe && clear_queen_path && squares_are_safe(cfg.queen_safe) &&
+  if (has_rights(allowed, cfg.queen_flag) && king_square_safe &&
+      clear_queen_path && squares_are_safe(cfg.queen_safe) &&
       has_rook_at(cfg.rook_queenside_start)) {
     rights |= cfg.queen_flag;
   }

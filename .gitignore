@@ -1,6 +1,7 @@
 # Build directories
 /build/
 **/build/
+moves_pgn/
 
 # CMake-generated files
 CMakeCache.txt
@@ -10,6 +11,12 @@ Makefile
 compile_commands.json
 Testing/
 CTestTestfile.cmake
+
+# my own stuff
+validation_matches.sqlite3
+eval_pairs*.csv
+optuna.db
+*.sqlite3
 
 # IDE/editor state
 .vscode/

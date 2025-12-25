@@ -717,6 +717,20 @@ void run_uci_loop(Engine& engine, int default_depth,
           ponder_enabled = true;
         }
       }
+    } else if (keyword == "staticeval") {
+      stop_search(true);
+      const int white_eval = engine.evaluate(board);
+      const int stm_eval =
+          (board.side_to_move == SideToMove::White) ? white_eval : -white_eval;
+      std::ostringstream oss;
+      oss << "info string static_eval_white " << white_eval;
+      log_uci("out", oss.str());
+      std::cout << oss.str() << '\n';
+      std::ostringstream oss2;
+      oss2 << "info score cp " << stm_eval;
+      log_uci("out", oss2.str());
+      std::cout << oss2.str() << '\n';
+      std::cout.flush();
     } else if (keyword == "ponderhit") {
       std::unique_ptr<SearchResult> ready_result;
       std::unique_ptr<Board> ready_board;

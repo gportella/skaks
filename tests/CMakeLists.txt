@@ -26,6 +26,7 @@ add_executable(chess_engine_tests
   cli_tests.cpp
   time_manager_tests.cpp
   zobrist_tests.cpp
+  params_loader_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests
@@ -34,9 +35,17 @@ target_link_libraries(chess_engine_tests
     GTest::gtest_main
 )
 
+target_link_directories(chess_engine_tests PRIVATE
+  ${YAML_CPP_LIB_DIR}
+)
+
 target_include_directories(chess_engine_tests
   PRIVATE
     ${SKAKS_GENERATED_INCLUDE_DIR}
+)
+
+target_include_directories(chess_engine_tests SYSTEM PUBLIC
+  ${YAML_CPP_INCLUDE_DIR}
 )
 
 chess_set_default_warnings(chess_engine_tests)

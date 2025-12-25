@@ -1,0 +1,39 @@
+#pragma once
+
+#include "chess/defaults.hpp"
+
+namespace chess {
+
+struct SearchParams {
+  int aspiration_window_initial = ASPIRATION_WINDOW_INITIAL;
+  int aspiration_window_max = ASPIRATION_WINDOW_MAX;
+  int quiescence_delta_margin = QUIESCENCE_DELTA_MARGIN;
+  int quiescence_max_ply = QUIESCENCE_MAX_PLY;
+  int quiescence_max_noisy_moves = QUIESCENCE_MAX_NOISY_MOVES;
+  int quiescence_zero_gain_skip_index = QUIESCENCE_ZERO_GAIN_SKIP_INDEX;
+  int null_move_reduction = NULL_MOVE_REDUCTION;
+  int null_move_min_depth = NULL_MOVE_MIN_DEPTH;
+};
+
+inline SearchParams default_search_params() {
+  return SearchParams{};
+}
+
+inline SearchParams& mutable_search_params() {
+  static SearchParams params = default_search_params();
+  return params;
+}
+
+inline const SearchParams& search_params() {
+  return mutable_search_params();
+}
+
+inline void set_search_params(const SearchParams& params) {
+  mutable_search_params() = params;
+}
+
+inline void reset_search_params() {
+  mutable_search_params() = default_search_params();
+}
+
+} // namespace chess

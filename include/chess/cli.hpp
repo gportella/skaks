@@ -30,11 +30,14 @@ struct CliOptions {
   bool polyglot = false;
   std::string polyglot_book_path;
   bool polyglot_book_override = false;
+  bool params_override = false;
+  std::string params_path;
   bool perf_mode = false;
   int perf_iterations = 3;
   int version_requests = 0;
   bool show_version = false;
   bool show_extended_version = false;
+  bool static_eval = false;
   std::string executable_path;
   bool best_move = false;
   TimeControlOptions time_control;

@@ -11,6 +11,36 @@ option(CHESS_BUILD_TESTS "Build unit tests" ON)
 option(CHESS_ENABLE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(CHESS_ENABLE_IPO "Enable interprocedural optimization (LTO)" OFF)
 option(CHESS_ENABLE_SANITIZERS "Enable address/undefined sanitizers in supported builds" OFF)
+option(CHESS_BUILD_PYTHON "Build Python bindings" OFF)
+
+include(FetchContent)
+
+FetchContent_Declare(
+  yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+  GIT_TAG 0.8.0 # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
+)
+FetchContent_MakeAvailable(yaml-cpp)
+
+
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(YAML_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_INSTALL OFF CACHE BOOL "" FORCE)
+
+set(YAML_CPP_URL "https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.8.0.tar.gz")
+if(DEFINED ENV{YAML_CPP_TARBALL} AND EXISTS $ENV{YAML_CPP_TARBALL})
+  set(YAML_CPP_URL $ENV{YAML_CPP_TARBALL})
+endif()
+
+FetchContent_Declare(
+  yaml-cpp
+  URL ${YAML_CPP_URL}
+)
+
+FetchContent_MakeAvailable(yaml-cpp)
+set(YAML_CPP_INCLUDE_DIR "${yaml-cpp_SOURCE_DIR}/include")
+set(YAML_CPP_LIB_DIR "${yaml-cpp_BINARY_DIR}")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -43,6 +73,10 @@ add_subdirectory(src)
 if(CHESS_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(CHESS_BUILD_PYTHON)
+  add_subdirectory(bindings/python)
 endif()
 
 if(CHESS_ENABLE_IPO)

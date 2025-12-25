@@ -29,6 +29,10 @@ CliParseResult parse_cli(int argc, char** argv) {
       ("no-polyglot", "Disable Polyglot book usage")
       ("polyglot-book", "Path to Polyglot opening book",
        cxxopts::value<std::string>())
+      ("params", "Path to YAML engine parameter file",
+       cxxopts::value<std::string>())
+      ("static-eval", "Print static evaluation for provided FEN",
+       cxxopts::value<bool>()->default_value("false"))
       ("o,onlyfen", "Print FEN only in self-play mode")
       ("s,self", "Run self-play CLI loop")
       ("bm,bestmove", "Print best move for the given FEN and exit")
@@ -93,6 +97,7 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.enable_profile = parsed.count("profile") > 0;
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.best_move = parsed.count("bestmove") > 0;
+    result.options.static_eval = parsed.count("static-eval") > 0;
 
     const bool request_polyglot = parsed.count("polyglot") > 0;
     const bool request_no_polyglot = parsed.count("no-polyglot") > 0;
@@ -120,6 +125,11 @@ CliParseResult parse_cli(int argc, char** argv) {
 
     if (request_polyglot) {
       result.options.polyglot = true;
+    }
+
+    if (parsed.count("params") > 0) {
+      result.options.params_path = parsed["params"].as<std::string>();
+      result.options.params_override = true;
     }
     result.options.perf_mode = parsed.count("perf") > 0;
     result.options.perf_iterations = parsed["perf-iters"].as<int>();
@@ -197,6 +207,11 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.message = "--bestmove cannot be combined with --uci or --self";
       return result;
     }
+    if (result.options.static_eval && (want_uci || want_self)) {
+      result.parse_error = true;
+      result.message = "--static-eval cannot be combined with --uci or --self";
+      return result;
+    }
     if (want_uci && want_self) {
       result.parse_error = true;
       result.message = "--uci and --self cannot be used together";
@@ -216,6 +231,11 @@ CliParseResult parse_cli(int argc, char** argv) {
         result.message = "--bestmove cannot be combined with --perf";
         return result;
       }
+      if (result.options.static_eval) {
+        result.parse_error = true;
+        result.message = "--static-eval cannot be combined with --perf";
+        return result;
+      }
       result.options.self_play = false;
       result.options.use_uci = false;
     }
@@ -226,8 +246,15 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.perf_mode = false;
     }
 
+    if (result.options.static_eval) {
+      result.options.self_play = false;
+      result.options.use_uci = false;
+      result.options.perf_mode = false;
+    }
+
     if (!want_uci && !want_self && !result.options.show_version &&
-        !result.options.perf_mode && !result.options.best_move) {
+        !result.options.perf_mode && !result.options.best_move &&
+        !result.options.static_eval) {
       // No explicit mode requested: default to UCI when no extra args were
       // provided.
       const bool user_supplied_args = adj_argc > 1;

@@ -1,0 +1,35 @@
+[build-system]
+requires = [
+  "scikit-build-core>=0.7.0",
+  "pybind11>=2.12.0",
+  "numpy>=1.24",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "skaks-eval"
+version = "0.1.0"
+description = "Python bindings for skaks eval"
+authors = [{ name = "skaks" }]
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+classifiers = [
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "License :: OSI Approved :: MIT License",
+]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest", "maturin>=1.4"]
+
+[tool.scikit-build]
+wheel.py-api = "py3"
+[tool.scikit-build.cmake]
+version = ">=3.24"
+build-type = "Release"
+args = ["-DCHESS_BUILD_PYTHON=ON"]
+
+

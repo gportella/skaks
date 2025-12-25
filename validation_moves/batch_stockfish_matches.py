@@ -22,6 +22,10 @@ DEFAULT_DEPTH = 8
 DEFAULT_DB_NAME = "validation_matches.sqlite3"
 PGN_HEADER = "PGN:"
 SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
+DEFAULT_ELO_START = 1500.0
+DEFAULT_ELO_OPPONENT = 2600.0
+DEFAULT_ELO_K_FACTOR = 20.0
+DEFAULT_ELO_STORE = str(Path(__file__).resolve().with_name(".skaks_elo.json"))
 
 
 @dataclass
@@ -58,6 +62,81 @@ def positive_float(value: str) -> float:
     return parsed
 
 
+@dataclass
+class EloComputation:
+    rating_before: float
+    rating_after: float
+    delta: float
+    expected_score: float
+    actual_score: float
+    games: int
+    wins: int
+    losses: int
+    draws: int
+    opponent_rating: float
+
+
+def load_rating(path: Path, fallback: float) -> float:
+    try:
+        content = path.read_text(encoding="utf-8")
+        data = json.loads(content)
+        rating = float(data.get("rating", fallback))
+        return rating
+    except FileNotFoundError:
+        return fallback
+    except (json.JSONDecodeError, OSError, ValueError):
+        return fallback
+
+
+def store_rating(path: Path, rating: float) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"rating": rating}
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def compute_elo(
+    *,
+    rating: float,
+    opponent_rating: float,
+    wins: int,
+    losses: int,
+    draws: int,
+    k_factor: float,
+) -> EloComputation:
+    games = wins + losses + draws
+    actual_score = wins + 0.5 * draws
+    if games == 0:
+        return EloComputation(
+            rating_before=rating,
+            rating_after=rating,
+            delta=0.0,
+            expected_score=0.0,
+            actual_score=actual_score,
+            games=0,
+            wins=wins,
+            losses=losses,
+            draws=draws,
+            opponent_rating=opponent_rating,
+        )
+
+    expected_per_game = 1.0 / (1.0 + 10 ** ((opponent_rating - rating) / 400.0))
+    expected_score = expected_per_game * games
+    delta = k_factor * (actual_score - expected_score)
+    rating_after = rating + delta
+    return EloComputation(
+        rating_before=rating,
+        rating_after=rating_after,
+        delta=delta,
+        expected_score=expected_score,
+        actual_score=actual_score,
+        games=games,
+        wins=wins,
+        losses=losses,
+        draws=draws,
+        opponent_rating=opponent_rating,
+    )
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run many fights against a reference engine and store the PGNs in SQLite."
@@ -85,6 +164,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=str,
         default=None,
         help="Opponent engine binary (default: delegated to fight script)",
+    )
+    parser.add_argument(
+        "--engine-params",
+        type=str,
+        help="Path to params file for the reference engine (passed as --engine-params)",
+    )
+    parser.add_argument(
+        "--opponent-params",
+        type=str,
+        help="Path to params file for the opponent engine (passed as --opponent-params)",
     )
     parser.add_argument(
         "--stockfish",
@@ -177,6 +266,38 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Print stdout/stderr for every game (default: only failures)",
     )
+    parser.add_argument(
+        "--elo-start",
+        type=float,
+        default=DEFAULT_ELO_START,
+        help=(
+            "Starting Elo for skaks when no stored rating is present "
+            f"(default: {DEFAULT_ELO_START})"
+        ),
+    )
+    parser.add_argument(
+        "--elo-opponent",
+        type=float,
+        default=DEFAULT_ELO_OPPONENT,
+        help=f"Assumed opponent Elo rating (default: {DEFAULT_ELO_OPPONENT})",
+    )
+    parser.add_argument(
+        "--elo-k-factor",
+        type=positive_float,
+        default=DEFAULT_ELO_K_FACTOR,
+        help=f"K-factor for Elo updates (default: {DEFAULT_ELO_K_FACTOR})",
+    )
+    parser.add_argument(
+        "--elo-store",
+        type=str,
+        default=DEFAULT_ELO_STORE,
+        help="Path to JSON file for persisting skaks Elo between runs",
+    )
+    parser.add_argument(
+        "--no-elo-store",
+        action="store_true",
+        help="Skip loading/saving Elo state; compute only for this batch",
+    )
 
     args = parser.parse_args(argv)
 
@@ -240,8 +361,12 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
 
     if args.engine:
         base_args.extend(["--engine", args.engine])
+    if args.engine_params:
+        base_args.extend(["--engine-params", args.engine_params])
     if args.opponent:
         base_args.extend(["--opponent", args.opponent])
+    if args.opponent_params:
+        base_args.extend(["--opponent-params", args.opponent_params])
     if args.no_handicap:
         base_args.append("--no-handicap")
     if args.handicap_factor is not None:
@@ -486,6 +611,15 @@ def run_batch(args: argparse.Namespace) -> int:
     try:
         prepare_database(connection)
 
+        rating_path = Path(args.elo_store)
+        if not rating_path.is_absolute():
+            rating_path = Path(__file__).resolve().parent / rating_path
+        rating_before = (
+            args.elo_start
+            if args.no_elo_store
+            else load_rating(rating_path, fallback=args.elo_start)
+        )
+
         base_args = build_fight_arguments(args)
         parameters_snapshot = {
             "limit": args.limit,
@@ -498,7 +632,9 @@ def run_batch(args: argparse.Namespace) -> int:
             "opponent_increment": args.opponent_increment,
             "moves_to_go": args.moves_to_go,
             "engine": args.engine,
+            "engine_params": args.engine_params,
             "opponent": args.opponent,
+            "opponent_params": args.opponent_params,
             "handicap_factor": args.handicap_factor,
             "handicap_depth": args.handicap_depth,
             "handicap_enabled": args.handicap_enabled,
@@ -622,6 +758,34 @@ def run_batch(args: argparse.Namespace) -> int:
         print(f"Stored results in {db_path}")
         print(f"Summary: {summarize_counts(summary)}")
         print(f"Failures: {failures} / {len(indices)}")
+
+        wins = summary.get("skaks", 0)
+        losses = summary.get("stockfish", 0)
+        draws = summary.get("draw", 0)
+        elo = compute_elo(
+            rating=rating_before,
+            opponent_rating=args.elo_opponent,
+            wins=wins,
+            losses=losses,
+            draws=draws,
+            k_factor=args.elo_k_factor,
+        )
+        if elo.games > 0:
+            print(
+                "Elo: "
+                f"start={elo.rating_before:.1f}, "
+                f"opp={elo.opponent_rating:.1f}, "
+                f"score={elo.actual_score:.1f}/{elo.games}, "
+                f"expected={elo.expected_score:.2f}, "
+                f"delta={elo.delta:+.1f}, "
+                f"new={elo.rating_after:.1f}"
+            )
+            if not args.no_elo_store:
+                store_rating(rating_path, elo.rating_after)
+                print(f"Stored Elo rating at {rating_path}")
+        else:
+            print("Elo: no completed games to rate")
+
         return 0 if failures == 0 else 1
     finally:
         connection.close()
