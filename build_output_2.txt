@@ -1,4 +1,0 @@
-[1/4] Building CXX object src/CMakeFiles/chess_engine_core.dir/search.cpp.o
-[2/4] Linking CXX static library src/libchess_engine_core.a
-[3/4] Linking CXX executable src/skaks
-[4/4] Linking CXX executable tests/chess_engine_tests

@@ -70,13 +70,26 @@ class MatchClock:
 
 
 class UciEngine:
-    def __init__(self, binary: str, timeout: float):
+    def __init__(
+        self,
+        binary: str,
+        timeout: float,
+        *,
+        add_uci_arg: bool = False,
+        extra_args: Optional[list[str]] = None,
+    ):
         env = os.environ.copy()
+        argv = [binary]
+        if add_uci_arg:
+            argv.append("--uci")
+        if extra_args:
+            argv.extend(extra_args)
+        self._transcript: list[str] = []
         self._proc = subprocess.Popen(
-            [binary],
+            argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=False,
             bufsize=0,
             env=env,
@@ -107,8 +120,23 @@ class UciEngine:
             raise TimeoutError("engine response timed out")
         line = fd.readline()
         if line == b"":
-            raise RuntimeError("engine terminated unexpectedly")
+            err_msg = "engine terminated unexpectedly"
+            code = self._proc.poll()
+            if code is not None:
+                err_msg += f" (exit {code})"
+            if self._proc.stderr is not None:
+                try:
+                    tail = self._proc.stderr.read()
+                    if tail:
+                        decoded = tail.decode("utf-8", errors="replace").strip()
+                        err_msg += f": {decoded}"
+                except Exception:
+                    pass
+            if self._transcript:
+                err_msg += f" | stdout prior: {' | '.join(self._transcript[-10:])}"
+            raise RuntimeError(err_msg)
         text = line.decode("utf-8", errors="replace").strip()
+        self._transcript.append(text)
         return text
 
     def _drain_until(self, token: str) -> None:
@@ -211,6 +239,17 @@ def _non_negative_int(value: str) -> int:
     return parsed
 
 
+def _params_argv(path: Optional[str]) -> Optional[list[str]]:
+    if path is None:
+        return None
+    return ["--params", path]
+
+
+def _needs_uci_arg(binary: str) -> bool:
+    name = Path(binary).name.lower()
+    return name.startswith("skaks")
+
+
 def run_game(
     *,
     depth: Optional[int],
@@ -224,6 +263,8 @@ def run_game(
     moves_to_go: Optional[int],
     reference_engine: str,
     opponent_engine: str,
+    reference_params: Optional[str],
+    opponent_params: Optional[str],
     handicap_factor: float,
     handicap_depth: int,
     handicap_enabled: bool,
@@ -253,8 +294,18 @@ def run_game(
     move_limit_hit = False
     try:
         with (
-            UciEngine(opponent_path, timeout=240.0) as opponent,
-            UciEngine(reference_path, timeout=240.0) as reference,
+            UciEngine(
+                opponent_path,
+                timeout=240.0,
+                add_uci_arg=_needs_uci_arg(opponent_path),
+                extra_args=_params_argv(opponent_params),
+            ) as opponent,
+            UciEngine(
+                reference_path,
+                timeout=240.0,
+                add_uci_arg=_needs_uci_arg(reference_path),
+                extra_args=_params_argv(reference_params),
+            ) as reference,
         ):
             clock: Optional[MatchClock] = None
             reference_movetime_ms: Optional[int] = None
@@ -445,6 +496,16 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Opponent engine binary to execute (default: stockfish)",
     )
     parser.add_argument(
+        "--engine-params",
+        type=str,
+        help="Path to YAML/JSON params for the reference engine (passed as --params)",
+    )
+    parser.add_argument(
+        "--opponent-params",
+        type=str,
+        help="Path to params file for the opponent engine (passed as --params)",
+    )
+    parser.add_argument(
         "--stockfish",
         action="store_true",
         help="Shortcut to set the opponent to Stockfish",
@@ -579,6 +640,8 @@ def main(argv: List[str]) -> int:
         moves_to_go=args.moves_to_go,
         reference_engine=args.engine,
         opponent_engine=args.opponent,
+        reference_params=args.engine_params,
+        opponent_params=args.opponent_params,
         handicap_factor=args.handicap_factor,
         handicap_depth=args.handicap_depth,
         handicap_enabled=args.handicap_enabled,

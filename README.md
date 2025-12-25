@@ -10,17 +10,14 @@ Default depth I think it's 4 right now, as I improve it we can allow ourselves b
 There's a `--perf` option, useful for regressions. I leave here a couple of scripts to track the performance, both in therms of nodes/ms and 
 and "quality" in puzzle solving -- not awesome, about 12% if lucky for *tricky* (?) ones.
 
-> Careful: I believe I could have missed some cases of move generation I did not consider legal, at times when I play
-> against it the turns swap and it's because I validate the opponents move in UCI. If it can't find the move
-> that I would call legal, it gets ingnored and then the turns get messed up. I will keep stress testing against 
-> `stockfish` to see what potential moves I might still miss. So far so good.
+> Careful, there are still some corner cases that might not be great, need to check the 50 moves rule, and perhas some legal move generation issues.
 
 ## Current version 
 
 ```test
 > skaks -vv
 
-skaks version 0.5
+skaks version 0.9.5
 Optimizations:
  - Bitboard move generation with precomputed attack masks
  - Alpha-beta search with transposition table caching
@@ -31,7 +28,15 @@ Optimizations:
  - Root move exclusion support for iterative deepening
  - Quiescence search to reduce horizon effect
  - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parammeter loading from external file
 ```
+
 
 ## Prerequisites
 
@@ -91,6 +96,16 @@ cmake --build --preset dev-debug --target chess_engine_tests
 ctest --test-dir build/debug --output-on-failure
 ```
 
+## Evaluating and tuning
+
+- `validation_moves/eval_from_pgn.py` takes a PGN file (one or many games) and prints a CSV with both Stockfish and skaks scores for each position. Example:
+
+	```sh
+	python validation_moves/eval_from_pgn.py --pgn my_games.pgn --stockfish /usr/local/bin/stockfish > evals.csv
+	```
+
+- The `tuning/` scripts consume those score pairs to train new eval parameters and write YAML configs you can pass back to the engine. After collecting more data, rerun tuning to update the parameters.
+
 ## Cross-compiling
 
 Two sample toolchain presets are provided for Linux x86_64 and arm64 targets (`cmake/toolchains/clang-linux-*.cmake`). Update the sysroot paths to match your environment, then configure:
@@ -103,6 +118,15 @@ cmake --build --preset linux-cross-x86_64
 The presets assume a clang-based cross toolchain (`clang --target=<triple>`). Adjust the compiler paths and `CMAKE_SYSROOT` as needed.
 
 ## Tooling
+
+There is a `tunning` directory with Python scripts to help with performance benchmarking and puzzle solving. These scripts require Python 3.11+ and can be run as follows:
+
+```bashpython3 tunning/perf_benchmark.py --help
+```
+```bash
+
+
+```
 
 - `.clang-format` and `.clang-tidy` are configured for LLVM-style formatting and broad static analysis.
 - `CMakePresets.json` centralizes configuration for development, release, sanitizers, and cross targets.

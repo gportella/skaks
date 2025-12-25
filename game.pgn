@@ -1,0 +1,18 @@
+[Event "?"]
+[Site "Rio de Janeiro"]
+[Date "????.??.??"]
+[Round "5"]
+[White "Main line"]
+[Black "Old Benoni"]
+[Result "0-1"]
+[ECO "A68"]
+[Annotator "chess-teacher.com"]
+[PlyCount "42"]
+[EventDate "2005.10.01"]
+[SourceVersionDate "2024.08.02"]
+1. d4 c5 2. d5 d6 3. c4 g6 4. Nc3 Bg7 5. e4 Nf6 6. f4 O-O 7. Nf3 (7. e5 $2 dxe5
+8. fxe5 Ng4 $17) 7... e6 8. Be2 (8. dxe6 $6 fxe6 {improves Black's position})
+8... exd5 9. cxd5 Bg4 10. O-O Nbd7 11. h3 Bxf3 12. Bxf3 Re8 13. Re1 a6 14. a4 (
+14. Be3 b5 15. Qd2 $2 b4 16. Na4 Nxe4 17. Bxe4 Rxe4 $19) 14... c4 15. Kh1 Nc5
+16. Qc2 b5 17. axb5 axb5 18. Rxa8 Qxa8 19. Nxb5 Qa5 20. Nc3 Nxd5 $1 21. exd5 (
+21. Nxd5 Qxe1+ $19) 21... Rxe1+ 0-1

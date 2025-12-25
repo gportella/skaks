@@ -4,6 +4,7 @@
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
+#include "chess/search_params.hpp"
 #include "chess/time_manager.hpp"
 
 #include <algorithm>
@@ -238,7 +239,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
   if (allow_null_move(board, depth)) {
     UndoNull undo_null = make_null_move(board);
-    const int null_move_reduction = NULL_MOVE_REDUCTION;
+    const int null_move_reduction = search_params().null_move_reduction;
     SearchResult null_result = alphabeta_minimax(
         board, depth - 1 - null_move_reduction, beta - 1, beta, flip_side(stm),
         evaluator, scratch, ply + 1, repetition_start, ply_from_root + 1, false,
@@ -613,8 +614,9 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
   const std::size_t static_excluded_count = excluded_count;
   const bool multi_pv = params.pv_count > 1;
+  const auto& sparams = search_params();
   std::uint64_t nodes = 0;
-  int aspiration_window = ASPIRATION_WINDOW_INITIAL;
+  int aspiration_window = sparams.aspiration_window_initial;
   SearchResult best_result{};
   SearchResult result{};
 
@@ -633,7 +635,7 @@ SearchResult search_position(Board& board, SideToMove stm,
         if (is_mate_score(best_score)) {
           alpha = -INF;
           beta = INF;
-          aspiration_window = ASPIRATION_WINDOW_INITIAL;
+          aspiration_window = sparams.aspiration_window_initial;
         } else {
           const int window_low = best_score - aspiration_window;
           const int window_high = best_score + aspiration_window;
@@ -672,7 +674,7 @@ SearchResult search_position(Board& board, SideToMove stm,
           if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
             alpha = -INF;
             beta = INF;
-            window = ASPIRATION_WINDOW_INITIAL;
+            window = sparams.aspiration_window_initial;
             forced_full_window = true;
             attempts = 0;
             continue;
@@ -681,7 +683,7 @@ SearchResult search_position(Board& board, SideToMove stm,
             if (!forced_full_window) {
               alpha = -INF;
               beta = INF;
-              window = ASPIRATION_WINDOW_INITIAL;
+              window = sparams.aspiration_window_initial;
               forced_full_window = true;
               attempts = 0;
               continue;
@@ -692,7 +694,7 @@ SearchResult search_position(Board& board, SideToMove stm,
             alpha = -INF;
             beta = INF;
           } else {
-            window = std::min(window * 2, ASPIRATION_WINDOW_MAX);
+            window = std::min(window * 2, sparams.aspiration_window_max);
             alpha = std::max(result.score - window, -MATE_BOUND);
             beta = std::min(result.score + window, MATE_BOUND);
             continue;
@@ -702,7 +704,7 @@ SearchResult search_position(Board& board, SideToMove stm,
           if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
             alpha = -INF;
             beta = INF;
-            window = ASPIRATION_WINDOW_INITIAL;
+            window = sparams.aspiration_window_initial;
             forced_full_window = true;
             attempts = 0;
             continue;
@@ -711,7 +713,7 @@ SearchResult search_position(Board& board, SideToMove stm,
             if (!forced_full_window) {
               alpha = -INF;
               beta = INF;
-              window = ASPIRATION_WINDOW_INITIAL;
+              window = sparams.aspiration_window_initial;
               forced_full_window = true;
               attempts = 0;
               continue;
@@ -722,7 +724,7 @@ SearchResult search_position(Board& board, SideToMove stm,
             alpha = -INF;
             beta = INF;
           } else {
-            window = std::min(window * 2, ASPIRATION_WINDOW_MAX);
+            window = std::min(window * 2, sparams.aspiration_window_max);
             alpha = std::max(result.score - window, -MATE_BOUND);
             beta = std::min(result.score + window, MATE_BOUND);
             continue;
@@ -757,7 +759,7 @@ SearchResult search_position(Board& board, SideToMove stm,
             encode_move(result.best_move.from, result.best_move.to,
                         result.best_move.moving_pc, result.best_move.captured_pc,
                         result.best_move.promo_pc, result.best_move.flags);
-        aspiration_window = ASPIRATION_WINDOW_INITIAL;
+        aspiration_window = sparams.aspiration_window_initial;
         continue;
       }
 

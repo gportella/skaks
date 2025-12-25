@@ -10,6 +10,7 @@ add_library(chess_engine_core STATIC
   perf.cpp
   polyglot.cpp
   quiescence.cpp
+  params_loader.cpp
   scoring_rules.cpp
   search.cpp
   time_manager.cpp
@@ -22,10 +23,23 @@ target_include_directories(chess_engine_core
     ${SKAKS_GENERATED_INCLUDE_DIR}
 )
 
+target_include_directories(chess_engine_core SYSTEM PUBLIC
+  ${YAML_CPP_INCLUDE_DIR}
+)
+
 target_compile_features(chess_engine_core PUBLIC cxx_std_23)
 
 chess_set_default_warnings(chess_engine_core)
 chess_enable_sanitizers(chess_engine_core)
+
+target_link_libraries(chess_engine_core
+  PRIVATE
+    yaml-cpp
+)
+
+target_link_directories(chess_engine_core PRIVATE
+  ${YAML_CPP_LIB_DIR}
+)
 
 add_executable(skaks
   main.cpp
@@ -40,9 +54,18 @@ target_include_directories(skaks
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 
+target_include_directories(skaks SYSTEM PUBLIC
+  ${YAML_CPP_INCLUDE_DIR}
+)
+
 target_link_libraries(skaks
   PRIVATE
     chess_engine_core
+    yaml-cpp
+)
+
+target_link_directories(skaks PRIVATE
+  ${YAML_CPP_LIB_DIR}
 )
 
 target_compile_features(skaks PUBLIC cxx_std_23)
