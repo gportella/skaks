@@ -15,7 +15,7 @@ CTestTestfile.cmake
 # my own stuff
 validation_matches.sqlite3
 eval_pairs*.csv
-optuna.db
+tuning/optuna.db
 *.sqlite3
 
 # IDE/editor state
