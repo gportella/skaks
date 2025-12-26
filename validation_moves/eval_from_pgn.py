@@ -1,5 +1,6 @@
 import argparse
 import csv
+import concurrent.futures
 import os
 import re
 import select
@@ -7,7 +8,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
 import chess
 import chess.pgn
@@ -37,6 +38,72 @@ def count_sampled_positions(
             if max_positions is not None and total >= max_positions:
                 return total
     return total
+
+
+def collect_positions(
+    pgn_path: Path, sample_stride: int, max_positions: Optional[int]
+) -> List[Tuple[int, int, str, bool]]:
+    """Collect sampled positions as (game_idx, ply, fen, white_to_move)."""
+    positions: List[Tuple[int, int, str, bool]] = []
+    for game_idx, game in enumerate(parse_pgn_games(pgn_path)):
+        board = game.board()
+        for ply, move in enumerate(game.mainline_moves()):
+            board.push(move)
+            if ply % sample_stride != 0:
+                continue
+            positions.append(
+                (game_idx, ply + 1, board.fen(), board.turn == chess.WHITE)
+            )
+            if max_positions is not None and len(positions) >= max_positions:
+                return positions
+    return positions
+
+
+def process_chunk(
+    chunk: Sequence[Tuple[int, int, str, bool]],
+    stockfish_path: Path,
+    skaks_path: Path,
+    stockfish_depth: int,
+    skaks_params: Optional[Path],
+    pov: str,
+) -> Tuple[List[Dict[str, object]], List[str]]:
+    rows: List[Dict[str, object]] = []
+    failures: List[str] = []
+    with (
+        UciSearchEngine(stockfish_path, depth=stockfish_depth) as sf,
+        UciStaticEngine(
+            skaks_path,
+            eval_command="staticeval",
+            params_path=skaks_params,
+            add_uci_arg=True,
+        ) as sk,
+    ):
+        for game_idx, ply, fen, white_to_move in chunk:
+            sf_white = sf.search_eval_white(fen)
+            sk_white = sk.static_eval_white(fen)
+            if sf_white is None or sk_white is None:
+                if len(failures) < 20:
+                    failures.append(fen)
+                continue
+
+            if pov == "white":
+                sf_cp = sf_white
+                sk_cp = sk_white
+            else:
+                sf_cp = sf_white if white_to_move else -sf_white
+                sk_cp = sk_white if white_to_move else -sk_white
+
+            rows.append(
+                {
+                    "game_index": game_idx,
+                    "ply": ply,
+                    "side_to_move": "w" if white_to_move else "b",
+                    "fen": fen,
+                    "stockfish_cp": sf_cp,
+                    "skaks_cp": sk_cp,
+                }
+            )
+    return rows, failures
 
 
 class UciStaticEngine:
@@ -189,6 +256,140 @@ class UciStaticEngine:
         self.close()
 
 
+class UciSearchEngine:
+    def __init__(
+        self,
+        binary: Path,
+        depth: int,
+        params_path: Optional[Path] = None,
+        add_uci_arg: bool = False,
+    ) -> None:
+        argv: List[str] = [str(binary)]
+        if add_uci_arg:
+            argv.append("--uci")
+        if params_path is not None:
+            argv.extend(["--params", str(params_path)])
+        self._proc = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=False,
+            bufsize=0,
+        )
+        self._depth = depth
+        self._handshake()
+
+    def _send(self, payload: str) -> None:
+        assert self._proc.stdin is not None
+        self._proc.stdin.write((payload + "\n").encode("utf-8"))
+        self._proc.stdin.flush()
+
+    def _read_line(self, timeout: float = 1.0) -> Optional[str]:
+        assert self._proc.stdout is not None
+        fd = self._proc.stdout
+        ready, _, _ = select.select([fd], [], [], timeout)
+        if not ready:
+            return ""
+        line = fd.readline()
+        if line == b"":
+            return None
+        text = line.decode("utf-8", errors="replace").rstrip("\n")
+        return text
+
+    def _drain_until(self, token: str, timeout: float = 60.0) -> None:
+        deadline = time.monotonic() + timeout
+        seen: List[str] = []
+        while True:
+            if time.monotonic() > deadline:
+                code = self._proc.poll()
+                detail = f"timeout waiting for '{token}' during handshake"
+                if code is not None:
+                    detail += f" (exit {code})"
+                if seen:
+                    detail += f" | seen: {' | '.join(seen[-8:])}"
+                raise RuntimeError(detail)
+            line = self._read_line(timeout=0.2)
+            if line is None:
+                code = self._proc.poll()
+                detail = (
+                    f"engine terminated unexpectedly during handshake (exit {code})"
+                )
+                if seen:
+                    detail += f" | seen: {' | '.join(seen[-8:])}"
+                raise RuntimeError(detail)
+            if line == "":
+                continue
+            seen.append(line)
+            if line.strip() == token:
+                return
+
+    def _handshake(self) -> None:
+        self._send("uci")
+        self._drain_until("uciok")
+        self._send("isready")
+        self._drain_until("readyok")
+
+    @staticmethod
+    def _parse_score(text: str) -> Optional[int]:
+        if "score" not in text:
+            return None
+        # Typical: "info depth 15 ... score cp 34" or "score mate 3"
+        tokens = text.split()
+        for idx, tok in enumerate(tokens):
+            if tok == "score" and idx + 2 < len(tokens):
+                kind = tokens[idx + 1]
+                val = tokens[idx + 2]
+                if kind == "cp":
+                    try:
+                        return int(val)
+                    except ValueError:
+                        return None
+                if kind == "mate":
+                    try:
+                        mate_ply = int(val)
+                        return 32000 if mate_ply > 0 else -32000
+                    except ValueError:
+                        return None
+        return None
+
+    def search_eval_white(self, fen: str) -> Optional[int]:
+        self._send(f"position fen {fen}")
+        self._send(f"go depth {self._depth}")
+        last_score: Optional[int] = None
+        deadline = time.monotonic() + 60.0
+        while True:
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"search eval timed out; last score={last_score}")
+            line = self._read_line(timeout=0.5)
+            if line is None:
+                break
+            if line == "":
+                continue
+            stripped = line.strip()
+            if stripped.startswith("info") and "score" in stripped:
+                parsed = self._parse_score(stripped)
+                if parsed is not None:
+                    last_score = parsed
+            if stripped.startswith("bestmove"):
+                break
+        return last_score
+
+    def close(self) -> None:
+        try:
+            if self._proc.poll() is None:
+                self._send("quit")
+                self._proc.wait(timeout=2)
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
+
 def process_games(
     pgn_path: Path,
     stockfish_path: Path,
@@ -199,6 +400,9 @@ def process_games(
     total_expected: Optional[int],
     pov: str,
     skaks_params: Optional[Path],
+    stockfish_depth: int,
+    workers: int,
+    chunk_size: int,
 ) -> None:
     out_fields = [
         "game_index",
@@ -209,78 +413,56 @@ def process_games(
         "skaks_cp",
     ]
 
+    positions = collect_positions(pgn_path, sample_stride, max_positions)
+
     total = 0
-    with (
-        UciStaticEngine(stockfish_path, eval_command="eval") as sf,
-        UciStaticEngine(
-            skaks_path,
-            eval_command="staticeval",
-            params_path=skaks_params,
-            add_uci_arg=True,
-        ) as sk,
-        output_path.open("a", newline="", encoding="utf-8") as out_f,
-    ):
+    failures: List[str] = []
+    header_needed = not output_path.exists() or output_path.stat().st_size == 0
+    with output_path.open("a", newline="", encoding="utf-8") as out_f:
         writer = csv.DictWriter(out_f, fieldnames=out_fields)
-        writer.writeheader()
+        if header_needed:
+            writer.writeheader()
 
-        failures = 0
-        failure_samples = []
-
-        for game_idx, game in enumerate(parse_pgn_games(pgn_path)):
-            board = game.board()
-            for ply, move in enumerate(game.mainline_moves()):
-                board.push(move)
-                if ply % sample_stride != 0:
-                    continue
-                if max_positions is not None and total >= max_positions:
-                    return
-
-                fen = board.fen()
-                sf_white = sf.static_eval_white(fen)
-                sk_white = sk.static_eval_white(fen)
-
-                if sf_white is None or sk_white is None:
-                    failures += 1
-                    if len(failure_samples) < 20:
-                        failure_samples.append(fen)
-                    continue
-
-                if pov == "white":
-                    sf_cp = sf_white
-                    sk_cp = sk_white
-                else:
-                    sf_cp = sf_white if board.turn == chess.WHITE else -sf_white
-                    sk_cp = sk_white if board.turn == chess.WHITE else -sk_white
-                if sf_cp is None or sk_cp is None:
-                    failures += 1
-                    if len(failure_samples) < 20:
-                        failure_samples.append(board.fen())
-                    continue
-
-                writer.writerow(
-                    {
-                        "game_index": game_idx,
-                        "ply": ply + 1,
-                        "side_to_move": "w" if board.turn == chess.WHITE else "b",
-                        "fen": board.fen(),
-                        "stockfish_cp": sf_cp,
-                        "skaks_cp": sk_cp,
-                    }
-                )
-                total += 1
-
-                if total % 10 == 0 or total == 1:
-                    expected = total_expected if total_expected is not None else "?"
-                    print(
-                        f"[progress] {total}/{expected} positions (last fen: {fen})",
-                        end="\r",
-                        flush=True,
+        if workers <= 1:
+            rows, chunk_failures = process_chunk(
+                positions,
+                stockfish_path,
+                skaks_path,
+                stockfish_depth,
+                skaks_params,
+                pov,
+            )
+            writer.writerows(rows)
+            total += len(rows)
+            failures.extend(chunk_failures)
+        else:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
+                futures = []
+                for idx in range(0, len(positions), chunk_size):
+                    chunk = positions[idx : idx + chunk_size]
+                    futures.append(
+                        ex.submit(
+                            process_chunk,
+                            chunk,
+                            stockfish_path,
+                            skaks_path,
+                            stockfish_depth,
+                            skaks_params,
+                            pov,
+                        )
                     )
-
-                if total_expected is not None and total >= total_expected:
-                    expected = total_expected if total_expected is not None else "?"
-                    print(f"[progress] {total}/{expected} positions", flush=True)
-                    return
+                for fut in concurrent.futures.as_completed(futures):
+                    rows, chunk_failures = fut.result()
+                    writer.writerows(rows)
+                    total += len(rows)
+                    failures.extend(chunk_failures)
+                    if total % 10 == 0 or total == 1:
+                        expected = total_expected if total_expected is not None else "?"
+                        print(
+                            f"[progress] {total}/{expected} positions",
+                            end="\r",
+                            flush=True,
+                        )
 
     # Ensure progress prints end with a newline
     if total > 0:
@@ -339,6 +521,24 @@ def main() -> None:
         default=None,
         help="Path to skaks params file (passed as --params)",
     )
+    parser.add_argument(
+        "--stockfish-depth",
+        type=int,
+        default=15,
+        help="Depth for Stockfish search eval (PV score)",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of worker processes to parallelize evaluation",
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=32,
+        help="Positions per worker chunk when using parallel mode",
+    )
     args = parser.parse_args()
 
     if not args.pgn.exists():
@@ -370,6 +570,9 @@ def main() -> None:
         total_expected=total_expected,
         pov=args.pov,
         skaks_params=args.skaks_params,
+        stockfish_depth=args.stockfish_depth,
+        workers=max(1, args.workers),
+        chunk_size=max(1, args.chunk_size),
     )
 
 

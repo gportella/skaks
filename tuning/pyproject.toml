@@ -20,6 +20,10 @@ dependencies = [
 full = [
   "pandas>=2.2",
 ]
+selfplay = [
+  "python-chess>=1.999",
+  "dask[distributed]>=2024.5.0",
+]
 
 [project.scripts]
 skaks-opt = "skaks_opt.cli:main"

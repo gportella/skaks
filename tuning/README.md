@@ -12,6 +12,10 @@ Parameter tuning for skaks engine using the Python binding `skaks_eval`.
    ```bash
    cd tuning && uv pip install -e .
    ```
+3) Optional: self-play helpers (PGN/FEN sampling, Dask fan-out, checkpointing):
+   ```bash
+   cd tuning && uv pip install -e .[selfplay]
+   ```
 
 ## Dataset format
 
