@@ -32,6 +32,8 @@ struct CliOptions {
   bool polyglot_book_override = false;
   bool params_override = false;
   std::string params_path;
+  bool nnue_override = false;
+  std::string nnue_path;
   bool perf_mode = false;
   int perf_iterations = 3;
   int version_requests = 0;

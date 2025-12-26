@@ -6,6 +6,7 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/moves.hpp"
+#include "chess/nnue.hpp"
 #include "chess/params_loader.hpp"
 #include "chess/perf.hpp"
 #include "chess/polyglot.hpp"
@@ -78,6 +79,18 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
     chess::set_engine_params(params);
+  }
+
+  if (cli.options.nnue_override) {
+    auto net = std::make_shared<chess::NnueNetwork>();
+    std::string error;
+    if (!chess::load_nnue_from_file(cli.options.nnue_path, *net, error)) {
+      std::cerr << "Failed to load NNUE weights: " << error << "\n";
+      return EXIT_FAILURE;
+    }
+    chess::set_active_nnue(std::move(net));
+  } else {
+    chess::set_active_nnue(nullptr);
   }
 
   chess::Engine engine;

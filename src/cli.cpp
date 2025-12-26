@@ -30,7 +30,9 @@ CliParseResult parse_cli(int argc, char** argv) {
       ("polyglot-book", "Path to Polyglot opening book",
        cxxopts::value<std::string>())
       ("params", "Path to YAML engine parameter file",
-       cxxopts::value<std::string>())
+        cxxopts::value<std::string>())
+            ("nnue", "Path to NNUE weights YAML file",
+        cxxopts::value<std::string>())
       ("static-eval", "Print static evaluation for provided FEN",
        cxxopts::value<bool>()->default_value("false"))
       ("o,onlyfen", "Print FEN only in self-play mode")
@@ -130,6 +132,10 @@ CliParseResult parse_cli(int argc, char** argv) {
     if (parsed.count("params") > 0) {
       result.options.params_path = parsed["params"].as<std::string>();
       result.options.params_override = true;
+    }
+    if (parsed.count("nnue") > 0) {
+      result.options.nnue_path = parsed["nnue"].as<std::string>();
+      result.options.nnue_override = true;
     }
     result.options.perf_mode = parsed.count("perf") > 0;
     result.options.perf_iterations = parsed["perf-iters"].as<int>();

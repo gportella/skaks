@@ -27,6 +27,7 @@ add_executable(chess_engine_tests
   time_manager_tests.cpp
   zobrist_tests.cpp
   params_loader_tests.cpp
+  nnue_features_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests

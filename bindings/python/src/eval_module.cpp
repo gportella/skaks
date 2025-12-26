@@ -18,6 +18,9 @@
 namespace py = pybind11;
 using namespace pybind11::literals;
 
+// From nnue_module.cpp
+void bind_nnue(py::module_& m);
+
 namespace {
 
 template <typename T>
@@ -366,6 +369,8 @@ SelfPlayResult selfplay_many(const std::vector<std::string>& start_fens,
 
 PYBIND11_MODULE(skaks_eval, m) {
   m.doc() = "skaks evaluation bindings";
+
+  bind_nnue(m);
 
   m.def("eval_fens", &eval_fens, py::arg("fens"),
         py::arg("params") = std::nullopt, py::arg("threads") = 0,

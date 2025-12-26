@@ -4,6 +4,8 @@ import argparse
 import csv
 import json
 import math
+import sys
+import time
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -186,6 +188,24 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--study-name", default="skaks-texel", help="Study name")
     p.add_argument("--timeout", type=int, default=None, help="Timeout seconds")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
+    p.add_argument(
+        "--progress-every",
+        type=int,
+        default=0,
+        help="Print progress every N completed trials (0 disables)",
+    )
+    p.add_argument(
+        "--progress-style",
+        choices=["simple", "fancy"],
+        default="simple",
+        help="Progress output style (simple=fixed line, fancy=animated bar)",
+    )
+    p.add_argument(
+        "--progress-color",
+        choices=["auto", "ansi", "none"],
+        default="auto",
+        help="Colorize progress output (auto=tty only)",
+    )
     p.add_argument("--best-out", type=Path, help="Write best params to YAML")
     p.add_argument("--metrics-out", type=Path, help="Write per-trial metrics to CSV")
     p.add_argument("--plot-out", type=Path, help="Loss plot output (png)")
@@ -272,6 +292,16 @@ def main(argv: List[str] | None = None) -> None:
         load_if_exists=True,
     )
 
+    start_time = time.time()
+    initial_completed = sum(
+        1 for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+    )
+    planned_new = args.trials if args.trials is not None else None
+    planned_total = initial_completed + planned_new if planned_new is not None else None
+    color_enabled = args.progress_color in {"ansi"} or (
+        args.progress_color == "auto" and sys.stdout.isatty()
+    )
+
     def objective(trial: optuna.Trial) -> float:
         updates = {
             spec.name: quantized_suggest(trial, spec, args.sampler)
@@ -295,9 +325,100 @@ def main(argv: List[str] | None = None) -> None:
         trial.set_user_attr("texel_scale", scale)
         return loss
 
+    def _progress_callback(
+        study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+    ) -> None:
+        if args.progress_every <= 0:
+            return
+        # trial.number is zero-based; add 1 for human-friendly count
+        if (trial.number + 1) % args.progress_every != 0:
+            return
+        best = study.best_trial
+        best_val = getattr(best, "value", None)
+        best_loss = f"{best_val:.4f}" if best_val is not None else "-"
+        scale_val = trial.user_attrs.get("texel_scale")
+        scale_txt = f"{scale_val:.1f}" if scale_val is not None else "-"
+        err_cnt = trial.user_attrs.get("error_count", 0)
+        completed_all = sum(
+            1 for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+        )
+        session_completed = max(0, completed_all - initial_completed)
+        total = planned_new if planned_new is not None else "?"
+        elapsed = time.time() - start_time
+
+        # Colors
+        green = "\x1b[32m" if color_enabled else ""
+        yellow = "\x1b[33m" if color_enabled else ""
+        cyan = "\x1b[36m" if color_enabled else ""
+        reset = "\x1b[0m" if color_enabled else ""
+
+        improving = False
+        try:
+            if best_val is not None and trial.value <= best_val + 1e-9:
+                improving = True
+        except Exception:
+            improving = False
+
+        if args.progress_style == "fancy":
+            width = 30
+            # Unicode chess glyphs for a friendlier animation
+            pieces = [
+                "♔",
+                "♕",
+                "♖",
+                "♗",
+                "♘",
+                "♙",
+                "♚",
+                "♛",
+                "♜",
+                "♝",
+                "♞",
+                "♟",
+            ]
+            # Move piece position based on trial number; mod to stay in bounds
+            pos = (trial.number * 3) % width
+            piece = pieces[trial.number % len(pieces)]
+            track = "".join(piece if idx == pos else "·" for idx in range(width))
+            track_colored = f"{cyan}{track}{reset}" if color_enabled else track
+            loss_txt = (
+                f"{green if improving else yellow}{trial.value:.4f}{reset}"
+                if color_enabled
+                else f"{trial.value:.4f}"
+            )
+            best_txt = f"{green}{best_loss}{reset}" if color_enabled else best_loss
+            line = (
+                f"\r[progress] {session_completed}/{total} (total {completed_all}) [{track_colored}] "
+                f"loss={loss_txt} best={best_txt} "
+                f"scale={scale_txt} errors={err_cnt} "
+                f"elapsed={elapsed:.1f}s"
+            )
+        else:
+            loss_txt = (
+                f"{green if improving else yellow}{trial.value:.4f}{reset}"
+                if color_enabled
+                else f"{trial.value:.4f}"
+            )
+            best_txt = f"{green}{best_loss}{reset}" if color_enabled else best_loss
+            line = (
+                f"\r[progress] {session_completed}/{total} (total {completed_all}) "
+                f"loss={loss_txt} best={best_txt} "
+                f"scale={scale_txt} errors={err_cnt} "
+                f"elapsed={elapsed:.1f}s"
+            )
+
+        print(line, end="", flush=True)
+
     study.optimize(
-        objective, n_trials=args.trials, timeout=args.timeout, n_jobs=args.jobs
+        objective,
+        n_trials=args.trials,
+        timeout=args.timeout,
+        n_jobs=args.jobs,
+        callbacks=[_progress_callback],
     )
+
+    if args.progress_every > 0:
+        print()
 
     best = study.best_trial
     merged = apply_param_updates(base_params, best.params)

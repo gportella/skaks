@@ -1,0 +1,77 @@
+evaluation:
+  bishop_dev_bonus: 29
+  bishop_pair_bonus: 75
+  bishop_pin_penalty:
+    base: 22
+    mobility: 2
+  castle_urgency: 62
+  castling_bonus: 20
+  central_pawn_bonus: 22
+  check_penalty: 29
+  connect_rooks_bonus: 32
+  early_queen_penalty: 14
+  flank_pawn_penalty: 28
+  hanging_divisor: 4
+  hanging_min_penalty: 26
+  king_attack_weights:
+  - 14
+  - 32
+  - 30
+  - 44
+  - 74
+  - 20
+  - 14
+  - 32
+  - 30
+  - 44
+  - 74
+  - 20
+  king_ring_base: 7
+  king_ring_defended_scale: 9
+  king_ring_enemy_occupier: 14
+  king_ring_enemy_piece_material_scale: 34
+  knight_dev_bonus: 32
+  knight_pin_penalty:
+    base: 15
+    mobility: 0
+  mobility_scaling: 24
+  passed_pawn_advance: 1
+  passed_pawn_base: 14
+  pawn_pin_diagonal_penalty:
+    base: 15
+    mobility: 7
+  pawn_pin_straight_penalty:
+    base: 27
+    mobility: 7
+  pawn_shield_bonus: 10
+  rook_open_file_bonus: 44
+  rook_pin_penalty:
+    base: 23
+    mobility: 3
+  rook_semi_open_file_bonus: 44
+  tempo_bonus: 1
+  threat_base:
+  - 0
+  - 12
+  - 30
+  - 30
+  - 45
+  - 180
+  - 540
+  - 12
+  - 30
+  - 30
+  - 45
+  - 180
+  - 540
+  threat_weight: 5
+search:
+  aspiration_window_initial: 1794
+  aspiration_window_max: 6107
+  null_move_min_depth: 7
+  null_move_reduction: 3
+  quiescence_delta_margin: 318
+  quiescence_max_noisy_moves: 25
+  quiescence_max_ply: 12
+  quiescence_zero_gain_skip_index: 4
+texel_scale: 1197

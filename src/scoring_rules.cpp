@@ -4,6 +4,7 @@
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
 #include "chess/evaluation_params.hpp"
+#include "chess/nnue.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/pins.hpp"
 #include "chess/pst_tables.hpp"
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace chess {
 
@@ -672,6 +674,12 @@ int evaluate_board(const Board& board) {
     return -100000; // Black wins (bad for White)
   } else if (board.king_captured == PieceColor::Black) {
     return 100000; // White wins
+  }
+
+  if (const auto net = active_nnue()) {
+    const auto feat = make_nnue_features(board);
+    const float eval = net->forward(feat);
+    return static_cast<int>(std::lround(eval));
   }
 
   int total_eval = 0;

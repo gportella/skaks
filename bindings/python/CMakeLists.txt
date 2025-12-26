@@ -54,6 +54,7 @@ add_subdirectory("${SKAKS_ROOT}/src" core_build)
 
 add_library(skaks_eval MODULE
   src/eval_module.cpp
+  src/nnue_module.cpp
 )
 
 target_link_libraries(skaks_eval PRIVATE pybind11::module chess_engine_core)

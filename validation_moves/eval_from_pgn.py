@@ -40,19 +40,50 @@ def count_sampled_positions(
     return total
 
 
+def _parse_result(raw: str) -> Tuple[str, Optional[float], Optional[str]]:
+    """Normalize a PGN result string and derive outcome/winner.
+
+    Returns (normalized_result, outcome, winner), where outcome is in [0,1]
+    with 1.0 = white win, 0.0 = black win, 0.5 = draw. winner is one of
+    "w", "b", "d" or None if unknown.
+    """
+
+    normalized = raw.strip() if raw else ""
+    if normalized in {"1-0", "1/2-1/2", "0-1"}:
+        if normalized == "1-0":
+            return normalized, 1.0, "w"
+        if normalized == "0-1":
+            return normalized, 0.0, "b"
+        return normalized, 0.5, "d"
+    return normalized or "*", None, None
+
+
 def collect_positions(
     pgn_path: Path, sample_stride: int, max_positions: Optional[int]
-) -> List[Tuple[int, int, str, bool]]:
-    """Collect sampled positions as (game_idx, ply, fen, white_to_move)."""
-    positions: List[Tuple[int, int, str, bool]] = []
+) -> List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]]:
+    """Collect sampled positions as (game_idx, ply, fen, white_to_move, result, outcome, winner)."""
+
+    positions: List[
+        Tuple[int, int, str, bool, str, Optional[float], Optional[str]]
+    ] = []
     for game_idx, game in enumerate(parse_pgn_games(pgn_path)):
+        result_raw = game.headers.get("Result", "")
+        result_norm, outcome, winner = _parse_result(result_raw)
         board = game.board()
         for ply, move in enumerate(game.mainline_moves()):
             board.push(move)
             if ply % sample_stride != 0:
                 continue
             positions.append(
-                (game_idx, ply + 1, board.fen(), board.turn == chess.WHITE)
+                (
+                    game_idx,
+                    ply + 1,
+                    board.fen(),
+                    board.turn == chess.WHITE,
+                    result_norm,
+                    outcome,
+                    winner,
+                )
             )
             if max_positions is not None and len(positions) >= max_positions:
                 return positions
@@ -60,7 +91,7 @@ def collect_positions(
 
 
 def process_chunk(
-    chunk: Sequence[Tuple[int, int, str, bool]],
+    chunk: Sequence[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]],
     stockfish_path: Path,
     skaks_path: Path,
     stockfish_depth: int,
@@ -78,7 +109,7 @@ def process_chunk(
             add_uci_arg=True,
         ) as sk,
     ):
-        for game_idx, ply, fen, white_to_move in chunk:
+        for game_idx, ply, fen, white_to_move, result, outcome, winner in chunk:
             sf_white = sf.search_eval_white(fen)
             sk_white = sk.static_eval_white(fen)
             if sf_white is None or sk_white is None:
@@ -101,6 +132,9 @@ def process_chunk(
                     "fen": fen,
                     "stockfish_cp": sf_cp,
                     "skaks_cp": sk_cp,
+                    "result": result,
+                    "outcome": outcome,
+                    "winner": winner,
                 }
             )
     return rows, failures
@@ -411,6 +445,9 @@ def process_games(
         "fen",
         "stockfish_cp",
         "skaks_cp",
+        "result",
+        "outcome",
+        "winner",
     ]
 
     positions = collect_positions(pgn_path, sample_stride, max_positions)
@@ -469,12 +506,11 @@ def process_games(
         expected = total_expected if total_expected is not None else "?"
         print(f"[progress] {total}/{expected} positions", flush=True)
 
-    if failures > 0:
-        print(f"[warn] skipped {failures} positions with engine errors")
-        if failure_samples:
-            print("[warn] sample failing FENs:")
-            for fen in failure_samples:
-                print(f"  {fen}")
+    if failures:
+        print(f"[warn] skipped {len(failures)} positions with engine errors")
+        print("[warn] sample failing FENs:")
+        for fen in failures[:20]:
+            print(f"  {fen}")
 
 
 def main() -> None:

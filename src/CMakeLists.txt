@@ -15,6 +15,7 @@ add_library(chess_engine_core STATIC
   search.cpp
   time_manager.cpp
   zobrist.cpp
+  nnue.cpp
 )
 
 target_include_directories(chess_engine_core

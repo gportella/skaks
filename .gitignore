@@ -30,3 +30,4 @@ optuna.db
 
 # macOS
 .DS_Store
+optuna.db-journal
