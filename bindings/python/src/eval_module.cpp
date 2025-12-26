@@ -2,6 +2,7 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/evaluation_params.hpp"
+#include "chess/search.hpp"
 #include "chess/search_params.hpp"
 
 #include <algorithm>
@@ -256,6 +257,111 @@ py::object eval_fen_single(const std::string& fen,
   return py::dict("ok"_a = true, "cp"_a = res.cp);
 }
 
+struct SelfPlayOptions {
+  int depth = 4;
+  std::uint64_t movetime_ms = 0; // 0 means unused
+  int max_plies = 160;
+  int sample_stride = 4;
+};
+
+struct SelfPlayResult {
+  std::vector<std::string> fens;
+  std::vector<double> outcomes;
+  std::vector<std::string> side_to_move;
+  int games_played = 0;
+};
+
+double game_outcome(chess::Board board) {
+  const bool king_captured = board.king_captured != chess::PieceColor::None;
+  const bool has_moves = chess::has_legal_moves(board, board.side_to_move);
+  const bool side_in_check = chess::is_check(board, board.side_to_move);
+
+  if (king_captured) {
+    return board.king_captured == chess::PieceColor::White ? 0.0 : 1.0;
+  }
+  if (!has_moves && side_in_check) {
+    return board.side_to_move == chess::SideToMove::White ? 0.0 : 1.0;
+  }
+  return 0.5;
+}
+
+chess::SearchParameters make_search_params(const SelfPlayOptions& opts) {
+  chess::SearchParameters params{};
+  if (opts.movetime_ms > 0) {
+    params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+    chess::SearchLimits limits{};
+    limits.use_time = true;
+    limits.per_move = true;
+    limits.move_time_ms = opts.movetime_ms;
+    params.limits = limits;
+  } else {
+    params.depth = opts.depth;
+  }
+  params.alpha = -10000;
+  params.beta = 10000;
+  return params;
+}
+
+SelfPlayResult selfplay_many(const std::vector<std::string>& start_fens,
+                             const std::optional<py::dict>& params,
+                             const SelfPlayOptions& opts) {
+  if (start_fens.empty()) {
+    throw std::invalid_argument("start_fens must not be empty");
+  }
+  if ((opts.depth <= 0 && opts.movetime_ms == 0) || opts.max_plies <= 0 ||
+      opts.sample_stride <= 0) {
+    throw std::invalid_argument("invalid self-play options");
+  }
+
+  chess::EngineParams p =
+      params ? params_from_dict(*params) : chess::default_engine_params();
+  chess::set_engine_params(p);
+
+  SelfPlayResult out{};
+  const chess::SearchParameters search_params = make_search_params(opts);
+
+  py::gil_scoped_release release;
+  for (std::size_t game_idx = 0; game_idx < start_fens.size(); ++game_idx) {
+    chess::Board board = chess::initial_board(start_fens[game_idx]);
+    chess::Engine engine;
+    engine.reset_history(board);
+
+    int plies_played = 0;
+
+    while (plies_played < opts.max_plies) {
+      auto result = engine.search(board, search_params);
+      const bool has_move =
+          result.best_move.moving_pc != chess::OccupancyType::empty;
+      if (!has_move) {
+        break;
+      }
+
+      const bool irreversible = chess::move_is_irreversible(result.best_move);
+      chess::make_move(board, result.best_move);
+      engine.record_position(board.position_key, irreversible);
+      ++plies_played;
+
+      if ((plies_played - 1) % opts.sample_stride == 0) {
+        out.fens.push_back(chess::board_to_fen(board));
+        out.side_to_move.push_back(board.side_to_move == chess::SideToMove::White
+                                       ? std::string("w")
+                                       : std::string("b"));
+      }
+
+      if (board.is_terminal()) {
+        break;
+      }
+    }
+
+    const double outcome = game_outcome(board);
+    for (std::size_t i = out.outcomes.size(); i < out.fens.size(); ++i) {
+      out.outcomes.push_back(outcome);
+    }
+    out.games_played += 1;
+  }
+  return out;
+}
+
 } // namespace
 
 PYBIND11_MODULE(skaks_eval, m) {
@@ -269,4 +375,26 @@ PYBIND11_MODULE(skaks_eval, m) {
   m.def("eval_fen", &eval_fen_single, py::arg("fen"),
         py::arg("params") = std::nullopt,
         "Evaluate a single FEN. Returns {ok, cp or error}.");
+
+  m.def(
+      "selfplay",
+      [](const std::vector<std::string>& start_fens,
+         const std::optional<py::dict>& params, int depth, int movetime_ms,
+         int max_plies, int sample_stride) {
+        SelfPlayOptions opts{};
+        opts.depth = depth;
+        opts.movetime_ms =
+            movetime_ms > 0 ? static_cast<std::uint64_t>(movetime_ms) : 0ULL;
+        opts.max_plies = max_plies;
+        opts.sample_stride = sample_stride;
+        auto res = selfplay_many(start_fens, params, opts);
+        return py::dict("fen"_a = res.fens, "outcome"_a = res.outcomes,
+                        "side_to_move"_a = res.side_to_move,
+                        "games_played"_a = res.games_played);
+      },
+      py::arg("start_fens"), py::arg("params") = std::nullopt,
+      py::arg("depth") = 0, py::arg("movetime_ms") = 200,
+      py::arg("max_plies") = 160, py::arg("sample_stride") = 4,
+      "Run internal self-play over start_fens and return sampled FENs."
+      " Exactly one of depth or movetime_ms must be positive.");
 }

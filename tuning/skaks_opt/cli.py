@@ -55,13 +55,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default="side",
         help="Interpret scores as side-to-move (default, matches engine outputs) or white POV",
     )
-    p.add_argument("--sampler", choices=["tpe", "random"], default="tpe")
+    p.add_argument(
+        "--sampler",
+        choices=["cmaes", "tpe", "random"],
+        default="cmaes",
+        help="Sampler to use (default: cmaes)",
+    )
     p.add_argument(
         "--mtpe",
         action="store_true",
         help="Use multivariate TPE (grouped) for correlated params; best with multiple jobs",
     )
-    p.add_argument("--pruner", choices=["none", "median"], default="median")
+    p.add_argument(
+        "--pruner",
+        choices=["none", "median", "successive_halving", "hyperband"],
+        default="median",
+    )
     p.add_argument("--storage", help="Optuna storage URL for distributed tuning")
     p.add_argument(
         "--study-name", default="skaks-opt", help="Study name (used with storage)"
@@ -117,11 +126,21 @@ def main(argv: List[str] | None = None) -> None:
             n_startup_trials=30 if args.mtpe else 10,
             warn_independent_sampling=not args.mtpe,
         )
-    else:
+    elif args.sampler == "random":
         sampler = optuna.samplers.RandomSampler(seed=args.seed)
+    else:
+        sampler = optuna.samplers.CmaEsSampler(seed=args.seed)
 
     if args.pruner == "median":
         pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=0)
+    elif args.pruner == "successive_halving":
+        pruner = optuna.pruners.SuccessiveHalvingPruner(
+            min_resource=1, reduction_factor=3, bootstrap_count=0
+        )
+    elif args.pruner == "hyperband":
+        pruner = optuna.pruners.HyperbandPruner(
+            min_resource=1, max_resource="auto", reduction_factor=3, bootstrap_count=0
+        )
     else:
         pruner = optuna.pruners.NopPruner()
 
@@ -134,11 +153,15 @@ def main(argv: List[str] | None = None) -> None:
         load_if_exists=True,
     )
 
+    def quantized_suggest(trial: optuna.Trial, spec) -> int:
+        if args.sampler == "cmaes":
+            raw = trial.suggest_float(spec.name, spec.low, spec.high)
+            stepped = round((raw - spec.low) / spec.step) * spec.step + spec.low
+            return int(max(spec.low, min(spec.high, stepped)))
+        return int(trial.suggest_int(spec.name, spec.low, spec.high, step=spec.step))
+
     def objective(trial: optuna.Trial) -> float:
-        updates = {
-            spec.name: trial.suggest_int(spec.name, spec.low, spec.high, step=spec.step)
-            for spec in param_space
-        }
+        updates = {spec.name: quantized_suggest(trial, spec) for spec in param_space}
         result = evaluate_params(
             param_updates=updates,
             dataset=train_ds,
