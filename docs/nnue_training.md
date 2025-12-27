@@ -30,73 +30,43 @@ The C++ helper `chess::NnueNetwork` expects:
 
 The forward pass applies a ReLU hidden layer and a single linear output. Input size is fixed to 1537; hidden size is inferred from `b1.size()`.
 
-## Quick PyTorch training sketch
+## One-shot trainer (Python)
 
-This is a bare-bones example using FEN/outcome pairs (outcome in [0, 1], e.g., win=1, loss=0, draw=0.5). Adjust to your dataset and regularization needs.
+Use `tuning/nnue_train.py` to train and export weights in the engine format (quantized int8/int32 with optional `scale`). It reads CSVs like `eval_pairs_pvs_with_results.csv` (fen + outcome) or `eval_pairs_pvs.csv` (fen + eval_cp).
 
-```python
-import torch
-from torch import nn
-from torch.utils.data import Dataset, DataLoader
-from skaks_eval import features_from_fen
+Example (outcome labels already in [0, 1]):
 
-class FenDataset(Dataset):
-    def __init__(self, rows):  # rows: list of (fen, outcome)
-        self.rows = rows
-    def __len__(self):
-        return len(self.rows)
-    def __getitem__(self, idx):
-        fen, outcome = self.rows[idx]
-        x = torch.from_numpy(features_from_fen(fen)).float()
-        y = torch.tensor(outcome, dtype=torch.float32)
-        return x, y
-
-class TinyNnue(nn.Module):
-    def __init__(self, hidden=128):
-        super().__init__()
-        self.fc1 = nn.Linear(1537, hidden)
-        self.fc2 = nn.Linear(hidden, 1)
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        return self.fc2(x).squeeze(-1)
-
-def train(rows, hidden=128, epochs=3, batch_size=1024, lr=1e-3):
-    device = torch.device(
-        "cuda" if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available()
-        else "cpu"
-    )
-    ds = FenDataset(rows)
-    dl = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    model = TinyNnue(hidden).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=lr)
-    loss_fn = nn.BCEWithLogitsLoss()  # sigmoid inside
-
-    model.train()
-    for _ in range(epochs):
-        for xb, yb in dl:
-            xb, yb = xb.to(device), yb.to(device)
-            opt.zero_grad()
-            logits = model(xb)
-            loss = loss_fn(logits, yb)
-            loss.backward()
-            opt.step()
-    return model
+```bash
+python tuning/nnue_train.py --data eval_pairs_pvs_with_results.csv --out nnue_weights.json
 ```
 
-## Exporting weights to C++ layout
+Example (centipawn evals converted to probability, scaled by 600, POV = side_to_move if present):
 
-After training, move tensors to CPU and flatten:
-
-```python
-state = model.state_dict()
-w1 = state['fc1.weight'].contiguous().view(-1).tolist()
-b1 = state['fc1.bias'].tolist()
-w2 = state['fc2.weight'].contiguous().view(-1).tolist()  # shape [1, hidden]
-b2 = float(state['fc2.bias'][0])
+```bash
+python tuning/nnue_train.py \
+  --data eval_pairs_pvs.csv \
+  --eval-col eval_cp \
+  --cp-scale 600 \
+  --pov side \
+  --out nnue_weights.json
 ```
 
-These arrays map directly onto `chess::NnueNetwork` fields. The current C++ side only runs inference; weight loading/writing is left to the caller (e.g., embed JSON/binary or extend bindings to accept weights).
+Flags of interest: `--hidden` (default 256), `--epochs`, `--batch-size`, `--lr`, `--val-split`, `--cache-features`, `--scale` (post-int scaling). Device preference: CUDA, else MPS on macOS, else CPU.
+
+Output schema (consumed by engine `--nnue` and `skaks_eval.load_nnue_yaml`):
+
+```json
+{
+  "nnue": {
+    "hidden": 256,
+    "w1": [int8...],
+    "b1": [int32...],
+    "w2": [int8...],
+    "b2": int32,
+    "scale": 1.0
+  }
+}
+```
 
 ## Dataset tips
 

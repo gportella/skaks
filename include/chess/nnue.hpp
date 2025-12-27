@@ -30,6 +30,12 @@ struct NnueFeatures {
 // Forward declaration
 struct NnueNetwork;
 
+// Simple accumulator holding post-ReLU hidden activations for the current
+// features. This is a per-position cache; incremental update is a future step.
+struct NnueAccumulator {
+  std::vector<int32_t> activations;
+};
+
 // Map OccupancyType to [0, kNnuePieceKinds).
 std::size_t nnue_piece_index(OccupancyType occ);
 
@@ -51,19 +57,25 @@ bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
 void set_active_nnue(std::shared_ptr<NnueNetwork> net);
 std::shared_ptr<const NnueNetwork> active_nnue();
 
-// Minimal two-layer dense network (ReLU hidden) for embedding small NNUE models.
+// Minimal two-layer dense network (ReLU hidden) with int8 quantized weights.
+// Hidden size is typically 256 in this build; weights are assumed row-major.
 struct NnueNetwork {
-  std::vector<float> w1; // [hidden, input]
-  std::vector<float> b1; // [hidden]
-  std::vector<float> w2; // [hidden]
-  float b2{0.0f};
+  std::vector<int8_t> w1;   // [hidden, input]
+  std::vector<int32_t> b1;  // [hidden]
+  std::vector<int8_t> w2;   // [hidden]
+  int32_t b2{0};
+  float output_scale{1.0f}; // scale int output to cp
   std::size_t hidden_size() const {
     return b1.size();
   }
   std::size_t input_size() const {
     return kNnueInputs;
   }
+  // Build activations (post-ReLU) from features.
+  void build_accumulator(const NnueFeatures& feat, NnueAccumulator& acc) const;
+  // Forward using either a prebuilt accumulator or raw features.
   float forward(const NnueFeatures& feat) const;
+  float forward(const NnueAccumulator& acc) const;
 };
 
 } // namespace chess

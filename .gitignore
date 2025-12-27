@@ -31,3 +31,4 @@ optuna.db
 # macOS
 .DS_Store
 optuna.db-journal
+eval_pairs_pvs.csv

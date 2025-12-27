@@ -1,6 +1,8 @@
 #include "chess/board.hpp"
 #include "chess/nnue.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -45,6 +47,17 @@ to_vector_flat(py::array_t<float, py::array::c_style | py::array::forcecast> arr
   return std::vector<float>(data, data + expected);
 }
 
+int8_t q8(float v) {
+  const int iv = static_cast<int>(std::lround(v));
+  return static_cast<int8_t>(std::clamp(iv, -127, 127));
+}
+
+int32_t q32(float v) {
+  const long long iv = static_cast<long long>(std::llround(v));
+  const long long clamped = std::clamp(iv, -2147483648LL, 2147483647LL);
+  return static_cast<int32_t>(clamped);
+}
+
 std::vector<std::int8_t> to_vector_int8(
     py::array_t<std::int8_t, py::array::c_style | py::array::forcecast> arr,
     std::size_t expected) {
@@ -69,10 +82,19 @@ double forward_from_arrays(
   const auto b2_vec = to_vector_flat(b2, 1);
 
   chess::NnueNetwork net{};
-  net.w1 = w1_vec;
-  net.b1 = b1_vec;
-  net.w2 = w2_vec;
-  net.b2 = b2_vec.front();
+  net.w1.resize(w1_vec.size());
+  for (std::size_t i = 0; i < w1_vec.size(); ++i) {
+    net.w1[i] = q8(w1_vec[i]);
+  }
+  net.b1.resize(b1_vec.size());
+  for (std::size_t i = 0; i < b1_vec.size(); ++i) {
+    net.b1[i] = q32(b1_vec[i]);
+  }
+  net.w2.resize(w2_vec.size());
+  for (std::size_t i = 0; i < w2_vec.size(); ++i) {
+    net.w2[i] = q8(w2_vec[i]);
+  }
+  net.b2 = q32(b2_vec.front());
 
   chess::NnueFeatures f{};
   if (!fen_opt.is_none()) {
@@ -103,20 +125,20 @@ py::dict load_yaml_weights(const std::string& path) {
   py::dict d;
   d["hidden"] = hidden;
 
-  py::array_t<float> w1_arr(
+  py::array_t<int8_t> w1_arr(
       {hidden, static_cast<py::ssize_t>(chess::kNnueInputs)});
   std::memcpy(w1_arr.mutable_data(), net.w1.data(),
-              net.w1.size() * sizeof(float));
+              net.w1.size() * sizeof(int8_t));
   d["w1"] = std::move(w1_arr);
 
-  py::array_t<float> b1_arr({hidden});
+  py::array_t<int32_t> b1_arr({hidden});
   std::memcpy(b1_arr.mutable_data(), net.b1.data(),
-              net.b1.size() * sizeof(float));
+              net.b1.size() * sizeof(int32_t));
   d["b1"] = std::move(b1_arr);
 
-  py::array_t<float> w2_arr({hidden});
+  py::array_t<int8_t> w2_arr({hidden});
   std::memcpy(w2_arr.mutable_data(), net.w2.data(),
-              net.w2.size() * sizeof(float));
+              net.w2.size() * sizeof(int8_t));
   d["w2"] = std::move(w2_arr);
 
   d["b2"] = net.b2;

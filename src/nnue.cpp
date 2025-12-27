@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -14,6 +15,8 @@ namespace chess {
 namespace {
 constexpr std::size_t kPiecesPerKing = kNnuePieceKinds * kNnueSquares;
 std::shared_ptr<NnueNetwork> g_active_nnue;
+constexpr int kQuantMin = -127;
+constexpr int kQuantMax = 127;
 
 std::size_t king_bucket_index(bool white_king) {
   return white_king ? 0 : 1;
@@ -112,6 +115,17 @@ bool parse_float_scalar(const YAML::Node& node, const char* key, float& out,
   }
   return true;
 }
+
+int8_t quantize_int8(float v) {
+  const int iv = static_cast<int>(std::lround(v));
+  return static_cast<int8_t>(std::clamp(iv, kQuantMin, kQuantMax));
+}
+
+int32_t quantize_int32(float v) {
+  const long long iv = static_cast<long long>(std::llround(v));
+  const long long clamped = std::clamp(iv, -2147483648LL, 2147483647LL);
+  return static_cast<int32_t>(clamped);
+}
 } // namespace
 
 std::size_t nnue_piece_index(OccupancyType occ) {
@@ -154,22 +168,40 @@ NnueFeatures make_nnue_features(const Board& board) {
   return feat;
 }
 
-float NnueNetwork::forward(const NnueFeatures& feat) const {
+void NnueNetwork::build_accumulator(const NnueFeatures& feat,
+                                    NnueAccumulator& acc) const {
   const std::size_t hidden = hidden_size();
   if (w1.size() != hidden * input_size() || w2.size() != hidden) {
     throw std::runtime_error("NNUE weights have inconsistent dimensions");
   }
-  float out = b2;
+  acc.activations.assign(hidden, 0);
   for (std::size_t h = 0; h < hidden; ++h) {
-    float sum = b1[h];
-    const float* w_row = w1.data() + h * input_size();
+    int32_t sum = b1[h];
+    const int8_t* w_row = w1.data() + h * input_size();
     for (std::size_t i = 0; i < input_size(); ++i) {
-      sum += w_row[i] * static_cast<float>(feat.values[i]);
+      sum +=
+          static_cast<int32_t>(w_row[i]) * static_cast<int32_t>(feat.values[i]);
     }
-    const float act = std::max(0.0f, sum);
-    out += w2[h] * act;
+    acc.activations[h] = std::max<int32_t>(0, sum);
   }
-  return out;
+}
+
+float NnueNetwork::forward(const NnueAccumulator& acc) const {
+  if (acc.activations.size() != hidden_size()) {
+    throw std::runtime_error("Accumulator size mismatch");
+  }
+  int64_t out = static_cast<int64_t>(b2);
+  for (std::size_t h = 0; h < hidden_size(); ++h) {
+    out +=
+        static_cast<int64_t>(w2[h]) * static_cast<int64_t>(acc.activations[h]);
+  }
+  return static_cast<float>(out) * output_scale;
+}
+
+float NnueNetwork::forward(const NnueFeatures& feat) const {
+  NnueAccumulator acc;
+  build_accumulator(feat, acc);
+  return forward(acc);
 }
 
 bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
@@ -199,6 +231,7 @@ bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
   std::vector<float> b1;
   std::vector<float> w2;
   float b2 = 0.0f;
+  float scale = 1.0f;
 
   if (!parse_float_sequence(nnue, "w1", w1, error, std::nullopt)) {
     return false;
@@ -211,6 +244,16 @@ bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
   }
   if (!parse_float_scalar(nnue, "b2", b2, error)) {
     return false;
+  }
+  if (const auto scale_node = nnue["scale"]) {
+    try {
+      scale = scale_node.as<float>();
+    } catch (const YAML::BadConversion& ex) {
+      std::ostringstream oss;
+      oss << "Invalid float for 'scale': " << ex.what();
+      error = oss.str();
+      return false;
+    }
   }
 
   if (b1.empty()) {
@@ -252,10 +295,20 @@ bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
     return false;
   }
 
-  out.w1 = std::move(w1);
-  out.b1 = std::move(b1);
-  out.w2 = std::move(w2);
-  out.b2 = b2;
+  out.w1.resize(w1.size());
+  for (std::size_t i = 0; i < w1.size(); ++i) {
+    out.w1[i] = quantize_int8(w1[i]);
+  }
+  out.b1.resize(b1.size());
+  for (std::size_t i = 0; i < b1.size(); ++i) {
+    out.b1[i] = quantize_int32(b1[i]);
+  }
+  out.w2.resize(w2.size());
+  for (std::size_t i = 0; i < w2.size(); ++i) {
+    out.w2[i] = quantize_int8(w2[i]);
+  }
+  out.b2 = quantize_int32(b2);
+  out.output_scale = scale;
   return true;
 }
 

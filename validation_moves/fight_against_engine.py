@@ -4,6 +4,7 @@
 import argparse
 import os
 import select
+import shutil
 import subprocess
 import sys
 import time
@@ -20,6 +21,27 @@ DEFAULT_ENGINE = "skaks"
 DEFAULT_HANDICAP_FACTOR = 0.35
 DEFAULT_HANDICAP_DEPTH = 6
 MIN_CLOCK_MS = 1
+
+
+def _resolve_engine(path_str: str) -> str:
+    """Resolve an engine binary path, searching common build locations and PATH."""
+    candidate = Path(path_str)
+    search = []
+    if candidate.is_absolute():
+        search.append(candidate)
+    else:
+        search.append(Path.cwd() / candidate)
+        repo_root = Path(__file__).resolve().parent.parent
+        search.append(repo_root / candidate)
+        search.append(repo_root / "build" / "debug" / "bin" / candidate.name)
+        search.append(repo_root / "build" / "release" / "bin" / candidate.name)
+    for cand in search:
+        if cand.exists():
+            return str(cand.resolve())
+    which = shutil.which(path_str)
+    if which:
+        return which
+    raise FileNotFoundError(f"Engine binary not found: {path_str}")
 
 
 @dataclass
@@ -269,8 +291,8 @@ def run_game(
     handicap_depth: int,
     handicap_enabled: bool,
 ) -> int:
-    reference_path = reference_engine
-    opponent_path = opponent_engine
+    reference_path = _resolve_engine(reference_engine)
+    opponent_path = _resolve_engine(opponent_engine)
 
     white_name = Path(reference_path).name
     black_name = Path(opponent_path).name

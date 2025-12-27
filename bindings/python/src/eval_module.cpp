@@ -11,6 +11,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -274,6 +275,14 @@ struct SelfPlayResult {
   int games_played = 0;
 };
 
+struct ArenaResult {
+  int wins = 0;
+  int losses = 0;
+  int draws = 0;
+  int games = 0;
+  double score = 0.0;
+};
+
 double game_outcome(chess::Board board) {
   const bool king_captured = board.king_captured != chess::PieceColor::None;
   const bool has_moves = chess::has_legal_moves(board, board.side_to_move);
@@ -365,6 +374,101 @@ SelfPlayResult selfplay_many(const std::vector<std::string>& start_fens,
   return out;
 }
 
+ArenaResult arena_selfplay(const std::vector<std::string>& start_fens,
+                           const std::optional<py::dict>& base_params_dict,
+                           const std::optional<py::dict>& cand_params_dict,
+                           int games, int depth, int movetime_ms,
+                           int max_plies) {
+  if (games <= 0) {
+    throw std::invalid_argument("games must be positive");
+  }
+  if (start_fens.empty()) {
+    throw std::invalid_argument("start_fens must not be empty");
+  }
+  if ((depth <= 0 && movetime_ms <= 0) || (depth > 0 && movetime_ms > 0)) {
+    throw std::invalid_argument(
+        "exactly one of depth or movetime_ms must be set");
+  }
+  if (max_plies <= 0) {
+    throw std::invalid_argument("max_plies must be positive");
+  }
+
+  chess::EngineParams base_params = base_params_dict
+                                        ? params_from_dict(*base_params_dict)
+                                        : chess::default_engine_params();
+  chess::EngineParams cand_params =
+      cand_params_dict ? params_from_dict(*cand_params_dict) : base_params;
+
+  ArenaResult res{};
+  chess::Engine engine;
+
+  for (int game_idx = 0; game_idx < games; ++game_idx) {
+    const auto& fen =
+        start_fens[static_cast<std::size_t>(game_idx) % start_fens.size()];
+    chess::Board board = chess::initial_board(fen);
+    engine.reset_history(board);
+
+    const bool cand_white = (game_idx % 2 == 0);
+    int plies_played = 0;
+
+    while (plies_played < max_plies) {
+      const bool cand_to_move = (board.side_to_move == chess::SideToMove::White)
+                                    ? cand_white
+                                    : !cand_white;
+      if (cand_to_move) {
+        chess::set_engine_params(cand_params);
+      } else {
+        chess::set_engine_params(base_params);
+      }
+
+      chess::SearchParameters search_params{};
+      if (movetime_ms > 0) {
+        search_params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        chess::SearchLimits limits{};
+        limits.use_time = true;
+        limits.per_move = true;
+        limits.move_time_ms = static_cast<std::uint64_t>(movetime_ms);
+        search_params.limits = limits;
+      } else {
+        search_params.depth = depth;
+      }
+      search_params.alpha = -10000;
+      search_params.beta = 10000;
+
+      auto search_result = engine.search(board, search_params);
+      const bool has_move =
+          search_result.best_move.moving_pc != chess::OccupancyType::empty;
+      if (!has_move) {
+        break;
+      }
+
+      const bool irreversible =
+          chess::move_is_irreversible(search_result.best_move);
+      chess::make_move(board, search_result.best_move);
+      engine.record_position(board.position_key, irreversible);
+      ++plies_played;
+
+      if (board.is_terminal()) {
+        break;
+      }
+    }
+
+    const double outcome = game_outcome(board);
+    if (outcome > 0.5) {
+      res.wins += 1;
+    } else if (outcome < 0.5) {
+      res.losses += 1;
+    } else {
+      res.draws += 1;
+    }
+    res.games += 1;
+  }
+
+  const int total = res.wins + res.losses + res.draws;
+  res.score = (total > 0) ? (res.wins + 0.5 * res.draws) / total : 0.0;
+  return res;
+}
+
 } // namespace
 
 PYBIND11_MODULE(skaks_eval, m) {
@@ -402,4 +506,25 @@ PYBIND11_MODULE(skaks_eval, m) {
       py::arg("max_plies") = 160, py::arg("sample_stride") = 4,
       "Run internal self-play over start_fens and return sampled FENs."
       " Exactly one of depth or movetime_ms must be positive.");
+
+  m.def(
+      "arena",
+      [](const std::vector<std::string>& start_fens,
+         const std::optional<py::dict>& base_params,
+         const std::optional<py::dict>& cand_params, int games, int depth,
+         int movetime_ms, int max_plies) {
+        auto res = arena_selfplay(start_fens, base_params, cand_params, games,
+                                  depth, movetime_ms, max_plies);
+        return py::dict("score"_a = res.score, "wins"_a = res.wins,
+                        "losses"_a = res.losses, "draws"_a = res.draws,
+                        "games"_a = res.games);
+      },
+      py::arg("start_fens"), py::arg("base_params") = std::nullopt,
+      py::arg("cand_params") = std::nullopt, py::arg("games") = 20,
+      py::arg("depth") = 4, py::arg("movetime_ms") = 0,
+      py::arg("max_plies") = 160,
+      "Run baseline-vs-candidate arena internally. Baseline defaults to the"
+      " built-in params unless base_params is provided; cand_params overrides"
+      " the candidate (fallbacks to baseline). Exactly one of depth or"
+      " movetime_ms must be positive.");
 }

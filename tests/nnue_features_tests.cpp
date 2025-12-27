@@ -39,16 +39,16 @@ TEST(NnueFeatures, SideToMoveBitFlips) {
 TEST(NnueNetwork, ForwardSimpleWeights) {
   chess::NnueNetwork net{};
   const std::size_t hidden = 2;
-  net.b1 = {0.0f, 0.0f};
-  net.w1.assign(hidden * chess::kNnueInputs, 0.0f);
+  net.b1 = {0, 0};
+  net.w1.assign(hidden * chess::kNnueInputs, 0);
   // Activate first hidden unit on the stm bit
-  net.w1[0 * chess::kNnueInputs + (chess::kNnueInputs - 1)] = 2.0f;
+  net.w1[0 * chess::kNnueInputs + (chess::kNnueInputs - 1)] = 2;
   // Activate second hidden unit on white king at E1 (present in the test FEN)
   const std::size_t king_e1_idx =
       5 * 64 + 4; // wK piece index 5, square E1 idx 4
-  net.w1[1 * chess::kNnueInputs + king_e1_idx] = 1.0f;
-  net.w2 = {3.0f, 5.0f};
-  net.b2 = 1.0f;
+  net.w1[1 * chess::kNnueInputs + king_e1_idx] = 1;
+  net.w2 = {3, 5};
+  net.b2 = 1;
 
   chess::Board b = chess::initial_board("8/8/8/8/8/8/8/4K2k w - - 0 1");
   auto feat = make_nnue_features(b);
@@ -77,7 +77,7 @@ TEST(NnueLoader, LoadsFromYamlFile) {
     os << "]\n";
     os << "  b1: [0.0]\n";
     os << "  w2: [2.0]\n";
-    os << "  b2: 0.5\n";
+    os << "  b2: 0.0\n";
   }
 
   chess::NnueNetwork net{};
@@ -88,7 +88,7 @@ TEST(NnueLoader, LoadsFromYamlFile) {
   chess::Board b = chess::initial_board("8/8/8/8/8/8/8/4K2k w - - 0 1");
   auto feat = chess::make_nnue_features(b);
   const float out = net.forward(feat);
-  EXPECT_FLOAT_EQ(out, 2.5f);
+  EXPECT_FLOAT_EQ(out, 2.0f);
 
   std::filesystem::remove(tmp_path);
 }

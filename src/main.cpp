@@ -22,9 +22,121 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 namespace {
+
+chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options);
+
+double game_outcome(chess::Board board) {
+  const bool king_captured = board.king_captured != chess::PieceColor::None;
+  const bool has_moves = chess::has_legal_moves(board, board.side_to_move);
+  const bool side_in_check = chess::is_check(board, board.side_to_move);
+
+  if (king_captured) {
+    return board.king_captured == chess::PieceColor::White ? 0.0 : 1.0;
+  }
+  if (!has_moves && side_in_check) {
+    return board.side_to_move == chess::SideToMove::White ? 0.0 : 1.0;
+  }
+  return 0.5;
+}
+
+struct ArenaSummary {
+  int wins = 0;
+  int losses = 0;
+  int draws = 0;
+  int games = 0;
+  double score = 0.0;
+};
+
+ArenaSummary run_internal_arena(const chess::CliOptions& opts,
+                                const chess::EngineParams& base_params,
+                                const chess::EngineParams& cand_params,
+                                bool show_progress) {
+  chess::Engine engine;
+  ArenaSummary summary{};
+
+  const bool use_time = opts.time_control.enabled;
+  const auto limits = to_search_limits(opts.time_control);
+
+  for (int game_idx = 0; game_idx < opts.arena_games; ++game_idx) {
+    chess::Board board{};
+    try {
+      board = chess::initial_board(opts.fen);
+    } catch (const std::exception& ex) {
+      throw std::runtime_error(std::string("Failed to load FEN: ") + ex.what());
+    }
+    engine.reset_history(board);
+
+    const bool cand_white = (game_idx % 2 == 0);
+    int plies_played = 0;
+    const int max_plies = opts.max_full_moves * 2;
+
+    while (plies_played < max_plies) {
+      const bool cand_to_move = (board.side_to_move == chess::SideToMove::White)
+                                    ? cand_white
+                                    : !cand_white;
+      if (cand_to_move) {
+        chess::set_engine_params(cand_params);
+      } else {
+        chess::set_engine_params(base_params);
+      }
+
+      chess::SearchParameters params{};
+      if (use_time) {
+        params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        params.limits = limits;
+      } else {
+        params.depth = opts.search_depth;
+      }
+      params.alpha = -chess::INF;
+      params.beta = chess::INF;
+
+      auto result = engine.search(board, params);
+      const bool has_move =
+          result.best_move.moving_pc != chess::OccupancyType::empty;
+      if (!has_move) {
+        break;
+      }
+
+      const bool irreversible = chess::move_is_irreversible(result.best_move);
+      chess::make_move(board, result.best_move);
+      engine.record_position(board.position_key, irreversible);
+      ++plies_played;
+
+      if (board.is_terminal()) {
+        break;
+      }
+    }
+
+    const double outcome = game_outcome(board);
+    if (outcome > 0.5) {
+      summary.wins += 1;
+    } else if (outcome < 0.5) {
+      summary.losses += 1;
+    } else {
+      summary.draws += 1;
+    }
+    summary.games += 1;
+
+    if (show_progress) {
+      std::cout << "\r[arena] game " << (game_idx + 1) << "/" << opts.arena_games
+                << " W/L/D=" << summary.wins << "/" << summary.losses << "/"
+                << summary.draws << std::flush;
+    }
+  }
+
+  if (show_progress) {
+    std::cout << "\n";
+  }
+
+  const int total = summary.wins + summary.losses + summary.draws;
+  summary.score =
+      (total > 0) ? (summary.wins + 0.5 * summary.draws) / total : 0.0;
+  return summary;
+}
 
 chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options) {
   chess::SearchLimits limits{};
@@ -70,16 +182,19 @@ int main(int argc, char** argv) {
   }
 
   chess::reset_engine_params();
+  chess::EngineParams baseline_params = chess::default_engine_params();
+  chess::EngineParams candidate_params = baseline_params;
   if (cli.options.params_override) {
-    auto params = chess::default_engine_params();
     std::string error;
-    if (!chess::load_engine_params_from_file(cli.options.params_path, params,
-                                             error)) {
+    if (!chess::load_engine_params_from_file(cli.options.params_path,
+                                             candidate_params, error)) {
       std::cerr << "Failed to load params: " << error << "\n";
       return EXIT_FAILURE;
     }
-    chess::set_engine_params(params);
   }
+  // Default global params: baseline for arena, candidate otherwise.
+  chess::set_engine_params(cli.options.arena_mode ? baseline_params
+                                                  : candidate_params);
 
   if (cli.options.nnue_override) {
     auto net = std::make_shared<chess::NnueNetwork>();
@@ -94,6 +209,22 @@ int main(int argc, char** argv) {
   }
 
   chess::Engine engine;
+
+  if (cli.options.arena_mode) {
+    try {
+      const auto summary = run_internal_arena(cli.options, baseline_params,
+                                              candidate_params, true);
+      std::cout << "{\"score\":" << summary.score << ","
+                << "\"wins\":" << summary.wins << ","
+                << "\"losses\":" << summary.losses << ","
+                << "\"draws\":" << summary.draws << ","
+                << "\"games\":" << summary.games << "}" << std::endl;
+      return EXIT_SUCCESS;
+    } catch (const std::exception& ex) {
+      std::cerr << "Arena failed: " << ex.what() << "\n";
+      return EXIT_FAILURE;
+    }
+  }
 
   if (cli.options.static_eval) {
     chess::Board board{};

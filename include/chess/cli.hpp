@@ -42,6 +42,8 @@ struct CliOptions {
   bool static_eval = false;
   std::string executable_path;
   bool best_move = false;
+  bool arena_mode = false;
+  int arena_games = 20;
   TimeControlOptions time_control;
 };
 

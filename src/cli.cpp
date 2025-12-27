@@ -37,6 +37,9 @@ CliParseResult parse_cli(int argc, char** argv) {
        cxxopts::value<bool>()->default_value("false"))
       ("o,onlyfen", "Print FEN only in self-play mode")
       ("s,self", "Run self-play CLI loop")
+      ("arena", "Run built-in baseline-vs-params arena (no UCI)")
+      ("arena-games", "Number of games for arena mode",
+       cxxopts::value<int>()->default_value("20"))
       ("bm,bestmove", "Print best move for the given FEN and exit")
       ("v,version", "Show version information (repeat for extended details)")
       ("p,perf", "Run built-in performance benchmark")
@@ -208,19 +211,23 @@ CliParseResult parse_cli(int argc, char** argv) {
 
     const bool want_uci = parsed.count("uci") > 0;
     const bool want_self = parsed.count("self") > 0;
-    if (result.options.best_move && (want_uci || want_self)) {
+    const bool want_arena = parsed.count("arena") > 0;
+    if (result.options.best_move && (want_uci || want_self || want_arena)) {
       result.parse_error = true;
-      result.message = "--bestmove cannot be combined with --uci or --self";
+      result.message =
+          "--bestmove cannot be combined with --uci, --self, or --arena";
       return result;
     }
-    if (result.options.static_eval && (want_uci || want_self)) {
+    if (result.options.static_eval && (want_uci || want_self || want_arena)) {
       result.parse_error = true;
-      result.message = "--static-eval cannot be combined with --uci or --self";
+      result.message =
+          "--static-eval cannot be combined with --uci, --self, or --arena";
       return result;
     }
-    if (want_uci && want_self) {
+    if ((want_uci && want_self) || (want_uci && want_arena) ||
+        (want_self && want_arena)) {
       result.parse_error = true;
-      result.message = "--uci and --self cannot be used together";
+      result.message = "--uci, --self, and --arena are mutually exclusive";
       return result;
     }
     if (want_uci && parsed.count("perf") > 0) {
@@ -229,7 +236,8 @@ CliParseResult parse_cli(int argc, char** argv) {
       return result;
     }
     result.options.self_play = want_self;
-    result.options.use_uci = want_uci || !want_self;
+    result.options.arena_mode = want_arena;
+    result.options.use_uci = want_uci || (!want_self && !want_arena);
 
     if (result.options.perf_mode) {
       if (result.options.best_move) {
@@ -242,6 +250,11 @@ CliParseResult parse_cli(int argc, char** argv) {
         result.message = "--static-eval cannot be combined with --perf";
         return result;
       }
+      if (result.options.arena_mode) {
+        result.parse_error = true;
+        result.message = "--arena cannot be combined with --perf";
+        return result;
+      }
       result.options.self_play = false;
       result.options.use_uci = false;
     }
@@ -250,15 +263,17 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.self_play = false;
       result.options.use_uci = false;
       result.options.perf_mode = false;
+      result.options.arena_mode = false;
     }
 
     if (result.options.static_eval) {
       result.options.self_play = false;
       result.options.use_uci = false;
       result.options.perf_mode = false;
+      result.options.arena_mode = false;
     }
 
-    if (!want_uci && !want_self && !result.options.show_version &&
+    if (!want_uci && !want_self && !want_arena && !result.options.show_version &&
         !result.options.perf_mode && !result.options.best_move &&
         !result.options.static_eval) {
       // No explicit mode requested: default to UCI when no extra args were
@@ -278,6 +293,17 @@ CliParseResult parse_cli(int argc, char** argv) {
 
     if (result.options.use_uci && !request_no_polyglot) {
       result.options.polyglot = true;
+    }
+
+    if (result.options.arena_mode) {
+      result.options.arena_games = parsed["arena-games"].as<int>();
+      if (result.options.arena_games <= 0) {
+        result.parse_error = true;
+        result.message = "--arena-games must be positive";
+        return result;
+      }
+      // Force Polyglot off for deterministic arena runs.
+      result.options.polyglot = false;
     }
 
     if (result.options.search_depth < 0) {

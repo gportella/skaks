@@ -21,7 +21,7 @@ DEFAULT_MATCH_LIMIT = 500
 DEFAULT_DEPTH = 8
 DEFAULT_DB_NAME = "validation_matches.sqlite3"
 PGN_HEADER = "PGN:"
-SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
+DEFAULT_SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
 DEFAULT_ELO_START = 1500.0
 DEFAULT_ELO_OPPONENT = 2600.0
 DEFAULT_ELO_K_FACTOR = 20.0
@@ -171,9 +171,19 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Path to params file for the reference engine (passed as --engine-params)",
     )
     parser.add_argument(
+        "--engine-label",
+        type=str,
+        help="Display label for the reference engine in summary/Elo (default: engine basename)",
+    )
+    parser.add_argument(
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --opponent-params)",
+    )
+    parser.add_argument(
+        "--opponent-label",
+        type=str,
+        help="Display label for the opponent engine in summary/Elo (default: opponent basename)",
     )
     parser.add_argument(
         "--stockfish",
@@ -297,6 +307,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--no-elo-store",
         action="store_true",
         help="Skip loading/saving Elo state; compute only for this batch",
+    )
+    parser.add_argument(
+        "--summary-json",
+        type=str,
+        help="Optional path to write a JSON summary (counts, Elo, timings)",
     )
 
     args = parser.parse_args(argv)
@@ -491,29 +506,37 @@ def extract_metadata(
 def determine_winner_label(
     result_value: Optional[str],
     winner_value: Optional[str],
+    white_label: str,
+    black_label: str,
 ) -> str:
+    def _normalize(name: str) -> str:
+        return Path(str(name)).name.lower()
+
+    white_tokens = {_normalize(white_label), white_label.lower()}
+    black_tokens = {_normalize(black_label), black_label.lower()}
+
     if winner_value:
         normalized = winner_value.strip().lower()
         if normalized:
             if normalized.startswith("draw"):
                 return "draw"
-            if "skaks" in normalized:
-                return "skaks"
-            if "stockfish" in normalized:
-                return "stockfish"
+            if any(token in normalized for token in white_tokens):
+                return white_label
+            if any(token in normalized for token in black_tokens):
+                return black_label
             tokens = normalized.replace("-", " ").split()
             if "white" in tokens:
-                return "skaks"
+                return white_label
             if "black" in tokens:
-                return "stockfish"
+                return black_label
             if normalized == "unknown":
                 return "unknown"
     if result_value:
         normalized_result = result_value.strip().lower()
         if normalized_result in {"1-0", "1 - 0"}:
-            return "skaks"
+            return white_label
         if normalized_result in {"0-1", "0 - 1"}:
-            return "stockfish"
+            return black_label
         if normalized_result in {"1/2-1/2", "1/2 - 1/2", "½-½"}:
             return "draw"
         if normalized_result.startswith("draw"):
@@ -592,11 +615,11 @@ def choose_starting_index(
     return int(row[0]) + 1
 
 
-def summarize_counts(summary: Dict[str, int]) -> str:
-    ordered_labels = list(SUMMARY_LABELS)
-    extra_labels = [label for label in summary if label not in SUMMARY_LABELS]
-    labels = ordered_labels + sorted(extra_labels)
-    return ", ".join(f"{label}={summary.get(label, 0)}" for label in labels)
+def summarize_counts(summary: Dict[str, int], labels: Sequence[str]) -> str:
+    ordered_labels = list(labels)
+    extra_labels = [label for label in summary if label not in labels]
+    display_labels = ordered_labels + sorted(extra_labels)
+    return ", ".join(f"{label}={summary.get(label, 0)}" for label in display_labels)
 
 
 def run_batch(args: argparse.Namespace) -> int:
@@ -604,6 +627,8 @@ def run_batch(args: argparse.Namespace) -> int:
     if not fight_script.exists():
         print(f"Fight script not found at {fight_script}", file=sys.stderr)
         return 2
+
+    wall_start = time.perf_counter()
 
     db_path = Path(args.database).expanduser().resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -652,7 +677,24 @@ def run_batch(args: argparse.Namespace) -> int:
             print("No games scheduled (games=0). Nothing to do.")
             return 0
 
-        summary: Dict[str, int] = {label: 0 for label in SUMMARY_LABELS}
+        white_label = (
+            args.engine_label
+            if args.engine_label
+            else (Path(args.engine).name if args.engine else DEFAULT_SUMMARY_LABELS[0])
+        )
+        black_label = (
+            args.opponent_label
+            if args.opponent_label
+            else (
+                Path(args.opponent).name if args.opponent else DEFAULT_SUMMARY_LABELS[1]
+            )
+        )
+        if white_label == black_label:
+            white_label = f"{white_label}_white"
+            black_label = f"{black_label}_black"
+
+        summary_labels = (white_label, black_label, "draw", "unknown")
+        summary: Dict[str, int] = {label: 0 for label in summary_labels}
         failures = 0
         completed = 0
 
@@ -692,7 +734,9 @@ def run_batch(args: argparse.Namespace) -> int:
                         parsed_result = "unknown"
                     if parsed_winner is None:
                         parsed_winner = "unknown"
-                    winner_label = determine_winner_label(parsed_result, parsed_winner)
+                    winner_label = determine_winner_label(
+                        parsed_result, parsed_winner, white_label, black_label
+                    )
                     failed = match.exit_code != 0 or illegal_flag
                     if failed:
                         failures += 1
@@ -756,11 +800,11 @@ def run_batch(args: argparse.Namespace) -> int:
 
         print()
         print(f"Stored results in {db_path}")
-        print(f"Summary: {summarize_counts(summary)}")
+        print(f"Summary: {summarize_counts(summary, summary_labels)}")
         print(f"Failures: {failures} / {len(indices)}")
 
-        wins = summary.get("skaks", 0)
-        losses = summary.get("stockfish", 0)
+        wins = summary.get(white_label, 0)
+        losses = summary.get(black_label, 0)
         draws = summary.get("draw", 0)
         elo = compute_elo(
             rating=rating_before,
@@ -785,6 +829,40 @@ def run_batch(args: argparse.Namespace) -> int:
                 print(f"Stored Elo rating at {rating_path}")
         else:
             print("Elo: no completed games to rate")
+
+        if args.summary_json:
+            summary_payload = {
+                "games": len(indices),
+                "completed": completed,
+                "failures": failures,
+                "summary": summary,
+                "labels": {
+                    "white": white_label,
+                    "black": black_label,
+                },
+                "elo": {
+                    "start": elo.rating_before,
+                    "opponent": elo.opponent_rating,
+                    "delta": elo.delta,
+                    "new": elo.rating_after,
+                    "expected_score": elo.expected_score,
+                    "actual_score": elo.actual_score,
+                    "games": elo.games,
+                    "wins": elo.wins,
+                    "losses": elo.losses,
+                    "draws": elo.draws,
+                },
+                "timing_sec": time.perf_counter() - wall_start,
+                "parameters": parameters_snapshot,
+            }
+            try:
+                Path(args.summary_json).expanduser().write_text(
+                    json.dumps(summary_payload, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                print(f"Wrote summary JSON to {args.summary_json}")
+            except OSError as exc:
+                print(f"Failed to write summary JSON: {exc}", file=sys.stderr)
 
         return 0 if failures == 0 else 1
     finally:
