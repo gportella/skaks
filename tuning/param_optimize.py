@@ -148,17 +148,40 @@ def _save_params(data: Dict[str, Any], path: Path) -> None:
         yaml.safe_dump(data, f, sort_keys=True)
 
 
-def _collect_numeric_leaves(data: Any, prefix: str = "") -> List[Tuple[str, Any]]:
+def _collect_numeric_leaves(
+    data: Any,
+    prefix: str = "",
+    include_prefixes: Optional[List[str]] = None,
+    exclude_prefixes: Optional[List[str]] = None,
+) -> List[Tuple[str, Any]]:
     items: List[Tuple[str, Any]] = []
     if isinstance(data, dict):
         for k, v in data.items():
-            items.extend(_collect_numeric_leaves(v, f"{prefix}.{k}" if prefix else k))
+            items.extend(
+                _collect_numeric_leaves(
+                    v,
+                    f"{prefix}.{k}" if prefix else k,
+                    include_prefixes,
+                    exclude_prefixes,
+                )
+            )
     elif isinstance(data, list):
         for idx, v in enumerate(data):
             items.extend(
-                _collect_numeric_leaves(v, f"{prefix}[{idx}]" if prefix else f"[{idx}]")
+                _collect_numeric_leaves(
+                    v,
+                    f"{prefix}[{idx}]" if prefix else f"[{idx}]",
+                    include_prefixes,
+                    exclude_prefixes,
+                )
             )
     elif isinstance(data, (int, float)):
+        if include_prefixes:
+            if not any(prefix.startswith(pfx) for pfx in include_prefixes):
+                return items
+        if exclude_prefixes:
+            if any(prefix.startswith(pfx) for pfx in exclude_prefixes):
+                return items
         items.append((prefix, data))
     return items
 
@@ -197,10 +220,17 @@ def _set_by_path(data: Any, path: str, value: Any) -> None:
     ref[parts[-1]] = value
 
 
-def perturb_params(base: Dict[str, Any], noise: float) -> Dict[str, Any]:
-    """Return a copy with multiplicative noise on numeric leaves."""
+def perturb_params(
+    base: Dict[str, Any],
+    noise: float,
+    include_prefixes: Optional[List[str]],
+    exclude_prefixes: Optional[List[str]],
+) -> Dict[str, Any]:
+    """Return a copy with multiplicative noise on numeric leaves (filtered)."""
     data = json.loads(json.dumps(base))  # cheap deep copy
-    leaves = _collect_numeric_leaves(data)
+    leaves = _collect_numeric_leaves(
+        data, include_prefixes=include_prefixes, exclude_prefixes=exclude_prefixes
+    )
     for path, val in leaves:
         scale = math.exp(random.gauss(0.0, noise))
         if isinstance(val, int):
@@ -211,8 +241,14 @@ def perturb_params(base: Dict[str, Any], noise: float) -> Dict[str, Any]:
     return data
 
 
-def _flatten_params(data: Dict[str, Any]) -> Tuple[List[str], List[float], List[bool]]:
-    paths_vals = _collect_numeric_leaves(data)
+def _flatten_params(
+    data: Dict[str, Any],
+    include_prefixes: Optional[List[str]],
+    exclude_prefixes: Optional[List[str]],
+) -> Tuple[List[str], List[float], List[bool]]:
+    paths_vals = _collect_numeric_leaves(
+        data, include_prefixes=include_prefixes, exclude_prefixes=exclude_prefixes
+    )
     paths: List[str] = []
     vals: List[float] = []
     is_int: List[bool] = []
@@ -582,7 +618,12 @@ def optimize_loop(args: argparse.Namespace) -> None:
             parents = [data for (_, data) in beam] or [best_data]
             for i in range(args.beam_size):
                 parent = parents[i % len(parents)]
-                cand_data = perturb_params(parent, args.noise)
+                cand_data = perturb_params(
+                    parent,
+                    args.noise,
+                    include_prefixes=args.include_prefix,
+                    exclude_prefixes=args.exclude_prefix,
+                )
                 cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                 _save_params(cand_data, cand_path)
                 try:
@@ -641,7 +682,11 @@ def optimize_loop(args: argparse.Namespace) -> None:
             beam = [(score, data) for score, data, _, _ in candidates[: args.beam_size]]
             top_score, top_data, _, _ = candidates[0]
         else:  # CMA-like strategy
-            paths, mean_vec, is_int = _flatten_params(best_data)
+            paths, mean_vec, is_int = _flatten_params(
+                best_data,
+                include_prefixes=args.include_prefix,
+                exclude_prefixes=args.exclude_prefix,
+            )
             popsize = (
                 args.cma_popsize
                 if args.cma_popsize is not None
@@ -721,7 +766,11 @@ def optimize_loop(args: argparse.Namespace) -> None:
             # Recombine top mu candidates to update mean_vec
             new_mean = [0.0 for _ in mean_vec]
             for rank in range(min(mu, len(candidates))):
-                vec_paths, vec_vals, _ = _flatten_params(candidates[rank][1])
+                vec_paths, vec_vals, _ = _flatten_params(
+                    candidates[rank][1],
+                    include_prefixes=args.include_prefix,
+                    exclude_prefixes=args.exclude_prefix,
+                )
                 if vec_paths != paths:
                     continue
                 for idx, val in enumerate(vec_vals):
@@ -801,6 +850,16 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--use-arena-binding",
         action="store_true",
         help="Use internal arena binding (skaks_eval.arena) instead of batch runner",
+    )
+    parser.add_argument(
+        "--include-prefix",
+        action="append",
+        help="Only tune params whose dotted path starts with this prefix (repeatable)",
+    )
+    parser.add_argument(
+        "--exclude-prefix",
+        action="append",
+        help="Skip params whose dotted path starts with this prefix (repeatable)",
     )
     parser.add_argument(
         "--strategy",

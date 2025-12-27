@@ -50,8 +50,19 @@ def add_outcomes(input_csv: Path, output_csv: Path, pgn_path: Path) -> None:
                 if game_idx is not None and game_idx in mapping:
                     result, outcome, winner = mapping[game_idx]
                     row["result"] = result
-                    row["outcome"] = "" if outcome is None else outcome
-                    row["winner"] = winner or ""
+
+                    stm = (row.get("side_to_move") or "").lower()
+                    row_winner = winner or ""
+                    row_outcome = outcome
+                    if winner in {"w", "b"}:
+                        if stm == "w":
+                            row_winner = "w" if winner == "w" else "l"
+                            row_outcome = 1.0 if winner == "w" else 0.0
+                        elif stm == "b":
+                            row_winner = "w" if winner == "b" else "l"
+                            row_outcome = 1.0 if winner == "b" else 0.0
+                    row["winner"] = row_winner
+                    row["outcome"] = "" if row_outcome is None else row_outcome
                 else:
                     row.setdefault("result", "")
                     row.setdefault("outcome", "")
