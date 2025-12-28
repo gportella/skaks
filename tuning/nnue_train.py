@@ -3,7 +3,7 @@ import json
 import math
 import random
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple, Union, cast
 
 import pandas as pd
 import torch
@@ -270,7 +270,8 @@ def train(
     pos_weight: Optional[float],
     regression: bool,
     regression_loss: str,
-) -> TinyNnue:
+    return_best_val: bool = False,
+) -> Union[TinyNnue, Tuple[TinyNnue, float]]:
     if precomputed is not None:
         feats, labels = precomputed
         ds = TensorDataset(feats, labels)
@@ -411,7 +412,12 @@ def train(
 
     if best_state is not None:
         model.load_state_dict(best_state)
-    return model.cpu()
+    model_cpu = model.cpu()
+    if return_best_val:
+        if best_val == float("inf"):
+            best_val = avg_loss if val_dl is None else val_loss
+        return model_cpu, float(best_val)
+    return model_cpu
 
 
 def main() -> None:
@@ -588,6 +594,29 @@ def main() -> None:
         default=1.0,
         help="Multiply weights/biases by this before int quantization to avoid zeros",
     )
+    parser.add_argument(
+        "--optuna",
+        action="store_true",
+        help="Run Optuna hyperparameter search instead of a single training run",
+    )
+    parser.add_argument(
+        "--optuna-trials",
+        type=int,
+        default=20,
+        help="Number of Optuna trials",
+    )
+    parser.add_argument(
+        "--optuna-epochs",
+        type=int,
+        default=5,
+        help="Epochs per Optuna trial",
+    )
+    parser.add_argument(
+        "--optuna-study",
+        type=str,
+        default="nnue_optuna",
+        help="Optuna study name",
+    )
     args = parser.parse_args()
 
     device = torch.device(
@@ -632,6 +661,60 @@ def main() -> None:
             precomputed = (X, y)
             print(f"Saved precomputed features to {pre_path}")
 
+    if args.optuna:
+        if args.val_split <= 0:
+            raise SystemExit("Optuna requires val_split > 0 to measure validation loss")
+        try:
+            import optuna
+        except ImportError as exc:  # pragma: no cover
+            raise SystemExit("Install optuna to use --optuna") from exc
+
+        def objective(trial: "optuna.Trial") -> float:
+            hidden = trial.suggest_int("hidden", 128, 512, step=64)
+            dropout = trial.suggest_float("dropout", 0.0, 0.4, step=0.1)
+            lr = trial.suggest_float("lr", 3e-4, 3e-3, log=True)
+            batch_size = trial.suggest_categorical("batch_size", [512, 1024, 2048])
+            weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
+
+            result = train(
+                rows=rows,
+                hidden=hidden,
+                dropout=dropout,
+                epochs=args.optuna_epochs,
+                batch_size=batch_size,
+                lr=lr,
+                val_split=args.val_split,
+                cache_features=args.cache_features,
+                precomputed=precomputed,
+                num_workers=args.num_workers,
+                weight_decay=weight_decay,
+                stratified_split=args.stratified_split,
+                init_state=None,
+                device=device,
+                label_smoothing=args.label_smoothing,
+                lr_scheduler=args.lr_scheduler,
+                lr_step=args.lr_step,
+                lr_gamma=args.lr_gamma,
+                early_stop_patience=args.early_stop_patience,
+                min_epochs=args.min_epochs,
+                pos_weight=args.pos_weight,
+                regression=args.regression,
+                regression_loss=args.regression_loss,
+                return_best_val=True,
+            )
+            if isinstance(result, tuple):
+                _, best_val = result
+            else:
+                best_val = float("inf")
+            trial.report(best_val, step=0)
+            return best_val
+
+        study = optuna.create_study(direction="minimize", study_name=args.optuna_study)
+        study.optimize(objective, n_trials=args.optuna_trials)
+        print(f"Optuna best value: {study.best_value}")
+        print(f"Optuna best params: {study.best_params}")
+        return
+
     init_state: Optional[dict] = None
     if args.init_weights:
         state, hidden_override = load_init_weights(Path(args.init_weights))
@@ -640,30 +723,33 @@ def main() -> None:
             args.hidden = hidden_override
             print(f"Initializing from {args.init_weights} (hidden={hidden_override})")
 
-    model = train(
-        rows=rows,
-        hidden=args.hidden,
-        dropout=args.dropout,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        val_split=args.val_split,
-        cache_features=args.cache_features,
-        precomputed=precomputed,
-        num_workers=args.num_workers,
-        weight_decay=args.weight_decay,
-        stratified_split=args.stratified_split,
-        init_state=init_state,
-        device=device,
-        label_smoothing=args.label_smoothing,
-        lr_scheduler=args.lr_scheduler,
-        lr_step=args.lr_step,
-        lr_gamma=args.lr_gamma,
-        early_stop_patience=args.early_stop_patience,
-        min_epochs=args.min_epochs,
-        pos_weight=args.pos_weight,
-        regression=args.regression,
-        regression_loss=args.regression_loss,
+    model = cast(
+        TinyNnue,
+        train(
+            rows=rows,
+            hidden=args.hidden,
+            dropout=args.dropout,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            lr=args.lr,
+            val_split=args.val_split,
+            cache_features=args.cache_features,
+            precomputed=precomputed,
+            num_workers=args.num_workers,
+            weight_decay=args.weight_decay,
+            stratified_split=args.stratified_split,
+            init_state=init_state,
+            device=device,
+            label_smoothing=args.label_smoothing,
+            lr_scheduler=args.lr_scheduler,
+            lr_step=args.lr_step,
+            lr_gamma=args.lr_gamma,
+            early_stop_patience=args.early_stop_patience,
+            min_epochs=args.min_epochs,
+            pos_weight=args.pos_weight,
+            regression=args.regression,
+            regression_loss=args.regression_loss,
+        ),
     )
 
     if args.save_fp32:

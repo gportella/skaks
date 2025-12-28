@@ -32,3 +32,5 @@ optuna.db
 .DS_Store
 optuna.db-journal
 eval_pairs_*.csv
+*.nnue
+nn-*.nnue

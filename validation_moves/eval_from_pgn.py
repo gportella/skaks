@@ -24,7 +24,11 @@ def parse_pgn_games(pgn_path: Path) -> Iterator[chess.pgn.Game]:
 
 
 def count_sampled_positions(
-    pgn_path: Path, sample_stride: int, max_positions: Optional[int]
+    pgn_path: Path,
+    sample_stride: int,
+    max_positions: Optional[int],
+    min_ply: Optional[int],
+    max_ply: Optional[int],
 ) -> int:
     """Count how many positions will be sampled given stride and cap."""
     total = 0
@@ -33,6 +37,10 @@ def count_sampled_positions(
         for ply, move in enumerate(game.mainline_moves()):
             board.push(move)
             if ply % sample_stride != 0:
+                continue
+            if min_ply is not None and ply + 1 < min_ply:
+                continue
+            if max_ply is not None and ply + 1 > max_ply:
                 continue
             total += 1
             if max_positions is not None and total >= max_positions:
@@ -59,7 +67,11 @@ def _parse_result(raw: str) -> Tuple[str, Optional[float], Optional[str]]:
 
 
 def collect_positions(
-    pgn_path: Path, sample_stride: int, max_positions: Optional[int]
+    pgn_path: Path,
+    sample_stride: int,
+    max_positions: Optional[int],
+    min_ply: Optional[int],
+    max_ply: Optional[int],
 ) -> List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]]:
     """Collect sampled positions as (game_idx, ply, fen, white_to_move, result, outcome, winner)."""
 
@@ -73,6 +85,10 @@ def collect_positions(
         for ply, move in enumerate(game.mainline_moves()):
             board.push(move)
             if ply % sample_stride != 0:
+                continue
+            if min_ply is not None and ply + 1 < min_ply:
+                continue
+            if max_ply is not None and ply + 1 > max_ply:
                 continue
             positions.append(
                 (
@@ -430,6 +446,8 @@ def process_games(
     skaks_path: Path,
     sample_stride: int,
     max_positions: Optional[int],
+    min_ply: Optional[int],
+    max_ply: Optional[int],
     output_path: Path,
     total_expected: Optional[int],
     pov: str,
@@ -450,7 +468,9 @@ def process_games(
         "winner",
     ]
 
-    positions = collect_positions(pgn_path, sample_stride, max_positions)
+    positions = collect_positions(
+        pgn_path, sample_stride, max_positions, min_ply, max_ply
+    )
 
     total = 0
     failures: List[str] = []
@@ -461,17 +481,24 @@ def process_games(
             writer.writeheader()
 
         if workers <= 1:
-            rows, chunk_failures = process_chunk(
-                positions,
-                stockfish_path,
-                skaks_path,
-                stockfish_depth,
-                skaks_params,
-                pov,
-            )
-            writer.writerows(rows)
-            total += len(rows)
-            failures.extend(chunk_failures)
+            # Stream sequentially in chunks so we see progress and avoid holding all rows.
+            for idx in range(0, len(positions), chunk_size):
+                chunk = positions[idx : idx + chunk_size]
+                rows, chunk_failures = process_chunk(
+                    chunk,
+                    stockfish_path,
+                    skaks_path,
+                    stockfish_depth,
+                    skaks_params,
+                    pov,
+                )
+                writer.writerows(rows)
+                total += len(rows)
+                failures.extend(chunk_failures)
+                if total % 100 == 0 or total == 1:
+                    expected = total_expected if total_expected is not None else "?"
+                    print(f"[progress] {total}/{expected} positions", end="\r", flush=True)
+            print()
         else:
             with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
                 futures = []
@@ -543,6 +570,12 @@ def main() -> None:
         "--max-positions", type=int, default=None, help="Cap total positions (optional)"
     )
     parser.add_argument(
+        "--min-ply", type=int, default=None, help="Minimum ply to sample (1-based)"
+    )
+    parser.add_argument(
+        "--max-ply", type=int, default=None, help="Maximum ply to sample (1-based)"
+    )
+    parser.add_argument(
         "--output", type=Path, default=Path("eval_pairs.csv"), help="Output CSV path"
     )
     parser.add_argument(
@@ -592,6 +625,8 @@ def main() -> None:
         pgn_path=args.pgn,
         sample_stride=args.sample_stride,
         max_positions=args.max_positions,
+        min_ply=args.min_ply,
+        max_ply=args.max_ply,
     )
     print(f"Planning to sample up to {total_expected} positions")
 
@@ -602,6 +637,8 @@ def main() -> None:
         skaks_path=sk_path,
         sample_stride=args.sample_stride,
         max_positions=args.max_positions,
+        min_ply=args.min_ply,
+        max_ply=args.max_ply,
         output_path=args.output,
         total_expected=total_expected,
         pov=args.pov,
