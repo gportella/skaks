@@ -197,13 +197,21 @@ int main(int argc, char** argv) {
                                                   : candidate_params);
 
   if (cli.options.nnue_override) {
-    auto net = std::make_shared<chess::NnueNetwork>();
     std::string error;
-    if (!chess::load_nnue_from_file(cli.options.nnue_path, *net, error)) {
-      std::cerr << "Failed to load NNUE weights: " << error << "\n";
-      return EXIT_FAILURE;
+    const std::filesystem::path nnue_path{cli.options.nnue_path};
+    if (nnue_path.extension() == ".nnue") {
+      if (!chess::load_sf_nnue(cli.options.nnue_path, error)) {
+        std::cerr << "Failed to load SF NNUE weights: " << error << "\n";
+        return EXIT_FAILURE;
+      }
+    } else {
+      auto net = std::make_shared<chess::NnueNetwork>();
+      if (!chess::load_nnue_from_file(cli.options.nnue_path, *net, error)) {
+        std::cerr << "Failed to load NNUE weights: " << error << "\n";
+        return EXIT_FAILURE;
+      }
+      chess::set_active_nnue(std::move(net));
     }
-    chess::set_active_nnue(std::move(net));
   } else {
     chess::set_active_nnue(nullptr);
   }

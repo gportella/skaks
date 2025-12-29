@@ -1,18 +1,18 @@
 evaluation:
-  bishop_dev_bonus: 26
-  bishop_pair_bonus: 68
+  bishop_dev_bonus: 27
+  bishop_pair_bonus: 63
   bishop_pin_penalty:
     base: 27
     mobility: 1
   castle_urgency: 44
   castling_bonus: 9
-  central_pawn_bonus: 25
-  check_penalty: 44
+  central_pawn_bonus: 26
+  check_penalty: 41
   connect_rooks_bonus: 23
   early_queen_penalty: 14
-  flank_pawn_penalty: 26
+  flank_pawn_penalty: 27
   hanging_divisor: 8
-  hanging_min_penalty: 17
+  hanging_min_penalty: 18
   king_attack_weights:
   - 13
   - 32
@@ -30,7 +30,7 @@ evaluation:
   king_ring_defended_scale: 6
   king_ring_enemy_occupier: 4
   king_ring_enemy_piece_material_scale: 20
-  knight_dev_bonus: 34
+  knight_dev_bonus: 33
   knight_pin_penalty:
     base: 26
     mobility: 4
@@ -41,15 +41,15 @@ evaluation:
     base: 16
     mobility: 4
   pawn_pin_straight_penalty:
-    base: 18
+    base: 19
     mobility: 9
   pawn_shield_bonus: 4
   rook_open_file_bonus: 49
   rook_pin_penalty:
-    base: 25
+    base: 24
     mobility: 1
-  rook_semi_open_file_bonus: 24
-  tempo_bonus: 16
+  rook_semi_open_file_bonus: 26
+  tempo_bonus: 17
   threat_base:
   - 1
   - 12

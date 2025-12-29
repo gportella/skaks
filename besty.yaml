@@ -1,0 +1,108 @@
+evaluation:
+  bishop_dev_bonus: 27
+  bishop_pair_bonus: 81
+  bishop_pin_penalty:
+    base: 40
+    mobility: 1
+  castle_urgency: 39
+  castling_bonus: 6
+  central_pawn_bonus: 59
+  check_penalty: 56
+  connect_rooks_bonus: 15
+  early_queen_penalty: 25
+  flank_pawn_penalty: 16
+  hanging_divisor: 3
+  hanging_min_penalty: 51
+  king_attack_weights:
+  - 7
+  - 15
+  - 16
+  - 42
+  - 44
+  - 17
+  - 31
+  - 35
+  - 40
+  - 101
+  - 46
+  - 27
+  king_ring_base: 2
+  king_ring_defended_scale: 11
+  king_ring_enemy_occupier: 2
+  king_ring_enemy_piece_material_scale: 11
+  knight_dev_bonus: 16
+  knight_pin_penalty:
+    base: 39
+    mobility: 3
+  mobility_scaling: 9
+  passed_pawn_advance: 35
+  passed_pawn_base: 4
+  pawn_pin_diagonal_penalty:
+    base: 12
+    mobility: 9
+  pawn_pin_straight_penalty:
+    base: 17
+    mobility: 10
+  pawn_shield_bonus: 2
+  phase_weights_eg:
+  - 0.49305152899812504
+  - 0.49135209456707507
+  - 0.32725551710816075
+  - 3.6271509356437113
+  - 0.9699757715419097
+  - 0.42730264263563666
+  - 0.7527144874944174
+  - 4.521738774588093
+  - 0.5518345548232971
+  - 0.7944881874121945
+  - 0.6004008248668211
+  - 1.2739895077328371
+  - 0.5985076122733007
+  - 0.2977750234100658
+  - 1.4282575355748537
+  phase_weights_mg:
+  - 7.649435724633697
+  - 1.1737566832010753
+  - 2.5942328138256467
+  - 4.828668286556553
+  - 0.12792713977999862
+  - 1.0350533680821972
+  - 0.9586089680838995
+  - 0.25012605428965545
+  - 5.412459254235606
+  - 0.4418466320956021
+  - 0.7040365311052099
+  - 5.993543146607161
+  - 0.9005424840633302
+  - 0.5358721921639638
+  - 1.022630410016002
+  rook_open_file_bonus: 41
+  rook_pin_penalty:
+    base: 42
+    mobility: 3
+  rook_semi_open_file_bonus: 21
+  tempo_bonus: 12
+  threat_base:
+  - 1
+  - 12
+  - 10
+  - 63
+  - 103
+  - 158
+  - 355
+  - 13
+  - 70
+  - 92
+  - 42
+  - 194
+  - 980
+  threat_weight: 8
+search:
+  aspiration_window_initial: 1630
+  aspiration_window_max: 6620
+  null_move_min_depth: 6
+  null_move_reduction: 3
+  quiescence_delta_margin: 315
+  quiescence_max_noisy_moves: 19
+  quiescence_max_ply: 8
+  quiescence_zero_gain_skip_index: 6

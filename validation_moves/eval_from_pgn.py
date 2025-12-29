@@ -106,6 +106,30 @@ def collect_positions(
     return positions
 
 
+def filter_quiet_positions(
+    positions: List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]],
+    batch_size: int,
+) -> List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]]:
+    try:
+        import skaks_eval as sk
+    except Exception:
+        print("[warn] skaks_eval not available; skipping quiet filtering")
+        return positions
+
+    keep: List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]] = []
+    for start in range(0, len(positions), batch_size):
+        end = min(start + batch_size, len(positions))
+        chunk = positions[start:end]
+        fens = [p[2] for p in chunk]
+        flags = sk.is_quiet_batch(fens)
+        for pos, flag in zip(chunk, flags):
+            if flag is True:
+                keep.append(pos)
+    if not keep:
+        print("[warn] quiet filtering removed all positions")
+    return keep
+
+
 def process_chunk(
     chunk: Sequence[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]],
     stockfish_path: Path,
@@ -455,6 +479,8 @@ def process_games(
     stockfish_depth: int,
     workers: int,
     chunk_size: int,
+    require_quiet: bool,
+    quiet_batch: int,
 ) -> None:
     out_fields = [
         "game_index",
@@ -471,6 +497,10 @@ def process_games(
     positions = collect_positions(
         pgn_path, sample_stride, max_positions, min_ply, max_ply
     )
+    if require_quiet:
+        positions = filter_quiet_positions(positions, batch_size=quiet_batch)
+        if total_expected is None:
+            total_expected = len(positions)
 
     total = 0
     failures: List[str] = []
@@ -497,7 +527,9 @@ def process_games(
                 failures.extend(chunk_failures)
                 if total % 100 == 0 or total == 1:
                     expected = total_expected if total_expected is not None else "?"
-                    print(f"[progress] {total}/{expected} positions", end="\r", flush=True)
+                    print(
+                        f"[progress] {total}/{expected} positions", end="\r", flush=True
+                    )
             print()
         else:
             with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
@@ -608,6 +640,17 @@ def main() -> None:
         default=32,
         help="Positions per worker chunk when using parallel mode",
     )
+    parser.add_argument(
+        "--require-quiet",
+        action="store_true",
+        help="Filter to quiet positions (requires skaks_eval)",
+    )
+    parser.add_argument(
+        "--quiet-batch",
+        type=int,
+        default=2048,
+        help="Batch size for quiet filtering",
+    )
     args = parser.parse_args()
 
     if not args.pgn.exists():
@@ -646,6 +689,8 @@ def main() -> None:
         stockfish_depth=args.stockfish_depth,
         workers=max(1, args.workers),
         chunk_size=max(1, args.chunk_size),
+        require_quiet=args.require_quiet,
+        quiet_batch=max(1, args.quiet_batch),
     )
 
 

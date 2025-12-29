@@ -1,10 +1,14 @@
 #include "chess/nnue.hpp"
 
 #include "chess/types_io.hpp"
+#include "sf_nnue/nnue.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -17,6 +21,7 @@ constexpr std::size_t kPiecesPerKing = kNnuePieceKinds * kNnueSquares;
 std::shared_ptr<NnueNetwork> g_active_nnue;
 constexpr int kQuantMin = -127;
 constexpr int kQuantMax = 127;
+bool g_sf_nnue_loaded = false;
 
 std::size_t king_bucket_index(bool white_king) {
   return white_king ? 0 : 1;
@@ -126,6 +131,121 @@ int32_t quantize_int32(float v) {
   const long long clamped = std::clamp(iv, -2147483648LL, 2147483647LL);
   return static_cast<int32_t>(clamped);
 }
+
+int sf_piece_code(OccupancyType occ) {
+  switch (occ) {
+  case OccupancyType::wK:
+    return 1;
+  case OccupancyType::wQ:
+    return 2;
+  case OccupancyType::wR:
+    return 3;
+  case OccupancyType::wB:
+    return 4;
+  case OccupancyType::wN:
+    return 5;
+  case OccupancyType::wP:
+    return 6;
+  case OccupancyType::bK:
+    return 7;
+  case OccupancyType::bQ:
+    return 8;
+  case OccupancyType::bR:
+    return 9;
+  case OccupancyType::bB:
+    return 10;
+  case OccupancyType::bN:
+    return 11;
+  case OccupancyType::bP:
+    return 12;
+  default:
+    return 0;
+  }
+}
+
+bool build_sf_arrays(const Board& board, std::array<int, 33>& pieces,
+                     std::array<int, 33>& squares, std::string& error) {
+  pieces.fill(0);
+  squares.fill(0);
+
+  // Ensure kings are first, as expected by the bundled SF/sunfish NNUE code.
+  std::size_t idx = 0;
+  const int wking_sq = locate_king(board, PieceColor::White);
+  const int bking_sq = locate_king(board, PieceColor::Black);
+  if (wking_sq < 0 || bking_sq < 0) {
+    error = "Missing king when building NNUE features";
+    return false;
+  }
+  pieces[idx] = sf_piece_code(OccupancyType::wK);
+  squares[idx] = wking_sq;
+  ++idx;
+  pieces[idx] = sf_piece_code(OccupancyType::bK);
+  squares[idx] = bking_sq;
+  ++idx;
+
+  for (std::size_t sq = 0; sq < 64; ++sq) {
+    if (sq == static_cast<std::size_t>(wking_sq) ||
+        sq == static_cast<std::size_t>(bking_sq)) {
+      continue;
+    }
+    const auto occ = board.pieces[sq];
+    if (occ == OccupancyType::empty) {
+      continue;
+    }
+    const int code = sf_piece_code(occ);
+    if (code == 0) {
+      std::ostringstream oss;
+      oss << "Unsupported occupancy for SF NNUE mapping at sq " << sq;
+      error = oss.str();
+      return false;
+    }
+    if (idx + 1 >= pieces.size()) {
+      error = "Too many pieces for SF NNUE input";
+      return false;
+    }
+    pieces[idx] = code;
+    squares[idx] = static_cast<int>(sq);
+    ++idx;
+  }
+
+  pieces[idx] = 0;
+  squares[idx] = 0;
+  return true;
+}
+
+int eval_sf_backend(const Board& board) {
+  std::array<int, 33> pieces{};
+  std::array<int, 33> squares{};
+  std::string error;
+  if (!build_sf_arrays(board, pieces, squares, error)) {
+    throw std::runtime_error(error);
+  }
+  int player = (board.side_to_move == SideToMove::White) ? 0 : 1;
+
+  // sunfish/SF NNUE expect the piece list from the POV of the player argument
+  // ("friend" pieces first). If Black to move, swap colors and mirror the
+  // board so the net sees its own pieces as White on the near ranks.
+  if (player == 1) {
+    auto swap_code = [](int code) {
+      if (code >= 1 && code <= 6)
+        return code + 6; // white piece -> black code
+      if (code >= 7 && code <= 12)
+        return code - 6; // black piece -> white code
+      return code;
+    };
+    for (std::size_t i = 0; i < pieces.size() && pieces[i] != 0; ++i) {
+      pieces[i] = swap_code(pieces[i]);
+      const int sq = squares[i];
+      const int file = sq & 7;
+      const int rank = sq >> 3;
+      const int mirrored_rank = 7 - rank;
+      squares[i] = mirrored_rank * 8 + file; // flip ranks only
+    }
+    player = 0; // after transform, present as "white to move"
+  }
+
+  return nnue_evaluate(player, pieces.data(), squares.data());
+}
 } // namespace
 
 std::size_t nnue_piece_index(OccupancyType occ) {
@@ -206,6 +326,7 @@ float NnueNetwork::forward(const NnueFeatures& feat) const {
 
 bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
                          std::string& error) {
+  g_sf_nnue_loaded = false;
   YAML::Node root;
   try {
     root = YAML::LoadFile(path);
@@ -313,11 +434,71 @@ bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
 }
 
 void set_active_nnue(std::shared_ptr<NnueNetwork> net) {
+  g_sf_nnue_loaded = false;
   g_active_nnue = std::move(net);
 }
 
 std::shared_ptr<const NnueNetwork> active_nnue() {
   return g_active_nnue;
+}
+
+bool load_sf_nnue(const std::string& path, std::string& error) {
+  g_active_nnue.reset();
+  g_sf_nnue_loaded = false;
+  const auto p = std::filesystem::path(path);
+  if (!std::filesystem::exists(p)) {
+    error = "NNUE file not found";
+    return false;
+  }
+  std::error_code ec;
+  if (!std::filesystem::is_regular_file(p, ec)) {
+    error = "NNUE path is not a regular file";
+    return false;
+  }
+  const auto file_size = std::filesystem::file_size(p, ec);
+  if (file_size < 1024 || ec) {
+    error = "NNUE file is too small or unreadable";
+    return false;
+  }
+
+  // Basic header sanity check to fail fast on git-lfs pointers or wrong files.
+  // Accept either Stockfish-style magic "NNUE" or the sunfishNNUE variant
+  // that starts with NnueVersion (0x7AF32F16 little-endian).
+  std::ifstream fin(path, std::ios::binary);
+  char magic[4] = {0, 0, 0, 0};
+  fin.read(magic, 4);
+  const uint32_t hdr_u32 =
+      static_cast<uint32_t>(static_cast<unsigned char>(magic[0])) |
+      (static_cast<uint32_t>(static_cast<unsigned char>(magic[1])) << 8) |
+      (static_cast<uint32_t>(static_cast<unsigned char>(magic[2])) << 16) |
+      (static_cast<uint32_t>(static_cast<unsigned char>(magic[3])) << 24);
+  const bool sf_magic = std::string_view(magic, 4) == "NNUE";
+  const bool sunfish_magic =
+      hdr_u32 == 0x7AF32F16u; // matches sunfishNNUE NnueVersion
+  if (!sf_magic && !sunfish_magic) {
+    error = "NNUE file header invalid (expected 'NNUE' or 0x7AF32F16)";
+    return false;
+  }
+  try {
+    nnue_init(path.c_str());
+    g_sf_nnue_loaded = true;
+    return true;
+  } catch (const std::exception& ex) {
+    error = ex.what();
+    return false;
+  }
+}
+
+bool sf_nnue_active() {
+  return g_sf_nnue_loaded;
+}
+
+int evaluate_sf_nnue(const Board& board) {
+  if (!g_sf_nnue_loaded) {
+    throw std::runtime_error("SF NNUE backend not loaded");
+  }
+  const int stm_cp = eval_sf_backend(board); // centipawns from side-to-move POV
+  return (board.side_to_move == SideToMove::White) ? stm_cp : -stm_cp;
 }
 
 } // namespace chess

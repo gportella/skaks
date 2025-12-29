@@ -171,6 +171,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Path to params file for the reference engine (passed as --engine-params)",
     )
     parser.add_argument(
+        "--engine-nnue",
+        type=str,
+        help="Path to NNUE weights for the reference engine (passed as --engine-nnue)",
+    )
+    parser.add_argument(
         "--engine-label",
         type=str,
         help="Display label for the reference engine in summary/Elo (default: engine basename)",
@@ -179,6 +184,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --opponent-params)",
+    )
+    parser.add_argument(
+        "--opponent-nnue",
+        type=str,
+        help="Path to NNUE weights for the opponent engine (passed as --opponent-nnue)",
     )
     parser.add_argument(
         "--opponent-label",
@@ -262,13 +272,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--handicap-factor",
         type=positive_float,
-        default=0.35,
+        default=0.65,
         help="Scaling factor applied to opponent time when handicap is enabled",
     )
     parser.add_argument(
         "--handicap-depth",
         type=non_negative_int,
-        default=6,
+        default=3,
         help="Depth advantage retained by reference engine when handicap is enabled",
     )
     parser.add_argument(
@@ -378,10 +388,14 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         base_args.extend(["--engine", args.engine])
     if args.engine_params:
         base_args.extend(["--engine-params", args.engine_params])
+    if args.engine_nnue:
+        base_args.extend(["--engine-nnue", args.engine_nnue])
     if args.opponent:
         base_args.extend(["--opponent", args.opponent])
     if args.opponent_params:
         base_args.extend(["--opponent-params", args.opponent_params])
+    if args.opponent_nnue:
+        base_args.extend(["--opponent-nnue", args.opponent_nnue])
     if args.no_handicap:
         base_args.append("--no-handicap")
     if args.handicap_factor is not None:
@@ -658,8 +672,10 @@ def run_batch(args: argparse.Namespace) -> int:
             "moves_to_go": args.moves_to_go,
             "engine": args.engine,
             "engine_params": args.engine_params,
+            "engine_nnue": args.engine_nnue,
             "opponent": args.opponent,
             "opponent_params": args.opponent_params,
+            "opponent_nnue": args.opponent_nnue,
             "handicap_factor": args.handicap_factor,
             "handicap_depth": args.handicap_depth,
             "handicap_enabled": args.handicap_enabled,

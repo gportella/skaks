@@ -144,6 +144,35 @@ generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count) {
   return legal_moves;
 }
 
+bool is_quiet_position(Board& board, SideToMove stm) {
+  if (is_check(board, stm)) {
+    return false; // in check is never quiet
+  }
+
+  uint16_t move_count = 0;
+  auto moves = generate_legal_moves(board, stm, move_count);
+  for (uint16_t i = 0; i < move_count; ++i) {
+    const Move m = decode_move(moves[i]);
+    const bool tactical = (m.captured_pc != OccupancyType::empty) ||
+                          (m.promo_pc != OccupancyType::empty) ||
+                          flag_is_ep(m.flags) || flag_is_castle(m.flags) ||
+                          flag_is_long_castle(m.flags);
+    if (tactical) {
+      return false;
+    }
+
+    // Check if the move gives check; if so, position has tactical tension.
+    const Undo u = make_move(board, m);
+    const bool gives_check = is_check(board, board.side_to_move);
+    undo_move(board, u);
+    if (gives_check) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // mostly copied from make_move but only for captures and minimal state tracking
 UndoSEE make_see_move(Board& b, const Move& m) {
   UndoSEE undo;

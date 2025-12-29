@@ -15,7 +15,11 @@ import numpy as np
 import optuna
 import yaml
 
-from skaks_opt.params import DEFAULT_PARAMS, apply_param_updates, default_param_space
+from skaks_opt.params import (
+    DEFAULT_PARAMS,
+    apply_param_updates,
+    param_space_for_mode,
+)
 
 
 def _logit_prob(cp: np.ndarray, scale: float) -> np.ndarray:
@@ -99,11 +103,45 @@ def load_texel_csv(path: Path | str, limit: int | None = None) -> TexelDataset:
     )
 
 
-def quantized_suggest(trial: optuna.Trial, spec, sampler: str) -> int:
+def filter_quiet(dataset: TexelDataset, batch_size: int) -> TexelDataset:
+    try:
+        import skaks_eval as sk
+    except Exception:  # pragma: no cover - optional dependency
+        warnings.warn("skaks_eval not available; skipping quiet filtering")
+        return dataset
+
+    keep_mask = np.zeros(len(dataset.fens), dtype=bool)
+    for start in range(0, len(dataset.fens), batch_size):
+        end = min(start + batch_size, len(dataset.fens))
+        chunk = dataset.fens[start:end]
+        flags = sk.is_quiet_batch(chunk)
+        for idx, flag in enumerate(flags):
+            keep_mask[start + idx] = bool(flag) if flag is not None else False
+
+    if keep_mask.all():
+        return dataset
+    if not keep_mask.any():
+        raise ValueError("quiet filtering removed all positions")
+
+    return TexelDataset(
+        fens=[f for f, keep in zip(dataset.fens, keep_mask) if keep],
+        outcomes=dataset.outcomes[keep_mask],
+        weights=dataset.weights[keep_mask],
+        side=dataset.side[keep_mask],
+    )
+
+
+def quantized_suggest(trial: optuna.Trial, spec, sampler: str):
+    # Float params should stay float regardless of sampler choice.
+    if spec.is_float:
+        step = spec.step if isinstance(spec.step, float) else None
+        return trial.suggest_float(spec.name, spec.low, spec.high, step=step)
+
     if sampler == "cmaes":
         raw = trial.suggest_float(spec.name, spec.low, spec.high)
         stepped = round((raw - spec.low) / spec.step) * spec.step + spec.low
         return int(max(spec.low, min(spec.high, stepped)))
+
     return int(trial.suggest_int(spec.name, spec.low, spec.high, step=spec.step))
 
 
@@ -189,6 +227,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout", type=int, default=None, help="Timeout seconds")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
     p.add_argument(
+        "--require-quiet",
+        action="store_true",
+        help="Filter to positions with no captures/checks/castling from side to move",
+    )
+    p.add_argument(
+        "--quiet-batch",
+        type=int,
+        default=2048,
+        help="Batch size for quiet filtering (only if skaks_eval available)",
+    )
+    p.add_argument(
         "--progress-every",
         type=int,
         default=0,
@@ -228,6 +277,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=6.0,
         help="Loss added for failed evals (per weighted sample)",
     )
+    p.add_argument(
+        "--param-set",
+        choices=["full", "phase", "offense", "defense"],
+        default="full",
+        help="Limit tuned params to a subset (phase weights only, offensive, or defensive)",
+    )
     p.add_argument("--include-arrays", action="store_true", help="Tune array params")
     p.add_argument(
         "--base-params",
@@ -250,7 +305,12 @@ def main(argv: List[str] | None = None) -> None:
         warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
     dataset = load_texel_csv(args.data, limit=args.limit)
-    param_space = default_param_space(include_arrays=args.include_arrays)
+    if args.require_quiet:
+        dataset = filter_quiet(dataset, batch_size=args.quiet_batch)
+        print(f"Filtered to {len(dataset)} quiet positions")
+    param_space = param_space_for_mode(
+        mode=args.param_set, include_arrays=args.include_arrays
+    )
 
     if args.base_params and Path(args.base_params).exists():
         with Path(args.base_params).open("r") as fh:

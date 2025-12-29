@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Mapping
 import numpy as np
 
 from .data import Dataset
@@ -21,7 +21,7 @@ class EvalResult:
 
 
 def evaluate_params(
-    param_updates: Dict[str, int],
+    param_updates: Mapping[str, int | float],
     dataset: Dataset,
     batch_size: int = 256,
     threads: int = 0,

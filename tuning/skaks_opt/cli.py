@@ -6,13 +6,32 @@ import json
 import warnings
 from pathlib import Path
 from typing import List
+from threading import Lock
 
 import optuna
 import yaml
 
-from .data import load_csv, split_dataset
+try:
+    from tqdm import tqdm
+except Exception:  # pragma: no cover - optional dep
+    tqdm = None
+
+try:
+    from rich.console import Console
+    from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
+    from rich.progress import TimeRemainingColumn
+except Exception:  # pragma: no cover - optional dep
+    Console = None
+    Progress = None
+
+from .data import load_csv, split_dataset, filter_quiet
 from .evaluator import evaluate_params
-from .params import DEFAULT_PARAMS, apply_param_updates, default_param_space
+from .params import (
+    DEFAULT_PARAMS,
+    apply_param_updates,
+    default_param_space,
+    phase_weight_param_space,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -39,6 +58,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--include-arrays", action="store_true", help="Tune array params too"
+    )
+    p.add_argument(
+        "--phase-weights-only",
+        action="store_true",
+        help="Tune only phase mg/eg weights (ignores other params)",
     )
     p.add_argument(
         "--error-penalty", type=float, default=2000.0, help="Penalty per failed FEN"
@@ -95,13 +119,38 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Suppress Optuna per-trial info logging (show only summary)",
     )
+    p.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable tqdm progress bar (on by default if tqdm is installed)",
+    )
+    p.add_argument(
+        "--rich",
+        action="store_true",
+        default=True,
+        help="Use rich progress bar with chess glyphs (if rich installed)",
+    )
+    p.add_argument(
+        "--require-quiet",
+        action="store_true",
+        help="Filter dataset to quiet positions (requires skaks_eval)",
+    )
+    p.add_argument(
+        "--quiet-batch",
+        type=int,
+        default=2048,
+        help="Batch size for quiet filtering",
+    )
     return p
 
 
 def main(argv: List[str] | None = None) -> None:
     args = _build_parser().parse_args(argv)
 
+    # Hide Optuna trial spam by default; re-enable with OPTUNA_LOG_LEVEL if needed.
     if args.quiet:
+        optuna.logging.set_verbosity(optuna.logging.ERROR)
+    else:
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
     if args.mtpe:
@@ -111,11 +160,17 @@ def main(argv: List[str] | None = None) -> None:
         warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
     dataset = load_csv(args.data, limit=args.limit)
+    if args.require_quiet:
+        dataset = filter_quiet(dataset, batch_size=args.quiet_batch)
+        print(f"Filtered to {len(dataset)} quiet positions")
     train_ds = dataset
     val_ds = None
     if args.val_split and args.val_split > 0.0:
         train_ds, val_ds = split_dataset(dataset, args.val_split, seed=args.seed)
-    param_space = default_param_space(include_arrays=args.include_arrays)
+    if args.phase_weights_only:
+        param_space = phase_weight_param_space()
+    else:
+        param_space = default_param_space(include_arrays=args.include_arrays)
 
     if args.sampler == "tpe":
         sampler = optuna.samplers.TPESampler(
@@ -153,7 +208,48 @@ def main(argv: List[str] | None = None) -> None:
         load_if_exists=True,
     )
 
-    def quantized_suggest(trial: optuna.Trial, spec) -> int:
+    # Optional progress bars: prefer rich if requested and available.
+    progress = None
+    progress_lock: Lock | None = None
+    rich_progress = None
+    rich_task = None
+    glyph_bar_width = 40
+
+    chess_glyphs = ["♙", "♘", "♗", "♖", "♕", "♔", "♟", "♞", "♝", "♜", "♛", "♚"]
+    color_cycle = ["cyan", "magenta", "green", "yellow", "blue", "white"]
+    glyph_pattern = [
+        f"[{color_cycle[i % len(color_cycle)]}]{chess_glyphs[i % len(chess_glyphs)]}[/]"
+        for i in range(glyph_bar_width)
+    ]
+
+    if (
+        args.rich
+        and Progress is not None
+        and Console is not None
+        and not args.no_progress
+    ):
+        console = Console()
+        rich_progress = Progress(
+            TextColumn("[bold cyan]Tuning"),
+            TextColumn("{task.fields[pieces]}", justify="left"),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            TextColumn("[bold]{task.fields[status]}", justify="left"),
+            console=console,
+            expand=True,
+        )
+        rich_task = rich_progress.add_task(
+            "tuning", total=args.trials, status="", pieces=""
+        )
+        rich_progress.start()
+    elif tqdm is not None and not args.no_progress:
+        progress = tqdm(total=args.trials, desc="Tuning [N]", dynamic_ncols=True)
+        progress_lock = Lock()
+
+    def quantized_suggest(trial: optuna.Trial, spec):
+        if spec.is_float:
+            return trial.suggest_float(spec.name, spec.low, spec.high, step=spec.step)
         if args.sampler == "cmaes":
             raw = trial.suggest_float(spec.name, spec.low, spec.high)
             stepped = round((raw - spec.low) / spec.step) * spec.step + spec.low
@@ -171,6 +267,29 @@ def main(argv: List[str] | None = None) -> None:
             pov=args.pov,
             cp_cap=args.cp_cap,
         )
+        glyph = chess_glyphs[trial.number % len(chess_glyphs)]
+        color = color_cycle[trial.number % len(color_cycle)]
+
+        if rich_progress is not None and rich_task is not None:
+            progress_frac = (trial.number + 1) / max(1, args.trials)
+            filled = min(glyph_bar_width, int(round(progress_frac * glyph_bar_width)))
+            bar_text = "".join(glyph_pattern[:filled]).ljust(glyph_bar_width)
+            status = f"[{color}]loss {result.loss:.1f} mae {result.mae:.1f}[/]"
+            rich_progress.update(rich_task, advance=1, status=status, pieces=bar_text)
+        elif progress is not None:
+            payload = {
+                f"{glyph} loss": f"{result.loss:.1f}",
+                "mae": f"{result.mae:.1f}",
+            }
+            if val_ds is not None:
+                payload["val"] = "pending"
+            if progress_lock is not None:
+                with progress_lock:
+                    progress.update(1)
+                    progress.set_postfix(payload, refresh=False)
+            else:
+                progress.update(1)
+                progress.set_postfix(payload, refresh=False)
         trial.set_user_attr("error_count", result.error_count)
         trial.set_user_attr("evaluated", result.evaluated)
         trial.set_user_attr("mae", result.mae)
@@ -191,12 +310,39 @@ def main(argv: List[str] | None = None) -> None:
             trial.set_user_attr("val_mse", val_res.mse)
             trial.set_user_attr("val_rmse", val_res.rmse)
             trial.set_user_attr("val_error_count", val_res.error_count)
+            if rich_progress is not None and rich_task is not None:
+                progress_frac = (trial.number + 1) / max(1, args.trials)
+                filled = min(
+                    glyph_bar_width, int(round(progress_frac * glyph_bar_width))
+                )
+                bar_text = "".join(glyph_pattern[:filled]).ljust(glyph_bar_width)
+                status = (
+                    f"[{color}]loss {result.loss:.1f} mae {result.mae:.1f} "
+                    f"val {val_res.mae:.1f}[/]"
+                )
+                rich_progress.update(rich_task, status=status, pieces=bar_text)
+            elif progress is not None:
+                payload = {
+                    f"{glyph} loss": f"{result.loss:.1f}",
+                    "mae": f"{result.mae:.1f}",
+                    "val": f"{val_res.mae:.1f}",
+                }
+                if progress_lock is not None:
+                    with progress_lock:
+                        progress.set_postfix(payload, refresh=False)
+                else:
+                    progress.set_postfix(payload, refresh=False)
 
         return result.loss
 
     study.optimize(
         objective, n_trials=args.trials, timeout=args.timeout, n_jobs=args.jobs
     )
+
+    if progress is not None:
+        progress.close()
+    if rich_progress is not None:
+        rich_progress.stop()
 
     best = study.best_trial
     merged = apply_param_updates(DEFAULT_PARAMS, best.params)
@@ -236,10 +382,6 @@ def main(argv: List[str] | None = None) -> None:
     if args.plot_out:
         _write_plot(args.plot_out, completed)
         print(f"wrote loss plot to {args.plot_out}")
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()
 
 
 def _write_metrics_csv(path: Path, trials: List[optuna.trial.FrozenTrial]) -> None:
@@ -344,3 +486,7 @@ def _write_plot(path: Path, trials: List[optuna.trial.FrozenTrial]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=120)
     plt.close(fig)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

@@ -28,6 +28,15 @@ add_executable(chess_engine_tests
   zobrist_tests.cpp
   params_loader_tests.cpp
   nnue_features_tests.cpp
+  nnue_sf_tests.cpp
+)
+
+set_source_files_properties(
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/sf_nnue/nnue.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/sf_nnue/misc.cpp
+  PROPERTIES
+  COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-sign-conversion;-Wno-implicit-int-conversion;-Wno-vla-cxx-extension"
+  COMPILE_DEFINITIONS "USE_NEON;IS_64BIT=1"
 )
 
 target_link_libraries(chess_engine_tests

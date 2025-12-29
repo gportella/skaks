@@ -15,7 +15,45 @@
 #include <array>
 #include <cmath>
 
+namespace {
+constexpr std::size_t kTermCount =
+    static_cast<std::size_t>(chess::TermId::Count);
+
+chess::PhaseWeights& phase_weight_store() {
+  static chess::PhaseWeights w = [] {
+    chess::PhaseWeights init{};
+    for (std::size_t i = 0; i < kTermCount; ++i) {
+      init.mg[i] = 1.0;
+      init.eg[i] = 1.0;
+    }
+    return init;
+  }();
+  return w;
+}
+} // namespace
+
 namespace chess {
+
+PhaseWeights& mutable_phase_weights() {
+  return phase_weight_store();
+}
+
+const PhaseWeights& phase_weights() {
+  return phase_weight_store();
+}
+
+void set_phase_weights(const PhaseWeights& w) {
+  phase_weight_store() = w;
+}
+
+void reset_phase_weights() {
+  PhaseWeights w{};
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    w.mg[i] = 1.0;
+    w.eg[i] = 1.0;
+  }
+  phase_weight_store() = w;
+}
 
 // Helper: White-centric check queries
 inline bool white_in_check(const Board& board) {
@@ -523,6 +561,46 @@ int evaluate_rook_file_control(const Board& board) {
   return score;
 }
 
+EvalVector compute_eval_vector(const Board& b) {
+  EvalVector v{};
+  v.f[static_cast<int>(TermId::Material)] = evaluate_material(b);
+  v.f[static_cast<int>(TermId::PawnCenter)] = evaluate_pawn_center_control(b);
+  v.f[static_cast<int>(TermId::CenterControl)] = evaluate_center_control(b);
+  v.f[static_cast<int>(TermId::Attacking)] = evaluate_attacking_pieces(b);
+  v.f[static_cast<int>(TermId::KingSafety)] = evaluate_king_safety(b);
+  v.f[static_cast<int>(TermId::KingMobility)] = evaluate_king_mobility(b);
+  v.f[static_cast<int>(TermId::Pins)] = evaluate_pins(b);
+
+  const int mg_phase = std::min(b.phase, kPstPhaseMax);
+  const int eg_phase = kPstPhaseMax - mg_phase;
+  v.f[static_cast<int>(TermId::PstMg)] = b.pst_midgame_score;
+  v.f[static_cast<int>(TermId::PstEg)] = b.pst_endgame_score;
+
+  v.f[static_cast<int>(TermId::PassedPawns)] = evaluate_passed_pawns(b);
+  v.f[static_cast<int>(TermId::Initiative)] = evaluate_initiative(b);
+  v.f[static_cast<int>(TermId::Hanging)] = evaluate_hanging_pieces(b);
+  v.f[static_cast<int>(TermId::KingRing)] = evaluate_king_ring_pressure(b);
+  v.f[static_cast<int>(TermId::BishopPair)] = evaluate_bishop_pair(b);
+  v.f[static_cast<int>(TermId::RookFiles)] = evaluate_rook_file_control(b);
+
+  v.mg_phase = mg_phase;
+  v.eg_phase = eg_phase;
+  return v;
+}
+
+int eval_linear(const EvalVector& v, const PhaseWeights& W) {
+  const double mgw =
+      static_cast<double>(v.mg_phase) / static_cast<double>(kPstPhaseMax);
+  const double egw =
+      static_cast<double>(v.eg_phase) / static_cast<double>(kPstPhaseMax);
+  double sum = 0.0;
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    const double wi = W.mg[i] * mgw + W.eg[i] * egw;
+    sum += wi * static_cast<double>(v.f[i]);
+  }
+  return static_cast<int>(std::lround(sum));
+}
+
 int evaluate_opening_principles(const Board& board) {
   const auto& params = evaluation_params();
   const int open_w = opening_phase(board);
@@ -676,29 +754,18 @@ int evaluate_board(const Board& board) {
     return 100000; // White wins
   }
 
+  if (sf_nnue_active()) {
+    return evaluate_sf_nnue(board);
+  }
+
   if (const auto net = active_nnue()) {
     const auto feat = make_nnue_features(board);
     const float eval = net->forward(feat);
     return static_cast<int>(std::lround(eval));
   }
 
-  int total_eval = 0;
-  total_eval += evaluate_material(board);
-  total_eval += evaluate_pawn_center_control(board);
-  total_eval += evaluate_center_control(board);
-  total_eval += evaluate_attacking_pieces(board);
-  total_eval += evaluate_king_safety(board);
-  total_eval += evaluate_king_mobility(board);
-  total_eval += evaluate_pins(board);
-  total_eval += evaluate_pst(board);
-  total_eval += evaluate_passed_pawns(board);
-  total_eval += evaluate_initiative(board);
-  total_eval += evaluate_hanging_pieces(board);
-  total_eval += evaluate_king_ring_pressure(board);
-  total_eval += evaluate_bishop_pair(board);
-  total_eval += evaluate_rook_file_control(board);
-
-  return total_eval;
+  const auto v = compute_eval_vector(board);
+  return eval_linear(v, phase_weights());
 }
 
 } // namespace chess

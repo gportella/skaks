@@ -223,8 +223,8 @@ def _set_by_path(data: Any, path: str, value: Any) -> None:
 def perturb_params(
     base: Dict[str, Any],
     noise: float,
-    include_prefixes: Optional[List[str]],
-    exclude_prefixes: Optional[List[str]],
+    include_prefixes: Optional[List[str]] = None,
+    exclude_prefixes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Return a copy with multiplicative noise on numeric leaves (filtered)."""
     data = json.loads(json.dumps(base))  # cheap deep copy
@@ -556,6 +556,13 @@ def optimize_loop(args: argparse.Namespace) -> None:
     best_data = base_data
     best_score = -1.0
 
+    include_prefixes = args.include_prefix
+    if getattr(args, "phase_weights_only", False):
+        include_prefixes = [
+            "evaluation.phase_weights_mg",
+            "evaluation.phase_weights_eg",
+        ]
+
     if args.output:
         best_path = Path(args.output).resolve()
     else:
@@ -621,7 +628,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 cand_data = perturb_params(
                     parent,
                     args.noise,
-                    include_prefixes=args.include_prefix,
+                    include_prefixes=include_prefixes,
                     exclude_prefixes=args.exclude_prefix,
                 )
                 cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
@@ -684,7 +691,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
         else:  # CMA-like strategy
             paths, mean_vec, is_int = _flatten_params(
                 best_data,
-                include_prefixes=args.include_prefix,
+                include_prefixes=include_prefixes,
                 exclude_prefixes=args.exclude_prefix,
             )
             popsize = (
@@ -768,7 +775,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
             for rank in range(min(mu, len(candidates))):
                 vec_paths, vec_vals, _ = _flatten_params(
                     candidates[rank][1],
-                    include_prefixes=args.include_prefix,
+                    include_prefixes=include_prefixes,
                     exclude_prefixes=args.exclude_prefix,
                 )
                 if vec_paths != paths:
@@ -860,6 +867,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--exclude-prefix",
         action="append",
         help="Skip params whose dotted path starts with this prefix (repeatable)",
+    )
+    parser.add_argument(
+        "--phase-weights-only",
+        action="store_true",
+        help="Only tune evaluation.phase_weights_mg/eg arrays",
     )
     parser.add_argument(
         "--strategy",

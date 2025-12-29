@@ -2,6 +2,7 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/evaluation_params.hpp"
+#include "chess/moves.hpp"
 #include "chess/search.hpp"
 #include "chess/search_params.hpp"
 
@@ -42,6 +43,21 @@ void assign_array_if_present(const py::dict& src, const char* key,
     }
     for (std::size_t i = 0; i < N; ++i) {
       target[i] = py::cast<int>(seq[i]);
+    }
+  }
+}
+
+template <std::size_t N>
+void assign_array_double_if_present(const py::dict& src, const char* key,
+                                    std::array<double, N>& target) {
+  if (src.contains(key)) {
+    auto seq = py::cast<py::sequence>(src[key]);
+    if (seq.size() != static_cast<py::ssize_t>(N)) {
+      throw std::invalid_argument(std::string(key) + " must have " +
+                                  std::to_string(N) + " elements");
+    }
+    for (std::size_t i = 0; i < N; ++i) {
+      target[i] = py::cast<double>(seq[i]);
     }
   }
 }
@@ -120,6 +136,11 @@ chess::EngineParams params_from_dict(const py::dict& root) {
     assign_array_if_present(ev, "king_attack_weights",
                             params.evaluation.king_attack_weights);
     assign_array_if_present(ev, "threat_base", params.evaluation.threat_base);
+
+    assign_array_double_if_present(ev, "phase_weights_mg",
+                                   params.evaluation.phase_weights_mg);
+    assign_array_double_if_present(ev, "phase_weights_eg",
+                                   params.evaluation.phase_weights_eg);
 
     if (ev.contains("bishop_pin_penalty")) {
       auto pair = parse_pin_pair(ev["bishop_pin_penalty"], "bishop_pin_penalty");
@@ -259,6 +280,24 @@ py::object eval_fen_single(const std::string& fen,
     return py::dict("ok"_a = false, "error"_a = res.error);
   }
   return py::dict("ok"_a = true, "cp"_a = res.cp);
+}
+
+bool quiet_fen(const std::string& fen) {
+  chess::Board b = chess::initial_board(fen);
+  return chess::is_quiet_position(b, b.side_to_move);
+}
+
+py::list quiet_fens(const std::vector<std::string>& fens) {
+  py::list out;
+  for (const auto& fen : fens) {
+    try {
+      chess::Board b = chess::initial_board(fen);
+      out.append(py::bool_(chess::is_quiet_position(b, b.side_to_move)));
+    } catch (const std::exception& ex) {
+      out.append(py::none()); // signal parse error
+    }
+  }
+  return out;
 }
 
 struct SelfPlayOptions {
@@ -475,6 +514,12 @@ PYBIND11_MODULE(skaks_eval, m) {
   m.doc() = "skaks evaluation bindings";
 
   bind_nnue(m);
+
+  m.def("is_quiet", &quiet_fen, py::arg("fen"),
+        "Return True if side-to-move is not in check and has no captures,"
+        " promotions, castling, en-passant, or checking moves.");
+  m.def("is_quiet_batch", &quiet_fens, py::arg("fens"),
+        "Vectorized is_quiet; returns list of bool, None on parse errors.");
 
   m.def("eval_fens", &eval_fens, py::arg("fens"),
         py::arg("params") = std::nullopt, py::arg("threads") = 0,

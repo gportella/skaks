@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Dict, List, MutableMapping
 import re
@@ -8,6 +9,8 @@ __all__ = [
     "ParamSpec",
     "DEFAULT_PARAMS",
     "default_param_space",
+    "phase_weight_param_space",
+    "param_space_for_mode",
     "apply_param_updates",
 ]
 
@@ -20,9 +23,10 @@ class ParamSpec:
     """
 
     name: str
-    low: int
-    high: int
-    step: int = 1
+    low: float
+    high: float
+    step: float | None = 1
+    is_float: bool = False
 
 
 DEFAULT_PARAMS: Dict[str, Dict] = {
@@ -58,6 +62,8 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "knight_pin_penalty": {"base": 15, "mobility": 0},
         "pawn_pin_straight_penalty": {"base": 6, "mobility": 2},
         "pawn_pin_diagonal_penalty": {"base": 10, "mobility": 2},
+        "phase_weights_mg": [1.0] * 15,
+        "phase_weights_eg": [1.0] * 15,
     },
     "search": {
         "aspiration_window_initial": 800,
@@ -131,15 +137,121 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
             specs.append(ParamSpec(f"evaluation.king_attack_weights[{idx}]", 0, 120))
         for idx in range(len(DEFAULT_PARAMS["evaluation"]["threat_base"])):
             specs.append(ParamSpec(f"evaluation.threat_base[{idx}]", 0, 300))
+        specs.extend(_phase_weight_specs())
 
     return specs
+
+
+def _phase_weight_specs() -> List[ParamSpec]:
+    specs: List[ParamSpec] = []
+    for idx in range(len(DEFAULT_PARAMS["evaluation"]["phase_weights_mg"])):
+        specs.append(
+            ParamSpec(
+                f"evaluation.phase_weights_mg[{idx}]",
+                -3.0,
+                3.0,
+                step=0.05,
+                is_float=True,
+            )
+        )
+    for idx in range(len(DEFAULT_PARAMS["evaluation"]["phase_weights_eg"])):
+        specs.append(
+            ParamSpec(
+                f"evaluation.phase_weights_eg[{idx}]",
+                -3.0,
+                3.0,
+                step=0.05,
+                is_float=True,
+            )
+        )
+    return specs
+
+
+def phase_weight_param_space() -> List[ParamSpec]:
+    """Only tune midgame/endgame phase weights."""
+
+    return _phase_weight_specs()
+
+
+# Parameter subsets for narrower Texel searches
+_OFFENSE_KEYS = {
+    "evaluation.check_penalty",
+    "evaluation.tempo_bonus",
+    "evaluation.threat_weight",
+    "evaluation.king_ring_base",
+    "evaluation.king_ring_defended_scale",
+    "evaluation.king_ring_enemy_occupier",
+    "evaluation.king_ring_enemy_piece_material_scale",
+    "evaluation.bishop_pair_bonus",
+    "evaluation.rook_open_file_bonus",
+    "evaluation.rook_semi_open_file_bonus",
+    "evaluation.mobility_scaling",
+    "evaluation.passed_pawn_base",
+    "evaluation.passed_pawn_advance",
+    "evaluation.hanging_divisor",
+    "evaluation.hanging_min_penalty",
+    "evaluation.castle_urgency",
+    "evaluation.central_pawn_bonus",
+    "evaluation.connect_rooks_bonus",
+    "evaluation.king_attack_weights",
+    "evaluation.threat_base",
+}
+
+_DEFENSE_KEYS = {
+    "evaluation.pawn_shield_bonus",
+    "evaluation.castling_bonus",
+    "evaluation.flank_pawn_penalty",
+    "evaluation.king_ring_base",
+    "evaluation.king_ring_defended_scale",
+    "evaluation.king_ring_enemy_occupier",
+    "evaluation.king_ring_enemy_piece_material_scale",
+    "evaluation.early_queen_penalty",
+    "evaluation.bishop_pin_penalty",
+    "evaluation.rook_pin_penalty",
+    "evaluation.knight_pin_penalty",
+    "evaluation.pawn_pin_straight_penalty",
+    "evaluation.pawn_pin_diagonal_penalty",
+    "evaluation.king_attack_weights",
+    "evaluation.threat_base",
+}
+
+
+def _base_name(spec: ParamSpec) -> str:
+    return spec.name.split("[")[0]
+
+
+def param_space_for_mode(
+    mode: str = "full", include_arrays: bool = False
+) -> List[ParamSpec]:
+    """Return a filtered parameter space.
+
+    mode: full | phase | offense | defense
+    include_arrays: include king_attack_weights/threat_base when available.
+    """
+
+    if mode == "phase":
+        return phase_weight_param_space()
+
+    specs = default_param_space(include_arrays=include_arrays)
+
+    if mode == "full":
+        return specs
+
+    allowed = _OFFENSE_KEYS if mode == "offense" else _DEFENSE_KEYS
+    filtered: List[ParamSpec] = []
+    for spec in specs:
+        base = _base_name(spec)
+        if base in allowed:
+            filtered.append(spec)
+    return filtered
 
 
 _SEGMENT_RE = re.compile(r"^(?P<name>[a-zA-Z0-9_]+)(?:\[(?P<idx>\d+)\])?$")
 
 
-def _set_nested(target: MutableMapping, dotted: str, value: int) -> None:
+def _set_nested(target: MutableMapping, dotted: str, value: int | float) -> None:
     parts = dotted.split(".")
+    section = parts[0]
     cur: MutableMapping = target
     for part in parts[:-1]:
         m = _SEGMENT_RE.match(part)
@@ -166,7 +278,12 @@ def _set_nested(target: MutableMapping, dotted: str, value: int) -> None:
 
     idx_int = int(idx)
     if name not in cur:
-        raise ValueError(f"array {name} missing in base params")
+        defaults = DEFAULT_PARAMS.get(section, {}) if isinstance(section, str) else {}
+        default_arr = defaults.get(name)
+        if isinstance(default_arr, list):
+            cur[name] = list(default_arr)
+        else:
+            raise ValueError(f"array {name} missing in base params")
     arr = list(cur[name])
     if idx_int >= len(arr):
         raise IndexError(f"index {idx_int} out of bounds for {name}")
@@ -174,17 +291,27 @@ def _set_nested(target: MutableMapping, dotted: str, value: int) -> None:
     cur[name] = arr
 
 
-def apply_param_updates(base: Dict, updates: MutableMapping[str, int]) -> Dict:
+def apply_param_updates(base: Dict, updates: MutableMapping[str, int | float]) -> Dict:
     """Return a deep-ish copy of base with flat-key updates applied."""
 
+    base_eval = deepcopy(DEFAULT_PARAMS["evaluation"])
+    for key, val in base.get("evaluation", {}).items():
+        if isinstance(val, dict) and isinstance(base_eval.get(key), dict):
+            base_eval[key] = {**base_eval[key], **val}
+        else:
+            base_eval[key] = val
+
+    base_search = deepcopy(DEFAULT_PARAMS["search"])
+    for key, val in base.get("search", {}).items():
+        if isinstance(val, dict) and isinstance(base_search.get(key), dict):
+            base_search[key] = {**base_search[key], **val}
+        else:
+            base_search[key] = val
+
     merged = {
-        "evaluation": {
-            **base.get("evaluation", {}),
-        },
-        "search": {
-            **base.get("search", {}),
-        },
+        "evaluation": base_eval,
+        "search": base_search,
     }
     for key, val in updates.items():
-        _set_nested(merged, key, int(val))
+        _set_nested(merged, key, val)
     return merged

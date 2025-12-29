@@ -261,10 +261,15 @@ def _non_negative_int(value: str) -> int:
     return parsed
 
 
-def _params_argv(path: Optional[str]) -> Optional[list[str]]:
-    if path is None:
-        return None
-    return ["--params", path]
+def _extra_args(
+    params_path: Optional[str], nnue_path: Optional[str]
+) -> Optional[list[str]]:
+    argv: list[str] = []
+    if params_path:
+        argv.extend(["--params", params_path])
+    if nnue_path:
+        argv.extend(["--nnue", nnue_path])
+    return argv or None
 
 
 def _needs_uci_arg(binary: str) -> bool:
@@ -287,6 +292,8 @@ def run_game(
     opponent_engine: str,
     reference_params: Optional[str],
     opponent_params: Optional[str],
+    reference_nnue: Optional[str],
+    opponent_nnue: Optional[str],
     handicap_factor: float,
     handicap_depth: int,
     handicap_enabled: bool,
@@ -320,13 +327,13 @@ def run_game(
                 opponent_path,
                 timeout=240.0,
                 add_uci_arg=_needs_uci_arg(opponent_path),
-                extra_args=_params_argv(opponent_params),
+                extra_args=_extra_args(opponent_params, opponent_nnue),
             ) as opponent,
             UciEngine(
                 reference_path,
                 timeout=240.0,
                 add_uci_arg=_needs_uci_arg(reference_path),
-                extra_args=_params_argv(reference_params),
+                extra_args=_extra_args(reference_params, reference_nnue),
             ) as reference,
         ):
             clock: Optional[MatchClock] = None
@@ -523,9 +530,19 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Path to YAML/JSON params for the reference engine (passed as --params)",
     )
     parser.add_argument(
+        "--engine-nnue",
+        type=str,
+        help="Path to NNUE weights for the reference engine (passed as --nnue)",
+    )
+    parser.add_argument(
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --params)",
+    )
+    parser.add_argument(
+        "--opponent-nnue",
+        type=str,
+        help="Path to NNUE weights for the opponent engine (passed as --nnue)",
     )
     parser.add_argument(
         "--stockfish",
@@ -664,6 +681,8 @@ def main(argv: List[str]) -> int:
         opponent_engine=args.opponent,
         reference_params=args.engine_params,
         opponent_params=args.opponent_params,
+        reference_nnue=args.engine_nnue,
+        opponent_nnue=args.opponent_nnue,
         handicap_factor=args.handicap_factor,
         handicap_depth=args.handicap_depth,
         handicap_enabled=args.handicap_enabled,

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import csv
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, List, Sequence, Tuple
 import numpy as np
 
-__all__ = ["Example", "Dataset", "load_csv", "split_dataset"]
+__all__ = [
+    "Example",
+    "Dataset",
+    "load_csv",
+    "split_dataset",
+    "filter_quiet",
+]
 
 
 @dataclass(frozen=True)
@@ -86,6 +93,39 @@ def load_csv(path: Path | str, limit: int | None = None) -> Dataset:
                 sides.append(parse_side_to_move(fen))
     if not examples:
         raise ValueError(f"no rows loaded from {path}")
+    return Dataset(examples, side_override=sides)
+
+
+def filter_quiet(dataset: Dataset, batch_size: int = 2048) -> Dataset:
+    try:
+        import skaks_eval as sk
+    except Exception:  # pragma: no cover - optional dependency
+        warnings.warn("skaks_eval not available; skipping quiet filtering")
+        return dataset
+
+    keep_mask = np.zeros(len(dataset.fens), dtype=bool)
+    for start in range(0, len(dataset.fens), batch_size):
+        end = min(start + batch_size, len(dataset.fens))
+        chunk = dataset.fens[start:end]
+        flags = sk.is_quiet_batch(chunk)
+        for idx, flag in enumerate(flags):
+            keep_mask[start + idx] = bool(flag) if flag is not None else False
+
+    if keep_mask.all():
+        return dataset
+    if not keep_mask.any():
+        raise ValueError("quiet filtering removed all positions")
+
+    examples = [
+        Example(
+            fen=fen,
+            target_cp=float(dataset.targets[i]),
+            weight=float(dataset.weights[i]),
+        )
+        for i, fen in enumerate(dataset.fens)
+        if keep_mask[i]
+    ]
+    sides = [int(dataset.side[i]) for i in range(len(dataset.fens)) if keep_mask[i]]
     return Dataset(examples, side_override=sides)
 
 

@@ -53,6 +53,12 @@ NnueFeatures make_nnue_features(const Board& board);
 bool load_nnue_from_file(const std::string& path, NnueNetwork& out,
                          std::string& error);
 
+// Load Stockfish-style binary NNUE (.nnue). On success, evaluation switches to
+// the SF backend; YAML/PT networks remain available via set_active_nnue.
+bool load_sf_nnue(const std::string& path, std::string& error);
+bool sf_nnue_active();
+int evaluate_sf_nnue(const Board& board);
+
 // Manage the active NNUE network used by evaluation.
 void set_active_nnue(std::shared_ptr<NnueNetwork> net);
 std::shared_ptr<const NnueNetwork> active_nnue();
@@ -60,9 +66,9 @@ std::shared_ptr<const NnueNetwork> active_nnue();
 // Minimal two-layer dense network (ReLU hidden) with int8 quantized weights.
 // Hidden size is typically 256 in this build; weights are assumed row-major.
 struct NnueNetwork {
-  std::vector<int8_t> w1;   // [hidden, input]
-  std::vector<int32_t> b1;  // [hidden]
-  std::vector<int8_t> w2;   // [hidden]
+  std::vector<int8_t> w1;  // [hidden, input]
+  std::vector<int32_t> b1; // [hidden]
+  std::vector<int8_t> w2;  // [hidden]
   int32_t b2{0};
   float output_scale{1.0f}; // scale int output to cp
   std::size_t hidden_size() const {

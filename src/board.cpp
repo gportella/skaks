@@ -167,6 +167,9 @@ Board initial_board(std::string_view fen) {
   board.occupancy[static_cast<std::size_t>(PieceColor::Both)] =
       calculate_occupancy(board, PieceColor::Both);
 
+  // Initialize material, PST scores, and phase counts now that pieces are set.
+  initialize_incremental_scores(board);
+
   for (std::size_t sq = 0; sq < 64; ++sq) {
     const OccupancyType occ = board.pieces[static_cast<std::size_t>(sq)];
     if (occ == OccupancyType::empty)
