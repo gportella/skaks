@@ -20,15 +20,23 @@ add_library(chess_engine_core STATIC
   sf_nnue/nnue.cpp
 )
 
+# SF NNUE code can use NEON on ARM; disable on x86 (or when explicitly turned
+# off) to avoid pulling arm_neon headers on non-ARM Linux targets.
+set(_skaks_neon_default OFF)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(arm|aarch64)" OR CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+  set(_skaks_neon_default ON)
+endif()
+
+option(SKAKS_ENABLE_NEON "Enable NEON for sf_nnue/nnue.cpp (ARM targets only)" ${_skaks_neon_default})
+
+set(_sf_nnue_defs "IS_64BIT=1")
+if(SKAKS_ENABLE_NEON)
+  list(APPEND _sf_nnue_defs "USE_NEON")
+endif()
+
 set_source_files_properties(sf_nnue/nnue.cpp PROPERTIES
   COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-sign-conversion;-Wno-implicit-int-conversion;-Wno-vla-cxx-extension"
-  COMPILE_DEFINITIONS "USE_NEON;IS_64BIT=1"
-)
-
-# SF NNUE source originates from Stockfish and uses legacy casts; relax a few
-# warnings locally to keep the main target strict.
-set_source_files_properties(sf_nnue/nnue.cpp PROPERTIES
-  COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-implicit-int-conversion"
+  COMPILE_DEFINITIONS "${_sf_nnue_defs}"
 )
 
 target_include_directories(chess_engine_core
