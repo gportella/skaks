@@ -35,7 +35,7 @@ if(SKAKS_ENABLE_NEON)
 endif()
 
 set_source_files_properties(sf_nnue/nnue.cpp PROPERTIES
-  COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-sign-conversion;-Wno-implicit-int-conversion;-Wno-vla-cxx-extension"
+  COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-sign-conversion;-Wno-implicit-int-conversion;-Wno-vla-extension"
   COMPILE_DEFINITIONS "${_sf_nnue_defs}"
 )
 
