@@ -12,7 +12,6 @@ import itertools
 import json
 import math
 import multiprocessing as mp
-import os
 import random
 import shutil
 import subprocess
@@ -42,13 +41,6 @@ try:  # pragma: no cover - purely cosmetic
 except Exception:  # pragma: no cover
     HAS_RICH = False
     console = None
-
-try:  # Optional; used when distributing via Dask
-    from dask.distributed import Client, TimeoutError, LocalCluster  # type: ignore
-except Exception:  # pragma: no cover
-    Client = None  # type: ignore
-    TimeoutError = Exception  # type: ignore
-    LocalCluster = None  # type: ignore
 
 ANSI_COLORS = {
     "cyan": "\033[36m",
@@ -278,51 +270,6 @@ def _vector_to_params(
                 val = 1  # avoid zeroed integer weights
         _set_by_path(data, path, val)
     return data
-
-
-def _evaluate_payload_remote(payload: Dict[str, Any]) -> Tuple[float, Tuple[int, int, int], float]:
-    """Dask-friendly wrapper: writes temp YAMLs then calls evaluate_candidate_repeats."""
-
-    import tempfile
-
-    cand_tmp = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
-    base_tmp: Optional[Path] = None
-    try:
-        _save_params(payload["candidate_data"], cand_tmp)
-        if payload.get("baseline_data") is not None:
-            base_tmp = Path(tempfile.mkstemp(suffix="_base.yaml")[1])
-            _save_params(payload["baseline_data"], base_tmp)
-
-        return evaluate_candidate_repeats(
-            repeats=payload["repeats"],
-            progress_cb=None,
-            quiet=True,
-            use_arena=payload["use_arena_binding"],
-            start_fens=payload["start_fens"],
-            engine=Path(payload["engine"]),
-            baseline_params=base_tmp,
-            candidate_params=cand_tmp,
-            baseline_data=payload.get("baseline_data"),
-            candidate_data=payload["candidate_data"],
-            games=payload["games"],
-            depth=payload["depth"],
-            time_per_move=payload["time_per_move"],
-            clock=payload["clock"],
-            concurrency=payload["concurrency"],
-            arena_workers=payload["arena_workers"],
-            base_label="base",
-            cand_label="cand",
-        )
-    finally:
-        try:
-            cand_tmp.unlink()
-        except OSError:
-            pass
-        if base_tmp:
-            try:
-                base_tmp.unlink()
-            except OSError:
-                pass
 
 
 def run_batch(
@@ -671,60 +618,11 @@ def optimize_loop(args: argparse.Namespace) -> None:
         if not start_fens:
             raise SystemExit("Failed to sample start positions from PGN")
 
-    dask_client: Optional[Client] = None
-    scheduler_addr = args.dask_scheduler
-    if not scheduler_addr:
-        env_addr = os.environ.get("DASK_SCHEDULER_ADDRESS")
-        if env_addr:
-            scheduler_addr = env_addr
-    if not scheduler_addr:
-        host = os.environ.get("DASK_SCHEDULER_SERVICE_HOST")
-        port = os.environ.get("DASK_SCHEDULER_SERVICE_PORT")
-        if host and port:
-            scheduler_addr = f"{host}:{port}"
-
-    if scheduler_addr:
-        if Client is None:
-            _final_line("Dask not installed; ignoring scheduler auto-detect")
-        else:
-            try:
-                dask_client = Client(scheduler_addr, timeout=args.dask_connect_timeout)
-                _final_line(f"Connected to Dask scheduler at {scheduler_addr}")
-            except Exception as exc:
-                _final_line(f"Failed to connect to Dask scheduler: {exc}; falling back to local")
-                dask_client = None
-    elif args.dask_local_fallback:
-        if LocalCluster is None or Client is None:
-            _final_line("Dask LocalCluster not available; install dask.distributed")
-        else:
-            try:
-                cluster = LocalCluster(
-                    n_workers=max(1, args.dask_local_workers),
-                    threads_per_worker=max(1, args.dask_local_threads),
-                )
-                if args.dask_local_max_workers and args.dask_local_max_workers > args.dask_local_workers:
-                    try:
-                        cluster.adapt(
-                            minimum=max(1, args.dask_local_workers),
-                            maximum=args.dask_local_max_workers,
-                            interval="2s",
-                        )
-                    except Exception:
-                        pass
-                dask_client = Client(cluster)
-                _final_line(
-                    f"Started LocalCluster (workers={args.dask_local_workers}, threads={args.dask_local_threads}, max={args.dask_local_max_workers or args.dask_local_workers})"
-                )
-            except Exception as exc:
-                _final_line(f"Failed to start LocalCluster: {exc}; continuing local-only")
-                dask_client = None
-
     for step in range(1, args.iterations + 1):
         candidates: List[Tuple[float, Dict[str, Any], Tuple[int, int, int], float]] = []
 
         if args.strategy == "beam":
             parents = [data for (_, data) in beam] or [best_data]
-            payloads = []
             for i in range(args.beam_size):
                 parent = parents[i % len(parents)]
                 cand_data = perturb_params(
@@ -733,47 +631,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     include_prefixes=include_prefixes,
                     exclude_prefixes=args.exclude_prefix,
                 )
-                payloads.append((i, cand_data))
-
-            if dask_client:
-                futures = []
-                for idx, cand_data in payloads:
-                    payload = {
-                        "candidate_data": cand_data,
-                        "baseline_data": baseline_data,
-                        "repeats": args.repeats,
-                        "use_arena_binding": args.use_arena_binding,
-                        "start_fens": start_fens,
-                        "engine": str(engine),
-                        "games": args.games,
-                        "depth": args.depth,
-                        "time_per_move": args.time_per_move,
-                        "clock": args.clock,
-                        "concurrency": args.concurrency,
-                        "arena_workers": args.arena_workers,
-                    }
-                    futures.append((idx, cand_data, dask_client.submit(_evaluate_payload_remote, payload, pure=False)))
-
-                for idx, cand_data, fut in futures:
-                    timeout_val = None if args.dask_task_timeout <= 0 else args.dask_task_timeout
-                    try:
-                        score, (w, losses, d), wall = fut.result(timeout=timeout_val)
-                    except TimeoutError:
-                        _final_line(f"Candidate {idx+1}: Dask task timeout; skipped")
-                        continue
-                    except Exception as exc:
-                        _final_line(f"Candidate {idx+1}: Dask task failed: {exc}")
-                        continue
-                    _final_line(
-                        f"✓ iter={step} cand={idx + 1}/{args.beam_size} "
-                        f"score={score:.3f} WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
-                    )
-                    candidates.append((score, cand_data, (w, losses, d), wall))
-                if not candidates:
-                    _final_line("No Dask candidates succeeded; retrying locally for this iteration")
-                    dask_client = None
-            else:
-                for idx, cand_data in payloads:
+                cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
+                _save_params(cand_data, cand_path)
+                try:
                     color = next(color_cycle)
 
                     def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
@@ -787,50 +647,44 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         display_rep = min(rep_idx + 1, repeats)
                         line = (
                             f"{lead} iter {_color(str(step), color)}/{args.iterations} "
-                            f"cand {_color(str(idx + 1), color)}/{args.beam_size} "
+                            f"cand {_color(str(i + 1), color)}/{args.beam_size} "
                             f"repeat {_color(str(display_rep), color)}/{repeats} "
                             f"t={elapsed:.1f}s"
                         )
                         _live_line(line)
 
-                    cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
-                    _save_params(cand_data, cand_path)
+                    score, (w, losses, d), wall = evaluate_candidate_repeats(
+                        repeats=args.repeats,
+                        progress_cb=progress_cb,
+                        quiet=quiet_child,
+                        use_arena=args.use_arena_binding,
+                        start_fens=start_fens,
+                        engine=engine,
+                        baseline_params=baseline_params,
+                        candidate_params=cand_path,
+                        baseline_data=baseline_data,
+                        candidate_data=cand_data,
+                        games=args.games,
+                        depth=args.depth,
+                        time_per_move=args.time_per_move,
+                        clock=args.clock,
+                        concurrency=args.concurrency,
+                        arena_workers=args.arena_workers,
+                        base_label="base",
+                        cand_label="cand",
+                    )
+                    _final_line(
+                        f"{_color('✓', 'green')} iter={step} cand={i + 1}/{args.beam_size} "
+                        f"score={_color(f'{score:.3f}', color)} "
+                        f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                    )
+                    candidates.append((score, cand_data, (w, losses, d), wall))
+                finally:
                     try:
-                        score, (w, losses, d), wall = evaluate_candidate_repeats(
-                            repeats=args.repeats,
-                            progress_cb=progress_cb,
-                            quiet=quiet_child,
-                            use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
-                            engine=engine,
-                            baseline_params=baseline_params,
-                            candidate_params=cand_path,
-                            baseline_data=baseline_data,
-                            candidate_data=cand_data,
-                            games=args.games,
-                            depth=args.depth,
-                            time_per_move=args.time_per_move,
-                            clock=args.clock,
-                            concurrency=args.concurrency,
-                            arena_workers=args.arena_workers,
-                            base_label="base",
-                            cand_label="cand",
-                        )
-                        _final_line(
-                            f"{_color('✓', 'green')} iter={step} cand={idx + 1}/{args.beam_size} "
-                            f"score={_color(f'{score:.3f}', color)} "
-                            f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
-                        )
-                        candidates.append((score, cand_data, (w, losses, d), wall))
-                    finally:
-                        try:
-                            cand_path.unlink()
-                        except OSError:
-                            pass
+                        cand_path.unlink()
+                    except OSError:
+                        pass
 
-            if not candidates:
-                _final_line("No candidates evaluated this iteration; skipping update")
-                continue
             candidates.sort(key=lambda x: x[0], reverse=True)
             beam = [(score, data) for score, data, _, _ in candidates[: args.beam_size]]
             top_score, top_data, _, _ = candidates[0]
@@ -853,54 +707,15 @@ def optimize_loop(args: argparse.Namespace) -> None:
             sigma = args.cma_sigma if args.cma_sigma is not None else args.noise
             sigma = max(1e-4, sigma)
 
-            vec_payloads = []
             for i in range(popsize):
                 vec = []
                 for val in mean_vec:
                     scale = sigma * max(abs(val), 1.0)
                     vec.append(val + random.gauss(0.0, scale))
                 cand_data = _vector_to_params(base_data, paths, vec, is_int)
-                vec_payloads.append((i, cand_data))
-
-            if dask_client:
-                futures = []
-                for idx, cand_data in vec_payloads:
-                    payload = {
-                        "candidate_data": cand_data,
-                        "baseline_data": baseline_data,
-                        "repeats": args.repeats,
-                        "use_arena_binding": args.use_arena_binding,
-                        "start_fens": start_fens,
-                        "engine": str(engine),
-                        "games": args.games,
-                        "depth": args.depth,
-                        "time_per_move": args.time_per_move,
-                        "clock": args.clock,
-                        "concurrency": args.concurrency,
-                        "arena_workers": args.arena_workers,
-                    }
-                    futures.append((idx, cand_data, dask_client.submit(_evaluate_payload_remote, payload, pure=False)))
-
-                for idx, cand_data, fut in futures:
-                    timeout_val = None if args.dask_task_timeout <= 0 else args.dask_task_timeout
-                    try:
-                        score, (w, losses, d), wall = fut.result(timeout=timeout_val)
-                    except TimeoutError:
-                        _final_line(f"Candidate {idx+1}: Dask task timeout; skipped")
-                        continue
-                    except Exception as exc:
-                        _final_line(f"Candidate {idx+1}: Dask task failed: {exc}")
-                        continue
-                    _final_line(
-                        f"✓ iter={step} cand={idx + 1}/{popsize} "
-                        f"score={score:.3f} WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
-                    )
-                    candidates.append((score, cand_data, (w, losses, d), wall))
-                if not candidates:
-                    _final_line("No Dask candidates succeeded; retrying locally for this iteration")
-                    dask_client = None
-            else:
-                for idx, cand_data in vec_payloads:
+                cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
+                _save_params(cand_data, cand_path)
+                try:
                     color = next(color_cycle)
 
                     def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
@@ -914,50 +729,44 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         display_rep = min(rep_idx + 1, repeats)
                         line = (
                             f"{lead} iter {_color(str(step), color)}/{args.iterations} "
-                            f"cand {_color(str(idx + 1), color)}/{popsize} "
+                            f"cand {_color(str(i + 1), color)}/{popsize} "
                             f"repeat {_color(str(display_rep), color)}/{repeats} "
                             f"t={elapsed:.1f}s"
                         )
                         _live_line(line)
 
-                    cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
-                    _save_params(cand_data, cand_path)
+                    score, (w, losses, d), wall = evaluate_candidate_repeats(
+                        repeats=args.repeats,
+                        progress_cb=progress_cb,
+                        quiet=quiet_child,
+                        use_arena=args.use_arena_binding,
+                        start_fens=start_fens,
+                        engine=engine,
+                        baseline_params=baseline_params,
+                        candidate_params=cand_path,
+                        baseline_data=baseline_data,
+                        candidate_data=cand_data,
+                        games=args.games,
+                        depth=args.depth,
+                        time_per_move=args.time_per_move,
+                        clock=args.clock,
+                        concurrency=args.concurrency,
+                        arena_workers=args.arena_workers,
+                        base_label="base",
+                        cand_label="cand",
+                    )
+                    _final_line(
+                        f"{_color('✓', 'green')} iter={step} cand={i + 1}/{popsize} "
+                        f"score={_color(f'{score:.3f}', color)} "
+                        f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                    )
+                    candidates.append((score, cand_data, (w, losses, d), wall))
+                finally:
                     try:
-                        score, (w, losses, d), wall = evaluate_candidate_repeats(
-                            repeats=args.repeats,
-                            progress_cb=progress_cb,
-                            quiet=quiet_child,
-                            use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
-                            engine=engine,
-                            baseline_params=baseline_params,
-                            candidate_params=cand_path,
-                            baseline_data=baseline_data,
-                            candidate_data=cand_data,
-                            games=args.games,
-                            depth=args.depth,
-                            time_per_move=args.time_per_move,
-                            clock=args.clock,
-                            concurrency=args.concurrency,
-                            arena_workers=args.arena_workers,
-                            base_label="base",
-                            cand_label="cand",
-                        )
-                        _final_line(
-                            f"{_color('✓', 'green')} iter={step} cand={idx + 1}/{popsize} "
-                            f"score={_color(f'{score:.3f}', color)} "
-                            f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
-                        )
-                        candidates.append((score, cand_data, (w, losses, d), wall))
-                    finally:
-                        try:
-                            cand_path.unlink()
-                        except OSError:
-                            pass
+                        cand_path.unlink()
+                    except OSError:
+                        pass
 
-            if not candidates:
-                _final_line("No candidates evaluated this iteration; skipping update")
-                continue
             candidates.sort(key=lambda x: x[0], reverse=True)
             top_score, top_data, _, _ = candidates[0]
 
@@ -1107,45 +916,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--cma-sigma",
         type=float,
         help="Step scale for CMA-like strategy (default uses --noise)",
-    )
-    parser.add_argument(
-        "--dask-scheduler",
-        help="Dask scheduler address (enables distributed candidate evaluation)",
-    )
-    parser.add_argument(
-        "--dask-connect-timeout",
-        type=float,
-        default=10.0,
-        help="Seconds to wait when connecting to Dask scheduler",
-    )
-    parser.add_argument(
-        "--dask-task-timeout",
-        type=float,
-        default=0.0,
-        help="Per-candidate Dask task timeout seconds (0=disable)",
-    )
-    parser.add_argument(
-        "--dask-local-fallback",
-        action="store_true",
-        help="If no scheduler env/flag is found, start a LocalCluster for testing",
-    )
-    parser.add_argument(
-        "--dask-local-workers",
-        type=int,
-        default=1,
-        help="LocalCluster workers when --dask-local-fallback is used",
-    )
-    parser.add_argument(
-        "--dask-local-threads",
-        type=int,
-        default=1,
-        help="Threads per worker for LocalCluster fallback",
-    )
-    parser.add_argument(
-        "--dask-local-max-workers",
-        type=int,
-        default=0,
-        help="Enable adapt() if >0 (max workers) for LocalCluster fallback",
     )
     return parser.parse_args(argv)
 

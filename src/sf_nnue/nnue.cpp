@@ -17,12 +17,6 @@
 #endif
 //-------------------
 
-// Some toolchains define USE_NEON=0 via flags; normalize so that a zero value
-// does not trigger NEON includes on non-ARM targets.
-#if defined(USE_NEON) && (USE_NEON + 0) == 0
-#undef USE_NEON
-#endif
-
 #if defined(USE_AVX2)
 #include <immintrin.h>
 

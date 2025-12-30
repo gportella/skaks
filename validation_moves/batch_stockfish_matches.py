@@ -7,7 +7,7 @@ import argparse
 import concurrent.futures
 import json
 import os
-# import sqlite3
+import sqlite3
 import subprocess
 import sys
 import time
@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 DEFAULT_GAMES = 100
 DEFAULT_MATCH_LIMIT = 500
 DEFAULT_DEPTH = 8
-# DEFAULT_DB_NAME = "validation_matches.sqlite3"
+DEFAULT_DB_NAME = "validation_matches.sqlite3"
 PGN_HEADER = "PGN:"
 DEFAULT_SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
 DEFAULT_ELO_START = 1500.0
@@ -408,53 +408,53 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
     return base_args
 
 
-# def prepare_database(connection: sqlite3.Connection) -> None:
-#     connection.execute("PRAGMA journal_mode=WAL;")
-#     connection.execute(
-#         """
-#         CREATE TABLE IF NOT EXISTS matches (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             depth INTEGER,
-#             limit_plies INTEGER,
-#             parameters TEXT NOT NULL,
-#             game_index INTEGER NOT NULL,
-#             started_at TEXT NOT NULL,
-#             finished_at TEXT NOT NULL,
-#             duration_ms INTEGER NOT NULL,
-#             exit_code INTEGER NOT NULL,
-#             result TEXT,
-#             winner TEXT,
-#             pgn TEXT,
-#             stdout TEXT,
-#             stderr TEXT,
-#             white_engine TEXT,
-#             black_engine TEXT
-#         )
-#         """
-#     )
-#     connection.execute(
-#         """
-#         CREATE INDEX IF NOT EXISTS idx_matches_depth
-#         ON matches(depth)
-#         """
-#     )
-#     connection.execute(
-#         """
-#         CREATE INDEX IF NOT EXISTS idx_matches_parameters_game
-#         ON matches(parameters, game_index)
-#         """
-#     )
-#     connection.commit()
-#
-#     # Backward compatibility: add engine name columns if the table predates them.
-#     existing_columns = {
-#         row[1] for row in connection.execute("PRAGMA table_info(matches);")
-#     }
-#     if "white_engine" not in existing_columns:
-#         connection.execute("ALTER TABLE matches ADD COLUMN white_engine TEXT")
-#     if "black_engine" not in existing_columns:
-#         connection.execute("ALTER TABLE matches ADD COLUMN black_engine TEXT")
-#     connection.commit()
+def prepare_database(connection: sqlite3.Connection) -> None:
+    connection.execute("PRAGMA journal_mode=WAL;")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS matches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            depth INTEGER,
+            limit_plies INTEGER,
+            parameters TEXT NOT NULL,
+            game_index INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            exit_code INTEGER NOT NULL,
+            result TEXT,
+            winner TEXT,
+            pgn TEXT,
+            stdout TEXT,
+            stderr TEXT,
+            white_engine TEXT,
+            black_engine TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_matches_depth
+        ON matches(depth)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_matches_parameters_game
+        ON matches(parameters, game_index)
+        """
+    )
+    connection.commit()
+
+    # Backward compatibility: add engine name columns if the table predates them.
+    existing_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(matches);")
+    }
+    if "white_engine" not in existing_columns:
+        connection.execute("ALTER TABLE matches ADD COLUMN white_engine TEXT")
+    if "black_engine" not in existing_columns:
+        connection.execute("ALTER TABLE matches ADD COLUMN black_engine TEXT")
+    connection.commit()
 
 
 def run_single_match(
@@ -558,75 +558,75 @@ def determine_winner_label(
     return "unknown"
 
 
-# def record_match(
-#     connection: sqlite3.Connection,
-#     *,
-#     result: ExecutedMatch,
-#     depth: Optional[int],
-#     limit_plies: int,
-#     parameters_blob: str,
-#     parsed_result: Optional[str],
-#     parsed_winner: Optional[str],
-#     pgn_text: Optional[str],
-#     white_engine: str,
-#     black_engine: str,
-# ) -> None:
-#     connection.execute(
-#         """
-#         INSERT INTO matches (
-#             depth,
-#             limit_plies,
-#             parameters,
-#             game_index,
-#             started_at,
-#             finished_at,
-#             duration_ms,
-#             exit_code,
-#             result,
-#             winner,
-#             pgn,
-#             stdout,
-#             stderr,
-#             white_engine,
-#             black_engine
-#         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-#         """,
-#         (
-#             depth,
-#             limit_plies,
-#             parameters_blob,
-#             result.index,
-#             result.started_at.isoformat(),
-#             result.finished_at.isoformat(),
-#             result.duration_ms,
-#             result.exit_code,
-#             parsed_result,
-#             parsed_winner,
-#             pgn_text,
-#             result.stdout,
-#             result.stderr,
-#             white_engine,
-#             black_engine,
-#         ),
-#     )
-#     connection.commit()
+def record_match(
+    connection: sqlite3.Connection,
+    *,
+    result: ExecutedMatch,
+    depth: Optional[int],
+    limit_plies: int,
+    parameters_blob: str,
+    parsed_result: Optional[str],
+    parsed_winner: Optional[str],
+    pgn_text: Optional[str],
+    white_engine: str,
+    black_engine: str,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO matches (
+            depth,
+            limit_plies,
+            parameters,
+            game_index,
+            started_at,
+            finished_at,
+            duration_ms,
+            exit_code,
+            result,
+            winner,
+            pgn,
+            stdout,
+            stderr,
+            white_engine,
+            black_engine
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            depth,
+            limit_plies,
+            parameters_blob,
+            result.index,
+            result.started_at.isoformat(),
+            result.finished_at.isoformat(),
+            result.duration_ms,
+            result.exit_code,
+            parsed_result,
+            parsed_winner,
+            pgn_text,
+            result.stdout,
+            result.stderr,
+            white_engine,
+            black_engine,
+        ),
+    )
+    connection.commit()
 
 
-# def choose_starting_index(
-#     connection: sqlite3.Connection,
-#     *,
-#     parameters_blob: str,
-#     resume: bool,
-# ) -> int:
-#     if not resume:
-#         return 1
-#     cursor = connection.execute(
-#         "SELECT MAX(game_index) FROM matches WHERE parameters = ?", (parameters_blob,)
-#     )
-#     row = cursor.fetchone()
-#     if row is None or row[0] is None:
-#         return 1
-#     return int(row[0]) + 1
+def choose_starting_index(
+    connection: sqlite3.Connection,
+    *,
+    parameters_blob: str,
+    resume: bool,
+) -> int:
+    if not resume:
+        return 1
+    cursor = connection.execute(
+        "SELECT MAX(game_index) FROM matches WHERE parameters = ?", (parameters_blob,)
+    )
+    row = cursor.fetchone()
+    if row is None or row[0] is None:
+        return 1
+    return int(row[0]) + 1
 
 
 def summarize_counts(summary: Dict[str, int], labels: Sequence[str]) -> str:
@@ -644,56 +644,54 @@ def run_batch(args: argparse.Namespace) -> int:
 
     wall_start = time.perf_counter()
 
+    db_path = Path(args.database).expanduser().resolve()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(str(db_path))
+    try:
+        prepare_database(connection)
 
-    # db_path = Path(args.database).expanduser().resolve()
-    # db_path.parent.mkdir(parents=True, exist_ok=True)
-    # connection = sqlite3.connect(str(db_path))
-    # try:
-    #     prepare_database(connection)
+        rating_path = Path(args.elo_store)
+        if not rating_path.is_absolute():
+            rating_path = Path(__file__).resolve().parent / rating_path
+        rating_before = (
+            args.elo_start
+            if args.no_elo_store
+            else load_rating(rating_path, fallback=args.elo_start)
+        )
 
-    rating_path = Path(args.elo_store)
-    if not rating_path.is_absolute():
-        rating_path = Path(__file__).resolve().parent / rating_path
-    rating_before = (
-        args.elo_start
-        if args.no_elo_store
-        else load_rating(rating_path, fallback=args.elo_start)
-    )
+        base_args = build_fight_arguments(args)
+        parameters_snapshot = {
+            "limit": args.limit,
+            "depth": args.depth,
+            "time_per_move": args.time_per_move,
+            "opponent_time_per_move": args.opponent_time_per_move,
+            "clock": args.clock,
+            "opponent_clock": args.opponent_clock,
+            "increment": args.increment,
+            "opponent_increment": args.opponent_increment,
+            "moves_to_go": args.moves_to_go,
+            "engine": args.engine,
+            "engine_params": args.engine_params,
+            "engine_nnue": args.engine_nnue,
+            "opponent": args.opponent,
+            "opponent_params": args.opponent_params,
+            "opponent_nnue": args.opponent_nnue,
+            "handicap_factor": args.handicap_factor,
+            "handicap_depth": args.handicap_depth,
+            "handicap_enabled": args.handicap_enabled,
+            "timeout": args.timeout,
+        }
+        parameters_blob = json.dumps(
+            parameters_snapshot, sort_keys=True, separators=(",", ":")
+        )
 
-    base_args = build_fight_arguments(args)
-    parameters_snapshot = {
-        "limit": args.limit,
-        "depth": args.depth,
-        "time_per_move": args.time_per_move,
-        "opponent_time_per_move": args.opponent_time_per_move,
-        "clock": args.clock,
-        "opponent_clock": args.opponent_clock,
-        "increment": args.increment,
-        "opponent_increment": args.opponent_increment,
-        "moves_to_go": args.moves_to_go,
-        "engine": args.engine,
-        "engine_params": args.engine_params,
-        "engine_nnue": args.engine_nnue,
-        "opponent": args.opponent,
-        "opponent_params": args.opponent_params,
-        "opponent_nnue": args.opponent_nnue,
-        "handicap_factor": args.handicap_factor,
-        "handicap_depth": args.handicap_depth,
-        "handicap_enabled": args.handicap_enabled,
-        "timeout": args.timeout,
-    }
-    parameters_blob = json.dumps(
-        parameters_snapshot, sort_keys=True, separators=(",", ":")
-    )
-
-    # start_index = choose_starting_index(
-    #     connection, parameters_blob=parameters_blob, resume=args.resume
-    # )
-    start_index = 1
-    indices = list(range(start_index, start_index + args.games))
-    if not indices:
-        print("No games scheduled (games=0). Nothing to do.")
-        return 0
+        start_index = choose_starting_index(
+            connection, parameters_blob=parameters_blob, resume=args.resume
+        )
+        indices = list(range(start_index, start_index + args.games))
+        if not indices:
+            print("No games scheduled (games=0). Nothing to do.")
+            return 0
 
         white_label = (
             args.engine_label
