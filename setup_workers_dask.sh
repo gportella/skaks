@@ -62,20 +62,4 @@ assert importlib.util.find_spec('tuning.param_optimize'), 'Cannot import tuning.
 print('tuning import OK')
 PY
 
-# 7) Patch ha.py to use /opt/conda/bin/python for subprocess
-HA="${REPO_ROOT}/ha.py"
-if [ -f "$HA" ]; then
-  echo "[setup] Patching ha.py to use /opt/conda/bin/python..."
-  python3 - <<'PY'
-import pathlib, re
-p = pathlib.Path("/mnt/skaks/ha.py")
-s = p.read_text()
-s = re.sub(r'(?m)^\s*cmd\s*=\s*\[\s*"python"\s*,', 'cmd = ["/opt/conda/bin/python",', s)
-p.write_text(s)
-print("ha.py patched")
-PY
-else
-  echo "[setup] ha.py not found at ${HA}; skipping patch."
-fi
-
 echo "[setup] Completed successfully."
