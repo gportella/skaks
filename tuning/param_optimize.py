@@ -284,6 +284,7 @@ def run_batch(
     depth: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
+    opponent_time_per_move: Optional[float],
     concurrency: int,
     quiet: bool,
 ) -> Dict[str, Any]:
@@ -311,6 +312,8 @@ def run_batch(
         cmd.extend(["--engine-params", str(engine_params)])
     if opponent_params:
         cmd.extend(["--opponent-params", str(opponent_params)])
+    if opponent_time_per_move is not None:
+        cmd.extend(["--opponent-time-per-move", str(opponent_time_per_move)])
     if depth is not None:
         cmd.extend(["--depth", str(depth)])
     elif time_per_move is not None:
@@ -402,6 +405,10 @@ def evaluate_candidate(
     use_arena: bool,
     arena_workers: int,
     start_fens: Optional[List[str]] = None,
+    external: bool = False,
+    opponent: Optional[Path] = None,
+    opponent_params: Optional[Path] = None,
+    opponent_time_per_move: Optional[float] = None,
 ) -> Tuple[float, Tuple[int, int, int], float]:
     if use_arena:
         if skaks_eval is None:
@@ -466,35 +473,53 @@ def evaluate_candidate(
         wall = time.monotonic() - start_time
         return score, (wins, losses, draws), wall
     else:
-        half_games = max(2, games // 2)
-        s1 = run_batch(
-            engine=engine,
-            opponent=engine,
-            engine_params=baseline_params,
-            opponent_params=candidate_params,
-            engine_label=base_label,
-            opponent_label=cand_label,
-            games=half_games,
-            depth=depth,
-            time_per_move=time_per_move,
-            clock=clock,
-            concurrency=concurrency,
-            quiet=quiet,
-        )
-        s2 = run_batch(
-            engine=engine,
-            opponent=engine,
-            engine_params=candidate_params,
-            opponent_params=baseline_params,
-            engine_label=cand_label,
-            opponent_label=base_label,
-            games=half_games,
-            depth=depth,
-            time_per_move=time_per_move,
-            clock=clock,
-            concurrency=concurrency,
-            quiet=quiet,
-        )
+        if external:
+            s1 = run_batch(
+                engine=engine,
+                opponent=opponent,
+                engine_params=candidate_params,
+                opponent_params=opponent_params,
+                engine_label=base_label,
+                opponent_label=cand_label,
+                games=games,
+                depth=depth,
+                time_per_move=time_per_move,
+                clock=clock,
+                opponent_time_per_move=opponent_time_per_move,
+                concurrency=concurrency,
+                quiet=quiet,
+            )
+            s2 = {"summary": {}}
+        else:
+            half_games = max(2, games // 2)
+            s1 = run_batch(
+                engine=engine,
+                opponent=engine,
+                engine_params=baseline_params,
+                opponent_params=candidate_params,
+                engine_label=base_label,
+                opponent_label=cand_label,
+                games=half_games,
+                depth=depth,
+                time_per_move=time_per_move,
+                clock=clock,
+                concurrency=concurrency,
+                quiet=quiet,
+            )
+            s2 = run_batch(
+                engine=engine,
+                opponent=engine,
+                engine_params=candidate_params,
+                opponent_params=baseline_params,
+                engine_label=cand_label,
+                opponent_label=base_label,
+                games=half_games,
+                depth=depth,
+                time_per_move=time_per_move,
+                clock=clock,
+                concurrency=concurrency,
+                quiet=quiet,
+            )
         wins, losses, draws = aggregate_two_sided(base_label, cand_label, s1, s2)
         total = wins + losses + draws
         score = (wins + 0.5 * draws) / total if total > 0 else 0.0
@@ -552,9 +577,28 @@ def optimize_loop(args: argparse.Namespace) -> None:
         current_params = baseline_params
     assert current_params is not None
 
+    if args.external_opponent:
+        external = True
+        opponent = _resolve_engine(args.opponent)
+        opponent_params = None
+        opponent_time = args.opponent_time_per_move
+        base_label = "skaks"
+        cand_label = args.opponent
+        base_score = 0.5
+        baseline_data = None
+        baseline_params = None
+    else:
+        external = False
+        opponent = engine
+        opponent_params = baseline_params
+        opponent_time = None
+        base_label = "baseline"
+        cand_label = "candidate"
+        base_score = -1.0
+
     base_data = _load_params(current_params)
     best_data = base_data
-    best_score = -1.0
+    best_score = base_score
 
     include_prefixes = args.include_prefix
     if getattr(args, "phase_weights_only", False):
@@ -672,6 +716,10 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         arena_workers=args.arena_workers,
                         base_label="base",
                         cand_label="cand",
+                        external=external,
+                        opponent=opponent,
+                        opponent_params=opponent_params,
+                        opponent_time_per_move=opponent_time,
                     )
                     _final_line(
                         f"{_color('✓', 'green')} iter={step} cand={i + 1}/{args.beam_size} "
@@ -754,6 +802,10 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         arena_workers=args.arena_workers,
                         base_label="base",
                         cand_label="cand",
+                        external=external,
+                        opponent=opponent,
+                        opponent_params=opponent_params,
+                        opponent_time_per_move=opponent_time,
                     )
                     _final_line(
                         f"{_color('✓', 'green')} iter={step} cand={i + 1}/{popsize} "
@@ -808,6 +860,14 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         description="Self-play parameter optimizer (beam + repeats)"
     )
     parser.add_argument("--engine", default="skaks", help="Path to engine binary")
+    parser.add_argument(
+        "--opponent", default="stockfish", help="Opponent engine binary"
+    )
+    parser.add_argument(
+        "--external-opponent",
+        action="store_true",
+        help="Opponent is external engine, not self-play",
+    )
     parser.add_argument("--baseline-params", help="YAML params for baseline (opponent)")
     parser.add_argument(
         "--start-params",
@@ -840,6 +900,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--depth", type=int, help="Depth per move")
     parser.add_argument("--time-per-move", type=float, help="Seconds per move")
     parser.add_argument("--clock", type=float, help="Clock time seconds")
+    parser.add_argument(
+        "--opponent-time-per-move", type=float, help="Opponent seconds per move"
+    )
     parser.add_argument("--concurrency", type=int, default=4, help="Concurrent games")
     parser.add_argument(
         "--repeats",

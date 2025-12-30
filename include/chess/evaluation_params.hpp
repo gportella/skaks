@@ -46,8 +46,8 @@ struct EvaluationParams {
   PinPenalty pawn_pin_diagonal_penalty{};
   std::array<double, static_cast<std::size_t>(OccupancyType::bK) + 1>
       reserved{}; // placeholder to preserve layout
-  std::array<double, static_cast<std::size_t>(TermId::Count)> phase_weights_mg{};
-  std::array<double, static_cast<std::size_t>(TermId::Count)> phase_weights_eg{};
+  std::array<float, static_cast<std::size_t>(TermId::Count)> phase_weights_mg{};
+  std::array<float, static_cast<std::size_t>(TermId::Count)> phase_weights_eg{};
 };
 
 inline EvaluationParams default_evaluation_params() {
@@ -84,8 +84,8 @@ inline EvaluationParams default_evaluation_params() {
   params.pawn_pin_straight_penalty = {6, 2};
   params.pawn_pin_diagonal_penalty = {10, 2};
   for (std::size_t i = 0; i < params.phase_weights_mg.size(); ++i) {
-    params.phase_weights_mg[i] = 1.0;
-    params.phase_weights_eg[i] = 1.0;
+    params.phase_weights_mg[i] = 1.0f;
+    params.phase_weights_eg[i] = 1.0f;
   }
   return params;
 }

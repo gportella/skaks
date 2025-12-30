@@ -121,15 +121,20 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("evaluation.pawn_pin_straight_penalty.mobility", 4, 10),
         ParamSpec("evaluation.pawn_pin_diagonal_penalty.base", 14, 30),
         ParamSpec("evaluation.pawn_pin_diagonal_penalty.mobility", 4, 10),
-        # Search narrowed
-        ParamSpec("search.aspiration_window_initial", 1200, 2500, step=10),
-        ParamSpec("search.aspiration_window_max", 4000, 9000, step=20),
-        ParamSpec("search.quiescence_delta_margin", 240, 420, step=5),
-        ParamSpec("search.quiescence_max_ply", 8, 16),
-        ParamSpec("search.quiescence_max_noisy_moves", 12, 30),
-        ParamSpec("search.quiescence_zero_gain_skip_index", 0, 6),
-        ParamSpec("search.null_move_reduction", 2, 5),
-        ParamSpec("search.null_move_min_depth", 4, 9),
+        # Search expanded ranges
+        ParamSpec("search.aspiration_window_initial", 400, 3000, step=10),
+        ParamSpec("search.aspiration_window_max", 2000, 12000, step=20),
+        ParamSpec("search.quiescence_delta_margin", 100, 600, step=5),
+        ParamSpec("search.quiescence_max_ply", 4, 20),
+        ParamSpec("search.quiescence_max_noisy_moves", 8, 40),
+        ParamSpec("search.quiescence_zero_gain_skip_index", 0, 10),
+        ParamSpec("search.null_move_reduction", 1, 6),
+        ParamSpec("search.null_move_min_depth", 2, 12),
+        # Add some eval params that affect search speed
+        ParamSpec("evaluation.mobility_scaling", 5, 40),
+        ParamSpec(
+            "evaluation.king_attack_weights[0]", 10, 40
+        ),  # Example, tune some king attack
     ]
 
     if include_arrays:
@@ -148,7 +153,7 @@ def _phase_weight_specs() -> List[ParamSpec]:
         specs.append(
             ParamSpec(
                 f"evaluation.phase_weights_mg[{idx}]",
-                -3.0,
+                0.0,
                 3.0,
                 step=0.05,
                 is_float=True,
@@ -158,7 +163,7 @@ def _phase_weight_specs() -> List[ParamSpec]:
         specs.append(
             ParamSpec(
                 f"evaluation.phase_weights_eg[{idx}]",
-                -3.0,
+                0.0,
                 3.0,
                 step=0.05,
                 is_float=True,

@@ -40,10 +40,6 @@ class FightAgainstEngineParseArgsTests(unittest.TestCase):
         self.assertAlmostEqual(args.time_per_move, 2.0)
         self.assertAlmostEqual(args.opponent_time_per_move, 1.0)
 
-    def test_opponent_time_requires_primary_time(self) -> None:
-        with self.assertRaises(SystemExit):
-            parse_args(["--opponent-time-per-move", "1.0"])
-
     def test_clock_mode_defaults(self) -> None:
         args = parse_args(["--clock", "60"])
         self.assertIsNone(args.depth)

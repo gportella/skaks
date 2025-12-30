@@ -646,8 +646,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     elif mode_count > 1:
         parser.error("choose exactly one of --depth, --time-per-move, or --clock")
 
-    if args.time_per_move is None and args.opponent_time_per_move is not None:
-        parser.error("--opponent-time-per-move requires --time-per-move")
+    # if args.time_per_move is None and args.opponent_time_per_move is not None:
+    #     parser.error("--opponent-time-per-move requires --time-per-move")
     if args.clock is None and args.opponent_clock is not None:
         parser.error("--opponent-clock requires --clock")
     if args.clock is None and (

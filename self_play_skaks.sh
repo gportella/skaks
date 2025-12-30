@@ -1,0 +1,12 @@
+python -m tuning.param_optimize \
+  --engine skaks \
+  --baseline-params besty.yaml \
+  --start-params besty.yaml \
+  --include-prefix evaluation \
+  --phase-weights-only \
+  --games 20 --iterations 200 --repeats 6 \
+  --arena-pgn moves_pgn/LumbrasGigaBase_OTB_2025.pgn \
+  --arena-workers 4 \
+  --noise 0.25 --strategy beam --beam-size 4 \
+  --concurrency 4 --depth 5 \
+  --output besty.yaml

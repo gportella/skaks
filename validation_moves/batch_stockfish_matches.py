@@ -339,8 +339,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     if mode_count > 1:
         parser.error("choose exactly one of --depth, --time-per-move, or --clock")
 
-    if args.time_per_move is None and args.opponent_time_per_move is not None:
-        parser.error("--opponent-time-per-move requires --time-per-move")
+    # if args.time_per_move is None and args.opponent_time_per_move is not None:
+    #     parser.error("--opponent-time-per-move requires --time-per-move")
     if args.clock is None and args.opponent_clock is not None:
         parser.error("--opponent-clock requires --clock")
     if args.clock is None and (
@@ -383,6 +383,9 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
             base_args.extend(["--opponent-increment", str(args.opponent_increment)])
         if args.moves_to_go is not None:
             base_args.extend(["--moves-to-go", str(args.moves_to_go)])
+
+    if args.opponent_time_per_move is not None:
+        base_args.extend(["--opponent-time-per-move", str(args.opponent_time_per_move)])
 
     if args.engine:
         base_args.extend(["--engine", args.engine])

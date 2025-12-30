@@ -3,10 +3,10 @@ python tuning/texel_fit.py \
   --param-set offense --include-arrays \
   --cp-cap 1000 --pov side \
   --texel-scale-min 150 --texel-scale-max 600 \
-  --trials 200 --sampler cmaes \
+  --trials 50 --sampler cmaes \
   --jobs 2 --threads 4 \
   --batch-size 512 \
   --quiet \
   --require-quiet \
   --progress-every 1 --progress-style fancy --progress-color auto \
-  --study-name skaks-texel-offense --storage sqlite:///optuna.db
+  --study-name skaks-texel-offense --storage sqlite:///optuna_texel.db --best-out texel_params.yaml

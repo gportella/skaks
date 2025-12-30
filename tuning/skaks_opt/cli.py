@@ -347,6 +347,24 @@ def main(argv: List[str] | None = None) -> None:
     best = study.best_trial
     merged = apply_param_updates(DEFAULT_PARAMS, best.params)
 
+    # Round integer parameters to nearest int
+    def round_params(d):
+        if isinstance(d, dict):
+            for k, v in d.items():
+                if k in ("phase_weights_mg", "phase_weights_eg"):
+                    # Keep as floats
+                    continue
+                d[k] = round_params(v)
+        elif isinstance(d, list):
+            return [round_params(x) for x in d]
+        elif isinstance(d, (int, float)):
+            return round(d)
+        else:
+            return d
+        return d
+
+    merged = round_params(merged)
+
     print("=== best trial ===")
     print(
         json.dumps(

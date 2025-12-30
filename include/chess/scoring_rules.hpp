@@ -9,8 +9,8 @@
 namespace chess {
 
 struct PhaseWeights {
-  std::array<double, static_cast<std::size_t>(TermId::Count)> mg{};
-  std::array<double, static_cast<std::size_t>(TermId::Count)> eg{};
+  std::array<float, static_cast<std::size_t>(TermId::Count)> mg{};
+  std::array<float, static_cast<std::size_t>(TermId::Count)> eg{};
 };
 
 struct EvalVector {

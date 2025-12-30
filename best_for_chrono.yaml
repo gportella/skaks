@@ -1,0 +1,9 @@
+search:
+  aspiration_window_initial: 2190
+  aspiration_window_max: 8000
+  null_move_min_depth: 6
+  null_move_reduction: 3
+  quiescence_delta_margin: 320
+  quiescence_max_noisy_moves: 20
+  quiescence_max_ply: 11
+  quiescence_zero_gain_skip_index: 5

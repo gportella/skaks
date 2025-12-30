@@ -11,9 +11,9 @@
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
 
 namespace {
 constexpr std::size_t kTermCount =
@@ -23,8 +23,8 @@ chess::PhaseWeights& phase_weight_store() {
   static chess::PhaseWeights w = [] {
     chess::PhaseWeights init{};
     for (std::size_t i = 0; i < kTermCount; ++i) {
-      init.mg[i] = 1.0;
-      init.eg[i] = 1.0;
+      init.mg[i] = 1.0f;
+      init.eg[i] = 1.0f;
     }
     return init;
   }();
@@ -589,15 +589,37 @@ EvalVector compute_eval_vector(const Board& b) {
 }
 
 int eval_linear(const EvalVector& v, const PhaseWeights& W) {
-  const double mgw =
-      static_cast<double>(v.mg_phase) / static_cast<double>(kPstPhaseMax);
-  const double egw =
-      static_cast<double>(v.eg_phase) / static_cast<double>(kPstPhaseMax);
-  double sum = 0.0;
-  for (std::size_t i = 0; i < kTermCount; ++i) {
-    const double wi = W.mg[i] * mgw + W.eg[i] * egw;
-    sum += wi * static_cast<double>(v.f[i]);
+  const float mgw =
+      static_cast<float>(v.mg_phase) / static_cast<float>(kPstPhaseMax);
+  const float egw =
+      static_cast<float>(v.eg_phase) / static_cast<float>(kPstPhaseMax);
+#ifdef __x86_64__
+  __m256 sum_vec = _mm256_setzero_ps();
+  std::size_t i = 0;
+  for (; i + 7 < kTermCount; i += 8) {
+    __m256 wi_vec = _mm256_add_ps(
+        _mm256_mul_ps(_mm256_loadu_ps(&W.mg[i]), _mm256_set1_ps(mgw)),
+        _mm256_mul_ps(_mm256_loadu_ps(&W.eg[i]), _mm256_set1_ps(egw)));
+    __m256 fi_vec = _mm256_cvtepi32_ps(
+        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&v.f[i])));
+    sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(wi_vec, fi_vec));
   }
+  float sum = 0.0f;
+  float sum_arr[8];
+  _mm256_storeu_ps(sum_arr, sum_vec);
+  for (int j = 0; j < 8; ++j)
+    sum += sum_arr[j];
+  for (; i < kTermCount; ++i) {
+    const float wi = W.mg[i] * mgw + W.eg[i] * egw;
+    sum += wi * static_cast<float>(v.f[i]);
+  }
+#else
+  float sum = 0.0f;
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    const float wi = W.mg[i] * mgw + W.eg[i] * egw;
+    sum += wi * static_cast<float>(v.f[i]);
+  }
+#endif
   return static_cast<int>(std::lround(sum));
 }
 

@@ -1,17 +1,16 @@
 python tuning/texel_fit.py \
   --data eval_pairs_pvs_with_results.csv \
-  --trials 100 \
+  --trials 1000 \
   --jobs 4 \
   --threads 0 \
-  --batch-size 512 \
+  --batch-size 1024 \
   --cp-cap 1000 \
   --pov side \
   --texel-scale-min 150 --texel-scale-max 600 \
-  --phase-weights-only \
   --sampler random \
   --pruner hyperband \
   --progress-every 1 \
   --progress-style fancy --progress-color auto \
-  --study-name skaks-texel-quiet  \
-  --storage sqlite:///optuna.db \
+  --study-name skaks-texel-quiet \
+  --storage sqlite:///optuna_texel.db \
   --quiet --require-quiet

@@ -328,9 +328,31 @@ def _load_fens_from_pgn(
 
 
 def _run_arena_shard(
-    payload: Tuple[List[str], Dict[str, Any], Dict[str, Any], int, int, int],
+    payload: Tuple[
+        List[str],
+        Dict[str, Any],
+        Dict[str, Any],
+        int,
+        int,
+        int,
+        float,
+        float,
+        float,
+        int,
+    ],
 ) -> Dict[str, int]:
-    start_fens, base_params, cand_params, depth, movetime_ms, max_plies = payload
+    (
+        start_fens,
+        base_params,
+        cand_params,
+        depth,
+        movetime_ms,
+        max_plies,
+        wtime,
+        btime,
+        increment,
+        moves_to_go,
+    ) = payload
     import skaks_eval as _skaks_eval
 
     arena_result = _skaks_eval.arena(
@@ -341,6 +363,10 @@ def _run_arena_shard(
         depth=depth,
         movetime_ms=movetime_ms,
         max_plies=max_plies,
+        wtime=wtime,
+        btime=btime,
+        increment=increment,
+        moves_to_go=moves_to_go,
     )
     return {
         "wins": int(arena_result.get("wins", 0)),
@@ -364,18 +390,26 @@ def evaluate_candidate(
 ) -> Tuple[float, Tuple[int, int, int], float]:
     if skaks_eval is None:
         raise RuntimeError("skaks_eval not available; install bindings first")
-    if clock is not None:
-        raise ValueError(
-            "Arena binding does not support clock controls; use depth or time-per-move"
-        )
 
     movetime_ms = int(time_per_move * 1000) if time_per_move is not None else 0
     fen_pool = _normalize_fens(start_fens, games)
     base_params = _normalize_params(baseline_data)
     cand_params = _normalize_params(candidate_data)
 
+    # New: clock controls
+    wtime = btime = increment = moves_to_go = 0
+    # Strict enforcement: if clock is set, override depth and movetime_ms
+    if clock is not None:
+        wtime = btime = int(clock * 1000)
+        increment = 0
+        moves_to_go = 40
+        depth_value = 0
+        movetime_ms = 0
+    else:
+        depth_value = depth or 0
+        movetime_ms = int(time_per_move * 1000) if time_per_move is not None else 0
+
     start_time = time.monotonic()
-    depth_value = depth or 0
 
     effective_workers = shard_hint if shard_hint and shard_hint > 0 else arena_workers
 
@@ -393,6 +427,10 @@ def evaluate_candidate(
                     depth_value,
                     movetime_ms,
                     160,
+                    wtime,
+                    btime,
+                    increment,
+                    moves_to_go,
                 )
                 futures.append(dask_client.submit(_run_arena_shard, payload))
             shard_results = dask_client.gather(futures)
@@ -416,6 +454,10 @@ def evaluate_candidate(
             depth=depth_value,
             movetime_ms=movetime_ms,
             max_plies=160,
+            wtime=wtime,
+            btime=btime,
+            increment=increment,
+            moves_to_go=moves_to_go,
         )
         wins = int(arena_result.get("wins", 0))
         losses = int(arena_result.get("losses", 0))
@@ -423,7 +465,18 @@ def evaluate_candidate(
     else:
         chunk = max(1, (len(fen_pool) + arena_workers - 1) // arena_workers)
         tasks: List[
-            Tuple[List[str], Dict[str, Any], Dict[str, Any], int, int, int]
+            Tuple[
+                List[str],
+                Dict[str, Any],
+                Dict[str, Any],
+                int,
+                int,
+                int,
+                float,
+                float,
+                float,
+                int,
+            ]
         ] = []
         for idx in range(0, len(fen_pool), chunk):
             tasks.append(
@@ -434,6 +487,10 @@ def evaluate_candidate(
                     depth_value,
                     movetime_ms,
                     160,
+                    wtime,
+                    btime,
+                    increment,
+                    moves_to_go,
                 )
             )
         with mp.Pool(processes=arena_workers) as pool:
@@ -485,6 +542,10 @@ def evaluate_candidate_repeats(
         else:
             subset = None
 
+        # Strict enforcement: if clock is set, override depth and time_per_move
+        if clock is not None:
+            depth = 0
+            time_per_move = 0
         score, (wins, losses, draws), wall = evaluate_candidate(
             baseline_data=baseline_data,
             candidate_data=candidate_data,

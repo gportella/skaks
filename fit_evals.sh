@@ -1,16 +1,18 @@
 python -m tuning.skaks_opt.cli \
   --data eval_pairs_pvs_filtered.csv \
-  --trials 1500 \
+  --trials 150 \
   --require-quiet \
-  --jobs 2 \
+  --jobs 4 \
   --threads 0 \
-  --batch-size 1024 \
+  --batch-size 2048 \
   --cp-cap 600 \
   --error-penalty 2000 \
-  --sampler cmaes \
-  --pruner hyperband \
+  --sampler tpe \
+  --pruner median \
   --val-split 0.2 \
   --include-arrays \
+  --pov white \
+  --study-name opt_fit_white \
   --best-out tuning/out/best_filtered.yaml \
   --metrics-out tuning/out/metrics_filtered.csv \
   --rich --storage sqlite:///optuna.db
