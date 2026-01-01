@@ -56,6 +56,7 @@ ArenaSummary run_internal_arena(const chess::CliOptions& opts,
                                 const chess::EngineParams& cand_params,
                                 bool show_progress) {
   chess::Engine engine;
+  engine.set_evaluation_mode(opts.eval_mode);
   ArenaSummary summary{};
 
   const bool use_time = opts.time_control.enabled;
@@ -175,6 +176,9 @@ int main(int argc, char** argv) {
       for (const auto feature : chess::kOptimizationFeatures) {
         std::cout << " - " << feature << "\n";
       }
+      if (chess::kCompiledWithNeon) {
+        std::cout << " - Compiled with NEON eval_linear path" << "\n";
+      }
     } else {
       std::cout << "Use -vv for details.\n";
     }
@@ -217,6 +221,7 @@ int main(int argc, char** argv) {
   }
 
   chess::Engine engine;
+  engine.set_evaluation_mode(cli.options.eval_mode);
 
   if (cli.options.arena_mode) {
     try {

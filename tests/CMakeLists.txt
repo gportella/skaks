@@ -29,6 +29,7 @@ add_executable(chess_engine_tests
   params_loader_tests.cpp
   nnue_features_tests.cpp
   nnue_sf_tests.cpp
+  sf_eval_tests.cpp
 )
 
 set_source_files_properties(

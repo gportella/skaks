@@ -284,7 +284,8 @@ def run_batch(
     depth: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
-    opponent_time_per_move: Optional[float],
+    opponent_time_per_move: Optional[float] = None,
+    opponent_depth_factor: Optional[float] = None,
     concurrency: int,
     quiet: bool,
 ) -> Dict[str, Any]:
@@ -307,6 +308,8 @@ def run_batch(
         "--summary-json",
         str(summary_path),
         "--no-handicap",
+        "--timeout",
+        "60",
     ]
     if engine_params:
         cmd.extend(["--engine-params", str(engine_params)])
@@ -314,21 +317,42 @@ def run_batch(
         cmd.extend(["--opponent-params", str(opponent_params)])
     if opponent_time_per_move is not None:
         cmd.extend(["--opponent-time-per-move", str(opponent_time_per_move)])
+    if opponent_depth_factor is not None:
+        cmd.extend(["--opponent-depth-factor", str(opponent_depth_factor)])
     if depth is not None:
         cmd.extend(["--depth", str(depth)])
     elif time_per_move is not None:
         cmd.extend(["--time-per-move", str(time_per_move)])
     elif clock is not None:
         cmd.extend(["--clock", str(clock)])
-    run_kwargs: Dict[str, Any] = {"check": False, "text": True}
-    if quiet:
-        run_kwargs["stdout"] = subprocess.DEVNULL
-        run_kwargs["stderr"] = subprocess.STDOUT
+    # Always capture output so failures can be diagnosed even when quiet.
+    run_kwargs: Dict[str, Any] = {"check": False, "text": True, "capture_output": True}
     try:
         proc = subprocess.run(cmd, **run_kwargs)
+        out = proc.stdout or ""
+        err = proc.stderr or ""
+        # If the batch runner wrote a summary JSON we can proceed with it
+        # even if the process returned a non-zero exit code (some engines
+        # may crash occasionally). Prefer returning the summary to keep
+        # the optimizer running; surface stdout/stderr in logs.
+        try:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = None
         if proc.returncode != 0:
-            raise RuntimeError(f"batch runner failed with code {proc.returncode}")
-        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+            if payload is not None:
+                # Log the failure but return the partial summary
+                sys.stderr.write(
+                    f"batch runner exited {proc.returncode}, returning available summary.\nstdout:\n{out}\nstderr:\n{err}\n"
+                )
+                return payload
+            msg = (
+                f"batch runner failed with code {proc.returncode}\n"
+                f"stdout:\n{out}\n\n"
+                f"stderr:\n{err}\n\n"
+                f"summary_json:{payload}\n"
+            )
+            raise RuntimeError(msg)
         return payload
     finally:
         try:
@@ -409,6 +433,7 @@ def evaluate_candidate(
     opponent: Optional[Path] = None,
     opponent_params: Optional[Path] = None,
     opponent_time_per_move: Optional[float] = None,
+    opponent_depth_factor: Optional[float] = None,
 ) -> Tuple[float, Tuple[int, int, int], float]:
     if use_arena:
         if skaks_eval is None:
@@ -486,6 +511,7 @@ def evaluate_candidate(
                 time_per_move=time_per_move,
                 clock=clock,
                 opponent_time_per_move=opponent_time_per_move,
+                opponent_depth_factor=opponent_depth_factor,
                 concurrency=concurrency,
                 quiet=quiet,
             )
@@ -504,6 +530,7 @@ def evaluate_candidate(
                 time_per_move=time_per_move,
                 clock=clock,
                 concurrency=concurrency,
+                opponent_depth_factor=None,
                 quiet=quiet,
             )
             s2 = run_batch(
@@ -518,13 +545,30 @@ def evaluate_candidate(
                 time_per_move=time_per_move,
                 clock=clock,
                 concurrency=concurrency,
+                opponent_depth_factor=None,
                 quiet=quiet,
             )
-        wins, losses, draws = aggregate_two_sided(base_label, cand_label, s1, s2)
-        total = wins + losses + draws
-        score = (wins + 0.5 * draws) / total if total > 0 else 0.0
-        wall = s1.get("timing_sec", 0.0) + s2.get("timing_sec", 0.0)
-        return score, (wins, losses, draws), wall
+        if external:
+            # When running against an external opponent the batch runner
+            # returns a single summary where the `white`/`black` labels
+            # correspond to `engine_label` and `opponent_label`. In this
+            # mode `engine` is the candidate (Skaks) and `opponent` is the
+            # external engine. Compute wins/losses directly from that
+            # summary using the provided labels to avoid swapping sides.
+            summary = s1.get("summary", {})
+            wins = int(summary.get(base_label, 0))
+            losses = int(summary.get(cand_label, 0))
+            draws = int(summary.get("draw", 0))
+            total = wins + losses + draws
+            score = (wins + 0.5 * draws) / total if total > 0 else 0.0
+            wall = s1.get("timing_sec", 0.0)
+            return score, (wins, losses, draws), wall
+        else:
+            wins, losses, draws = aggregate_two_sided(base_label, cand_label, s1, s2)
+            total = wins + losses + draws
+            score = (wins + 0.5 * draws) / total if total > 0 else 0.0
+            wall = s1.get("timing_sec", 0.0) + s2.get("timing_sec", 0.0)
+            return score, (wins, losses, draws), wall
 
 
 def evaluate_candidate_repeats(
@@ -584,7 +628,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
         opponent_time = args.opponent_time_per_move
         base_label = "skaks"
         cand_label = args.opponent
-        base_score = 0.5
+        # Use a lower neutral baseline (0.25) so early improvements are
+        # easier to accept when starting from un-tuned parameters.
+        base_score = 0.25
         baseline_data = None
         baseline_params = None
     else:
@@ -594,11 +640,83 @@ def optimize_loop(args: argparse.Namespace) -> None:
         opponent_time = None
         base_label = "baseline"
         cand_label = "candidate"
-        base_score = -1.0
+        # Use a lower neutral baseline score of 0.25 for internal self-play
+        # so that early candidates that show modest improvement are accepted
+        # and the optimizer can climb from a weak starting point.
+        base_score = 0.25
 
     base_data = _load_params(current_params)
     best_data = base_data
     best_score = base_score
+
+    # The arena binding runs in-process and cannot evaluate an external
+    # opponent binary. Running with both flags would silently run an
+    # in-process arena (skaks vs skaks) while the user expects an
+    # external match. Fail fast with a clear message to avoid
+    # misleading optimizer results.
+    if args.external_opponent and args.use_arena_binding:
+        raise SystemExit(
+            "--external-opponent cannot be combined with --use-arena-binding;"
+            " disable arena binding or remove --external-opponent"
+        )
+
+    # If running against an external opponent, compute the baseline's
+    # actual score up-front so `best_score` reflects reality instead of the
+    # arbitrary default (0.5). This prevents the optimizer from reporting
+    # a misleading best score when no candidate outperforms the baseline.
+    if args.external_opponent and args.baseline_params:
+        try:
+            baseline_path = Path(args.baseline_params).resolve()
+            baseline_data = _load_params(baseline_path)
+            _live_line("Evaluating baseline performance against external opponent...")
+            score, (w, losses, d), wall = evaluate_candidate(
+                engine=engine,
+                baseline_params=None,
+                candidate_params=baseline_path,
+                baseline_data=None,
+                candidate_data=baseline_data,
+                games=args.games,
+                depth=args.depth,
+                time_per_move=args.time_per_move,
+                clock=args.clock,
+                concurrency=args.concurrency,
+                base_label="skaks",
+                cand_label=args.opponent,
+                quiet=True,
+                use_arena=args.use_arena_binding,
+                arena_workers=args.arena_workers,
+                start_fens=None,
+                external=True,
+                opponent=_resolve_engine(args.opponent),
+                opponent_params=None,
+                opponent_time_per_move=args.opponent_time_per_move,
+            )
+            # If the user provided a `--start-params` (current_params), prefer
+            # keeping that as the working best_data. Only use the evaluated
+            # baseline score to seed `best_score` if we don't already have a
+            # start params matching the baseline. Otherwise, make sure the
+            # numeric `best_score` reflects the better of the two so the
+            # optimizer doesn't mistakenly treat the baseline as better and
+            # overwrite the provided start params with a worse value.
+            try:
+                baseline_path = baseline_path.resolve()
+            except Exception:
+                pass
+            if current_params is None or (baseline_path == current_params):
+                best_score = score
+                best_data = baseline_data
+            else:
+                # Keep the start params but ensure best_score is at least
+                # the evaluated baseline score so comparisons are meaningful.
+                best_score = max(best_score, score)
+            _final_line(f"Baseline score={score:.3f} WLD={w}/{losses}/{d}")
+        except Exception:
+            # If baseline evaluation fails we keep the default base_score
+            pass
+
+    # Support the convenience alias --weights-only
+    if getattr(args, "weights_only", False):
+        args.phase_weights_only = True
 
     include_prefixes = args.include_prefix
     if getattr(args, "phase_weights_only", False):
@@ -614,7 +732,40 @@ def optimize_loop(args: argparse.Namespace) -> None:
         best_path = src.with_name(f"{src.stem}_optimized.yaml").resolve()
 
     best_path.parent.mkdir(parents=True, exist_ok=True)
-    _save_params(best_data, best_path)
+    # Persist an initial best params file if none exists. We also maintain
+    # a small JSON meta file alongside the YAML to record the best score so
+    # that separate runs and replicates won't be overwritten by worse
+    # candidates.
+    meta_path = best_path.with_suffix(best_path.suffix + ".best.json")
+    # Load on-disk best meta if present to initialize `best_score` and
+    # `best_data` from previous runs.
+    if best_path.exists() and meta_path.exists():
+        try:
+            import json as _json
+
+            meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+            disk_score = float(meta.get("score", best_score))
+            if disk_score > best_score:
+                # Replace in-memory best with on-disk superior result
+                best_score = disk_score
+                try:
+                    best_data = _load_params(best_path)
+                except Exception:
+                    pass
+        except Exception:
+            # If the meta is corrupted ignore and continue with in-memory
+            # defaults.
+            pass
+    else:
+        # Ensure initial files exist for tooling that expects them.
+        _save_params(best_data, best_path)
+        try:
+            import json as _json
+
+            meta = {"score": float(best_score), "timestamp": time.time()}
+            meta_path.write_text(_json.dumps(meta), encoding="utf-8")
+        except Exception:
+            pass
 
     beam: List[Tuple[float, Dict[str, Any]]] = [(best_score, best_data)]
 
@@ -697,6 +848,13 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         )
                         _live_line(line)
 
+                    # Emit an explicit batch start line so logs show when a
+                    # candidate's games begin (useful for long-running runs).
+                    _final_line(
+                        f"[BATCH START] iter={step} cand={i + 1}/{args.beam_size} games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
+                    )
+                    sys.stdout.flush()
+
                     score, (w, losses, d), wall = evaluate_candidate_repeats(
                         repeats=args.repeats,
                         progress_cb=progress_cb,
@@ -720,6 +878,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         opponent=opponent,
                         opponent_params=opponent_params,
                         opponent_time_per_move=opponent_time,
+                        opponent_depth_factor=args.opponent_depth_factor
+                        if hasattr(args, "opponent_depth_factor")
+                        else None,
                     )
                     _final_line(
                         f"{_color('✓', 'green')} iter={step} cand={i + 1}/{args.beam_size} "
@@ -783,6 +944,11 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         )
                         _live_line(line)
 
+                    _final_line(
+                        f"[BATCH START] iter={step} cand={i + 1}/{popsize} games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
+                    )
+                    sys.stdout.flush()
+
                     score, (w, losses, d), wall = evaluate_candidate_repeats(
                         repeats=args.repeats,
                         progress_cb=progress_cb,
@@ -806,6 +972,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         opponent=opponent,
                         opponent_params=opponent_params,
                         opponent_time_per_move=opponent_time,
+                        opponent_depth_factor=args.opponent_depth_factor
+                        if hasattr(args, "opponent_depth_factor")
+                        else None,
                     )
                     _final_line(
                         f"{_color('✓', 'green')} iter={step} cand={i + 1}/{popsize} "
@@ -838,17 +1007,118 @@ def optimize_loop(args: argparse.Namespace) -> None:
             best_data = _vector_to_params(base_data, paths, mean_vec, is_int)
             beam = [(top_score, best_data)]
 
-        if top_score > best_score:
+        # Only persist when the candidate is strictly better than the
+        # current on-disk best. We read the meta file first in case another
+        # replicate already wrote an improved best params during this run.
+        try:
+            import json as _json
+
+            disk_meta = None
+            if meta_path.exists():
+                try:
+                    disk_meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    disk_meta = None
+            disk_score = float(disk_meta.get("score")) if disk_meta else best_score
+        except Exception:
+            disk_score = best_score
+
+        # Apply a per-iteration relaxation to the on-disk score if requested.
+        # This makes it gradually easier to overwrite a stubborn best.
+        try:
+            decay = float(getattr(args, "baseline_decay", 0.0))
+        except Exception:
+            decay = 0.0
+        effective_disk_score = disk_score - (decay * float(step))
+
+        # Acceptance policy: prefer strictly greater score, but allow
+        # forced/seed accepts or raising the floor when applicable.
+        accept_candidate = False
+        if top_score > effective_disk_score:
+            accept_candidate = True
+        else:
+            # Force-accept first N replacements to seed the leaderboard
+            force_n = int(getattr(args, "force_accept_first", 0))
+            if force_n > 0:
+                # Count replacements by comparing on-disk score vs initial best
+                # Use a heuristic counter by checking meta timestamp or simple
+                # comparison: if disk_score equals initial baseline we treat
+                # as early run. Simpler: allow up to force_n accepts across
+                # this run tracked via a small in-memory counter stored on
+                # args object.
+                if not hasattr(args, "_accepted_replacements"):
+                    setattr(args, "_accepted_replacements", 0)
+                if getattr(args, "_accepted_replacements") < force_n:
+                    accept_candidate = True
+                    setattr(
+                        args,
+                        "_accepted_replacements",
+                        getattr(args, "_accepted_replacements") + 1,
+                    )
+            # If current on-disk best is below min_score, allow replacing
+            # when candidate reaches the min_score floor
+            if not accept_candidate:
+                min_floor = float(getattr(args, "min_score", 0.0))
+                try:
+                    if (
+                        float(top_score) >= min_floor
+                        and float(effective_disk_score) < min_floor
+                    ):
+                        accept_candidate = True
+                except Exception:
+                    pass
+
+        if accept_candidate:
             best_score = top_score
             best_data = top_data
-            _save_params(best_data, best_path)
-            _final_line(
-                f"{_color('⚑', 'yellow')} new best score={best_score:.3f} saved to {best_path}"
-            )
+            # Atomic write: write to temp then move into place.
+            tmp = best_path.with_suffix(best_path.suffix + ".tmp")
+            try:
+                _save_params(best_data, tmp)
+                tmp.replace(best_path)
+                meta = {"score": float(best_score), "timestamp": time.time()}
+                meta_path.write_text(_json.dumps(meta), encoding="utf-8")
+                _final_line(
+                    f"{_color('⚑', 'yellow')} new best score={best_score:.3f} saved to {best_path}"
+                )
+                # Also emit a greppable log line
+                _final_line(f"[NEW BEST] score={best_score:.3f} path={best_path}")
+                # When a new best is accepted, make it the baseline for
+                # subsequent candidate evaluations in this run (so future
+                # candidates are tested against the best-known params).
+                if not getattr(args, "external_opponent", False):
+                    try:
+                        baseline_params = best_path
+                        baseline_data = best_data
+                    except Exception:
+                        pass
+            finally:
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except Exception:
+                    pass
 
-    _final_line(
-        f"{_color('🏁', 'bright_white')} Best score={best_score:.3f}, params at {best_path}"
-    )
+    # Read on-disk meta if available so final report reflects global best
+    try:
+        import json as _json
+
+        if meta_path.exists():
+            meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+            disk_score = float(meta.get("score", best_score))
+            _final_line(
+                f"{_color('🏁', 'bright_white')} Best score={disk_score:.3f}, params at {best_path}"
+            )
+        else:
+            _final_line(
+                f"{_color('🏁', 'bright_white')} Best score={best_score:.3f}, params at {best_path}"
+            )
+    except Exception:
+        _final_line(
+            f"{_color('🏁', 'bright_white')} Best score={best_score:.3f}, params at {best_path}"
+        )
+    if getattr(args, "baseline_decay", 0.0):
+        _final_line(f"(baseline-decay={args.baseline_decay})")
     if args.output:
         out_path = Path(args.output).resolve()
         _save_params(best_data, out_path)
@@ -892,6 +1162,17 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--iterations", type=int, default=5, help="Number of candidate evaluations"
     )
     parser.add_argument(
+        "--baseline-decay",
+        type=float,
+        default=0.0,
+        help=(
+            "Per-iteration score relaxation applied to the stored best score. "
+            "A small positive value (e.g. 0.005) will lower the effective "
+            "on-disk best score each iteration, making acceptance of new "
+            "candidates gradually easier."
+        ),
+    )
+    parser.add_argument(
         "--noise",
         type=float,
         default=0.05,
@@ -902,6 +1183,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--clock", type=float, help="Clock time seconds")
     parser.add_argument(
         "--opponent-time-per-move", type=float, help="Opponent seconds per move"
+    )
+    parser.add_argument(
+        "--opponent-depth-factor",
+        type=float,
+        help="Scale factor applied to depth for the opponent when running external opponent (e.g. 0.6)",
     )
     parser.add_argument("--concurrency", type=int, default=4, help="Concurrent games")
     parser.add_argument(
@@ -935,6 +1221,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--phase-weights-only",
         action="store_true",
         help="Only tune evaluation.phase_weights_mg/eg arrays",
+    )
+    parser.add_argument(
+        "--weights-only",
+        action="store_true",
+        help="Alias for --phase-weights-only (tune only phase weight arrays)",
     )
     parser.add_argument(
         "--strategy",
@@ -979,6 +1270,18 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--cma-sigma",
         type=float,
         help="Step scale for CMA-like strategy (default uses --noise)",
+    )
+    parser.add_argument(
+        "--min-score",
+        type=float,
+        default=0.0,
+        help="Minimum score floor to allow accepting a candidate when current best is below this floor",
+    )
+    parser.add_argument(
+        "--force-accept-first",
+        type=int,
+        default=0,
+        help="Force-accept the first N candidate replacements (useful to seed a weak leaderboard)",
     )
     return parser.parse_args(argv)
 

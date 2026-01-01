@@ -5,10 +5,9 @@ Unified CLI entry point for Skaks optimization and fitting.
 import argparse
 from pathlib import Path
 from typing import List, Optional
-import sys
 
-from skaks_opt.texel import run_texel
-from skaks_opt.fit import run_fit
+from skaks_opt.texel import add_subparser as add_texel_subparser, run_texel
+from skaks_opt.fit import add_subparser as add_fit_subparser, run_fit
 from skaks_opt.selfplay import SelfPlayConfig, run_selfplay
 
 
@@ -56,14 +55,10 @@ def main():
     )
 
     # Texel fitting subcommand
-    texel_parser = subparsers.add_parser("texel", help="Run Texel fitting")
-    texel_parser.add_argument("--params", required=True, help="YAML parameter file")
-    texel_parser.add_argument("--games", type=int, default=100, help="Number of games")
+    add_texel_subparser(subparsers)
 
     # Parameter fitting subcommand
-    fit_parser = subparsers.add_parser("fit", help="Run parameter fitting")
-    fit_parser.add_argument("--params", required=True, help="YAML parameter file")
-    fit_parser.add_argument("--games", type=int, default=100, help="Number of games")
+    add_fit_subparser(subparsers)
 
     # Self-play optimization subcommand
     selfplay_parser = subparsers.add_parser(
@@ -200,11 +195,27 @@ def main():
         help="Random seed for optimizer (default: %(default)s)",
     )
 
+    monitor_parser = subparsers.add_parser(
+        "monitor", help="Track ongoing scan_out results"
+    )
+    monitor_parser.add_argument(
+        "--top",
+        type=int,
+        default=5,
+        help="Number of top samples to display (default: %(default)s)",
+    )
+    monitor_parser.add_argument(
+        "--interval",
+        type=int,
+        default=10,
+        help="Refresh interval in seconds (default: %(default)s)",
+    )
+
     args = parser.parse_args()
     if args.command == "texel":
-        run_texel(args.params, args.games)
+        run_texel(args)
     elif args.command == "fit":
-        run_fit(args.params, args.games)
+        run_fit(args)
     elif args.command == "selfplay":
 
         def _to_path(value: Optional[str]) -> Optional[Path]:
@@ -258,15 +269,13 @@ def main():
         )
         run_selfplay(config)
     elif args.command == "optimize-search":
-        from skaks_opt import optimize_search
+        from skaks_opt.optimize_search import run_optimize_search
 
-        sys.modules["__main__"].quiet = args.quiet
-        sys.modules["__main__"].trials = args.trials
-        sys.modules["__main__"].games = args.games
-        sys.modules["__main__"].output = args.output
-        sys.modules["__main__"].pgn = args.pgn
-        sys.modules["__main__"].depth = args.depth
-        optimize_search.main_entry()
+        run_optimize_search(args)
+    elif args.command == "monitor":
+        from scripts import scan_progress
+
+        scan_progress.run(top=args.top, interval=args.interval)
     else:
         parser.error("Unknown command")
 

@@ -191,6 +191,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Path to NNUE weights for the opponent engine (passed as --opponent-nnue)",
     )
     parser.add_argument(
+        "--opponent-depth-factor",
+        type=positive_float,
+        help="Scale factor applied to depth for the opponent (e.g. 0.6)",
+    )
+    parser.add_argument(
         "--opponent-label",
         type=str,
         help="Display label for the opponent engine in summary/Elo (default: opponent basename)",
@@ -386,6 +391,8 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
 
     if args.opponent_time_per_move is not None:
         base_args.extend(["--opponent-time-per-move", str(args.opponent_time_per_move)])
+    if getattr(args, "opponent_depth_factor", None) is not None:
+        base_args.extend(["--opponent-depth-factor", str(args.opponent_depth_factor)])
 
     if args.engine:
         base_args.extend(["--engine", args.engine])
@@ -679,6 +686,7 @@ def run_batch(args: argparse.Namespace) -> int:
             "opponent": args.opponent,
             "opponent_params": args.opponent_params,
             "opponent_nnue": args.opponent_nnue,
+            "opponent_depth_factor": args.opponent_depth_factor,
             "handicap_factor": args.handicap_factor,
             "handicap_depth": args.handicap_depth,
             "handicap_enabled": args.handicap_enabled,

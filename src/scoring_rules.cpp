@@ -14,6 +14,21 @@
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
+// Conditionally include ARM NEON only when available and safe to include.
+#if defined(__aarch64__)
+#if defined(__has_include)
+#if __has_include(<arm_neon.h>)
+#include <arm_neon.h>
+#define SKAKS_HAVE_NEON 1
+#else
+#define SKAKS_HAVE_NEON 0
+#endif
+#else
+#define SKAKS_HAVE_NEON 0
+#endif
+#else
+#define SKAKS_HAVE_NEON 0
+#endif
 
 namespace {
 constexpr std::size_t kTermCount =
@@ -564,12 +579,13 @@ int evaluate_rook_file_control(const Board& board) {
 EvalVector compute_eval_vector(const Board& b) {
   EvalVector v{};
   v.f[static_cast<int>(TermId::Material)] = evaluate_material(b);
-  v.f[static_cast<int>(TermId::PawnCenter)] = evaluate_pawn_center_control(b);
+  v.f[static_cast<int>(TermId::PawnCenter)] =
+      0; // evaluate_pawn_center_control(b);
   v.f[static_cast<int>(TermId::CenterControl)] = evaluate_center_control(b);
   v.f[static_cast<int>(TermId::Attacking)] = evaluate_attacking_pieces(b);
   v.f[static_cast<int>(TermId::KingSafety)] = evaluate_king_safety(b);
   v.f[static_cast<int>(TermId::KingMobility)] = evaluate_king_mobility(b);
-  v.f[static_cast<int>(TermId::Pins)] = evaluate_pins(b);
+  v.f[static_cast<int>(TermId::Pins)] = 0; // evaluate_pins(b);
 
   const int mg_phase = std::min(b.phase, kPstPhaseMax);
   const int eg_phase = kPstPhaseMax - mg_phase;
@@ -593,13 +609,21 @@ int eval_linear(const EvalVector& v, const PhaseWeights& W) {
       static_cast<float>(v.mg_phase) / static_cast<float>(kPstPhaseMax);
   const float egw =
       static_cast<float>(v.eg_phase) / static_cast<float>(kPstPhaseMax);
-#ifdef __x86_64__
+
+  // Precompute interpolated weights into a small contiguous float array to
+  // allow efficient vectorized dot-product implementations and to make the
+  // code easier to port to other SIMD ISAs (NEON).
+  alignas(32) float wbuf[kTermCount];
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    wbuf[i] = W.mg[i] * mgw + W.eg[i] * egw;
+  }
+
+#if defined(__x86_64__)
+  // AVX2 path (existing) — process 8 floats at a time
   __m256 sum_vec = _mm256_setzero_ps();
   std::size_t i = 0;
   for (; i + 7 < kTermCount; i += 8) {
-    __m256 wi_vec = _mm256_add_ps(
-        _mm256_mul_ps(_mm256_loadu_ps(&W.mg[i]), _mm256_set1_ps(mgw)),
-        _mm256_mul_ps(_mm256_loadu_ps(&W.eg[i]), _mm256_set1_ps(egw)));
+    __m256 wi_vec = _mm256_loadu_ps(&wbuf[i]);
     __m256 fi_vec = _mm256_cvtepi32_ps(
         _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&v.f[i])));
     sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(wi_vec, fi_vec));
@@ -610,17 +634,50 @@ int eval_linear(const EvalVector& v, const PhaseWeights& W) {
   for (int j = 0; j < 8; ++j)
     sum += sum_arr[j];
   for (; i < kTermCount; ++i) {
-    const float wi = W.mg[i] * mgw + W.eg[i] * egw;
-    sum += wi * static_cast<float>(v.f[i]);
+    sum += wbuf[i] * static_cast<float>(v.f[i]);
+  }
+#elif SKAKS_HAVE_NEON
+  // NEON path for aarch64 — process 4 floats at a time
+  float32x4_t sumv = vdupq_n_f32(0.0f);
+  std::size_t i = 0;
+  for (; i + 3 < kTermCount; i += 4) {
+    float32x4_t wv = vld1q_f32(&wbuf[i]);
+    // load int32 values and convert to float32
+    int32x4_t iv = vld1q_s32(reinterpret_cast<const int32_t*>(&v.f[i]));
+    float32x4_t fv = vcvtq_f32_s32(iv);
+    sumv = vmlaq_f32(sumv, wv, fv);
+  }
+  float sum = 0.0f;
+  float temp[4];
+  vst1q_f32(temp, sumv);
+  for (int j = 0; j < 4; ++j)
+    sum += temp[j];
+  for (; i < kTermCount; ++i) {
+    sum += wbuf[i] * static_cast<float>(v.f[i]);
   }
 #else
+  // Portable scalar fallback
   float sum = 0.0f;
   for (std::size_t i = 0; i < kTermCount; ++i) {
-    const float wi = W.mg[i] * mgw + W.eg[i] * egw;
-    sum += wi * static_cast<float>(v.f[i]);
+    sum += wbuf[i] * static_cast<float>(v.f[i]);
   }
 #endif
+
   return static_cast<int>(std::lround(sum));
+}
+
+// Helper: compute per-term contributions (wi * fi) into out array. Useful
+// for incremental updates where only a few terms or the phase changes.
+void compute_term_contributions(const EvalVector& v, const PhaseWeights& W,
+                                float out[kTermCount]) {
+  const float mgw =
+      static_cast<float>(v.mg_phase) / static_cast<float>(kPstPhaseMax);
+  const float egw =
+      static_cast<float>(v.eg_phase) / static_cast<float>(kPstPhaseMax);
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    const float wi = W.mg[i] * mgw + W.eg[i] * egw;
+    out[i] = wi * static_cast<float>(v.f[i]);
+  }
 }
 
 int evaluate_opening_principles(const Board& board) {

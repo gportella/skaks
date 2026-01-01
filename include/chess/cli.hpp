@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chess/defaults.hpp"
+#include "chess/eval_mode.hpp"
 
 #include <cstdint>
 #include <string>
@@ -44,6 +45,7 @@ struct CliOptions {
   bool best_move = false;
   bool arena_mode = false;
   int arena_games = 20;
+  EvaluationMode eval_mode = EvaluationMode::Native;
   TimeControlOptions time_control;
 };
 

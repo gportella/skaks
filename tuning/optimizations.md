@@ -2,12 +2,12 @@
 
 Concise menu of tuning paths with ready-to-run examples. Adjust paths as needed (built engine, data files, Python venv).
 
-## CP Regression (Texel-style) — `tuning.skaks_opt.cli`
+## CP Regression (Texel-style) — `skaks_opt fit`
 Use offline regression on labeled centipawn data.
 
 - **Typical filtered run (scalars + arrays)**
   ```
-  python -m tuning.skaks_opt.cli \
+  python -m skaks_opt fit \
     --data eval_pairs_pvs_filtered.csv \
     --trials 400 \
     --require-quiet \

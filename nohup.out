@@ -1,0 +1,26 @@
+usage: scan_keep_top.py [-h] [--n N] [--keep KEEP] [--concurrency CONCURRENCY]
+                        [--games GAMES] [--depth DEPTH] [--base BASE]
+                        [--params PARAMS] [--out OUT] [--dry-run]
+                        [--seed SEED]
+scan_keep_top.py: error: unrecognized arguments: --opponent sunfish
+Traceback (most recent call last):
+  File "/Users/ktxc111/work/repos/skaks/scripts/scan_keep_top.py", line 266, in <module>
+    main()
+  File "/Users/ktxc111/work/repos/skaks/scripts/scan_keep_top.py", line 198, in main
+    rc, out = done_future.result()
+              ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/miniconda3/lib/python3.12/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/miniconda3/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/Users/ktxc111/miniconda3/lib/python3.12/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/scripts/scan_keep_top.py", line 47, in run_eval
+    tmp_yaml = make_temp_start(base_yaml, mg, eg)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/scripts/scan_keep_top.py", line 121, in make_temp_start
+    new["evaluation"]["phase_weights_mg"] = [float(x) * mg_scale for x in mg]
+                                             ~~~~~~~~~^~~~~~~~~~
+TypeError: can't multiply sequence by non-int of type 'float'

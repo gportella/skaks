@@ -1,4 +1,4 @@
-python -m tuning.skaks_opt.cli \
+python -m skaks_opt fit \
   --data eval_pairs_pvs_filtered.csv \
   --trials 150 \
   --require-quiet \
@@ -15,4 +15,5 @@ python -m tuning.skaks_opt.cli \
   --study-name opt_fit_white \
   --best-out tuning/out/best_filtered.yaml \
   --metrics-out tuning/out/metrics_filtered.csv \
-  --rich --storage sqlite:///optuna.db
+  --rich \
+  --storage  sqlite:///optuna.db

@@ -1,0 +1,5 @@
+Evaluating baseline performance against external opponent...Baseline score=0.000 WLD=0/20/0
+[BATCH START] iter=1 cand=1/12 games=20 depth=5 external=True opponent=sunfish
+| ♔                iter 1/1 cand 1/12 repeat 1/1 t=0.0s/  ♕               iter 1/1 cand 1/12 repeat 1/1 t=11.6s✓ iter=1 cand=1/12 score=0.225 WLD=0/11/9 elo~-214.8 time=11.6s
+[BATCH START] iter=1 cand=2/12 games=20 depth=5 external=True opponent=sunfish
+-   ♖              iter 1/1 cand 2/12 repeat 1/1 t=0.0s

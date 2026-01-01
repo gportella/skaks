@@ -112,7 +112,7 @@ Use these when you only want to optimize the phase weights (`phase_weights_mg` /
 
 ```bash
 # CP regression on eval_pairs CSV (Optuna)
-python -m tuning.skaks_opt.cli \
+python -m skaks_opt fit \
 	--data eval_pairs_pvs_with_results.csv \
 	--phase-weights-only \
 	--trials 80 \

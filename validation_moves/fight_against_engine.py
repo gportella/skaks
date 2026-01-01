@@ -296,6 +296,7 @@ def run_game(
     opponent_nnue: Optional[str],
     handicap_factor: float,
     handicap_depth: int,
+    opponent_depth_factor: Optional[float],
     handicap_enabled: bool,
 ) -> int:
     reference_path = _resolve_engine(reference_engine)
@@ -413,10 +414,17 @@ def run_game(
                         )
                     else:
                         assert depth is not None
-                        if mover_color == chess.WHITE or depth_penalty == 0:
+                        if mover_color == chess.WHITE:
                             chosen_depth = depth
                         else:
-                            chosen_depth = max(depth - depth_penalty, 1)
+                            if opponent_depth_factor is not None:
+                                chosen_depth = max(
+                                    1, int(round(depth * opponent_depth_factor))
+                                )
+                            elif depth_penalty != 0:
+                                chosen_depth = max(depth - depth_penalty, 1)
+                            else:
+                                chosen_depth = depth
                         search_start = None
                         search_end = None
                         best_move = engine.bestmove(
@@ -573,6 +581,11 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Seconds per move for the opponent when using time controls",
     )
     parser.add_argument(
+        "--opponent-depth-factor",
+        type=_positive_float,
+        help="Scale factor applied to depth for the opponent (e.g. 0.6 gives opponent depth=round(depth*0.6))",
+    )
+    parser.add_argument(
         "--opponent-clock",
         "--stockfish-clock",
         dest="opponent_clock",
@@ -685,6 +698,7 @@ def main(argv: List[str]) -> int:
         opponent_nnue=args.opponent_nnue,
         handicap_factor=args.handicap_factor,
         handicap_depth=args.handicap_depth,
+        opponent_depth_factor=args.opponent_depth_factor,
         handicap_enabled=args.handicap_enabled,
     )
 

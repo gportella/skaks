@@ -3,6 +3,8 @@
 #include "chess/defaults.hpp"
 #include "cxxopts.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -35,6 +37,8 @@ CliParseResult parse_cli(int argc, char** argv) {
         cxxopts::value<std::string>())
       ("static-eval", "Print static evaluation for provided FEN",
        cxxopts::value<bool>()->default_value("false"))
+      ("eval", "Evaluation mode: native|sunfish",
+       cxxopts::value<std::string>()->default_value("native"))
       ("o,onlyfen", "Print FEN only in self-play mode")
       ("s,self", "Run self-play CLI loop")
       ("arena", "Run built-in baseline-vs-params arena (no UCI)")
@@ -103,6 +107,23 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.best_move = parsed.count("bestmove") > 0;
     result.options.static_eval = parsed.count("static-eval") > 0;
+
+    const auto eval_option = parsed["eval"].as<std::string>();
+    std::string eval_lower;
+    eval_lower.reserve(eval_option.size());
+    for (char ch : eval_option) {
+      eval_lower.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    if (eval_lower == "native" || eval_lower == "default") {
+      result.options.eval_mode = EvaluationMode::Native;
+    } else if (eval_lower == "sunfish") {
+      result.options.eval_mode = EvaluationMode::Sunfish;
+    } else {
+      result.parse_error = true;
+      result.message = "Unknown --eval mode: " + eval_option;
+      return result;
+    }
 
     const bool request_polyglot = parsed.count("polyglot") > 0;
     const bool request_no_polyglot = parsed.count("no-polyglot") > 0;

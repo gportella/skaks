@@ -1,30 +1,30 @@
 evaluation:
   bishop_dev_bonus: 27
-  bishop_pair_bonus: 81
+  bishop_pair_bonus: 79
   bishop_pin_penalty:
-    base: 40
+    base: 38
     mobility: 1
-  castle_urgency: 39
+  castle_urgency: 40
   castling_bonus: 6
-  central_pawn_bonus: 59
-  check_penalty: 56
-  connect_rooks_bonus: 15
-  early_queen_penalty: 25
-  flank_pawn_penalty: 16
+  central_pawn_bonus: 62
+  check_penalty: 58
+  connect_rooks_bonus: 17
+  early_queen_penalty: 27
+  flank_pawn_penalty: 17
   hanging_divisor: 3
-  hanging_min_penalty: 51
+  hanging_min_penalty: 49
   king_attack_weights:
-  - 7
-  - 15
-  - 16
-  - 42
-  - 44
+  - 8
+  - 14
   - 17
-  - 31
-  - 35
+  - 51
   - 40
-  - 101
-  - 46
+  - 15
+  - 31
+  - 34
+  - 41
+  - 93
+  - 48
   - 27
   king_ring_base: 2
   king_ring_defended_scale: 11
@@ -35,7 +35,7 @@ evaluation:
     base: 39
     mobility: 3
   mobility_scaling: 9
-  passed_pawn_advance: 35
+  passed_pawn_advance: 32
   passed_pawn_base: 4
   pawn_pin_diagonal_penalty:
     base: 12
@@ -45,64 +45,64 @@ evaluation:
     mobility: 10
   pawn_shield_bonus: 2
   phase_weights_eg:
-  - 0.4235759358548594
-  - 0.7353305748381124
-  - 0.7505631814243493
-  - 1.0198790264248025
-  - 93.55941039875687
-  - 0.7160778625826557
-  - 0.05352349211758166
-  - 6.9273485153876075
-  - 2.215726730751631
-  - 1.2904648049650507
-  - 21.751776570662976
-  - 0.05292445787297692
-  - 0.6225046835851065
-  - 3.412569763569139
-  - 136.07424570843207
+  - 0.4191979388702235
+  - 0.8623830734684632
+  - 0.6673321721479314
+  - 1.046548024686704
+  - 92.1517392529961
+  - 0.6982339912131457
+  - 0.050616655557742134
+  - 7.166818555450926
+  - 2.0838421912965583
+  - 1.3580112842722571
+  - 20.513244795021535
+  - 0.05183116089588112
+  - 0.6136799629767925
+  - 3.154110721380679
+  - 142.79705985450667
   phase_weights_mg:
-  - 0.647138776419526
-  - 0.17633889869436584
-  - 1602.0644893038116
-  - 21.070313633311788
-  - 0.04845679371487608
-  - 1.3895538964940466
-  - 65.96172045884472
-  - 0.2230207977575968
-  - 21.417781405221458
-  - 0.3631270900470982
-  - 0.24218137325650835
-  - 2.240741973208124
-  - 1.9416882430127225
-  - 0.03997534954061878
-  - 42.95204585709539
-  rook_open_file_bonus: 41
+  - 0.6581369695786221
+  - 0.17401970493555727
+  - 1443.744627345737
+  - 20.89449536887173
+  - 0.05024736562093749
+  - 1.364525508022567
+  - 67.11114952371832
+  - 0.22822197341163322
+  - 20.756204703134987
+  - 0.35041263678089274
+  - 0.2210388042954118
+  - 2.330523845055879
+  - 2.0653431980679415
+  - 0.03643509245320218
+  - 45.91371997045388
+  rook_open_file_bonus: 37
   rook_pin_penalty:
     base: 42
     mobility: 3
-  rook_semi_open_file_bonus: 21
-  tempo_bonus: 12
+  rook_semi_open_file_bonus: 20
+  tempo_bonus: 14
   threat_base:
   - 1
-  - 12
+  - 11
   - 10
   - 63
-  - 103
-  - 158
-  - 355
+  - 96
+  - 160
+  - 315
   - 13
-  - 70
-  - 92
-  - 42
-  - 194
-  - 980
+  - 68
+  - 97
+  - 47
+  - 182
+  - 1106
   threat_weight: 8
 search:
-  aspiration_window_initial: 1630
-  aspiration_window_max: 6620
+  aspiration_window_initial: 1532
+  aspiration_window_max: 6691
   null_move_min_depth: 6
   null_move_reduction: 3
-  quiescence_delta_margin: 315
+  quiescence_delta_margin: 297
   quiescence_max_noisy_moves: 19
-  quiescence_max_ply: 8
+  quiescence_max_ply: 7
   quiescence_zero_gain_skip_index: 6
