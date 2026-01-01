@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-"""Batch runner for validation matches with optional SQLite storage."""
+"""Batch orchestration for skaks_opt arena matches."""
 
 from __future__ import annotations
 
@@ -26,6 +25,21 @@ DEFAULT_ELO_START = 1500.0
 DEFAULT_ELO_OPPONENT = 2600.0
 DEFAULT_ELO_K_FACTOR = 20.0
 DEFAULT_ELO_STORE = str(Path(__file__).resolve().with_name(".skaks_elo.json"))
+
+__all__ = [
+    "DEFAULT_DEPTH",
+    "DEFAULT_ELO_K_FACTOR",
+    "DEFAULT_ELO_OPPONENT",
+    "DEFAULT_ELO_START",
+    "DEFAULT_ELO_STORE",
+    "DEFAULT_GAMES",
+    "DEFAULT_MATCH_LIMIT",
+    "RECOMMENDED_DB_NAME",
+    "non_negative_int",
+    "positive_float",
+    "positive_int",
+    "run_batch",
+]
 
 
 @dataclass
@@ -176,6 +190,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Path to NNUE weights for the reference engine (passed as --engine-nnue)",
     )
     parser.add_argument(
+        "--engine-eval",
+        type=str,
+        help="Evaluation mode override for the reference engine (forwarded as --engine-eval)",
+    )
+    parser.add_argument(
         "--engine-label",
         type=str,
         help="Display label for the reference engine in summary/Elo (default: engine basename)",
@@ -189,6 +208,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--opponent-nnue",
         type=str,
         help="Path to NNUE weights for the opponent engine (passed as --opponent-nnue)",
+    )
+    parser.add_argument(
+        "--opponent-eval",
+        type=str,
+        help="Evaluation mode override for the opponent engine (forwarded as --opponent-eval)",
     )
     parser.add_argument(
         "--opponent-depth-factor",
@@ -348,8 +372,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     if mode_count > 1:
         parser.error("choose exactly one of --depth, --time-per-move, or --clock")
 
-    # if args.time_per_move is None and args.opponent_time_per_move is not None:
-    #     parser.error("--opponent-time-per-move requires --time-per-move")
     if args.clock is None and args.opponent_clock is not None:
         parser.error("--opponent-clock requires --clock")
     if args.clock is None and (
@@ -404,12 +426,16 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         base_args.extend(["--engine-params", args.engine_params])
     if args.engine_nnue:
         base_args.extend(["--engine-nnue", args.engine_nnue])
+    if args.engine_eval:
+        base_args.extend(["--engine-eval", args.engine_eval])
     if args.opponent:
         base_args.extend(["--opponent", args.opponent])
     if args.opponent_params:
         base_args.extend(["--opponent-params", args.opponent_params])
     if args.opponent_nnue:
         base_args.extend(["--opponent-nnue", args.opponent_nnue])
+    if args.opponent_eval:
+        base_args.extend(["--opponent-eval", args.opponent_eval])
     if args.no_handicap:
         base_args.append("--no-handicap")
     if args.handicap_factor is not None:
@@ -460,7 +486,6 @@ def prepare_database(connection: sqlite3.Connection) -> None:
     )
     connection.commit()
 
-    # Backward compatibility: add engine name columns if the table predates them.
     existing_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(matches);")
     }
@@ -565,7 +590,7 @@ def determine_winner_label(
             return white_label
         if normalized_result in {"0-1", "0 - 1"}:
             return black_label
-        if normalized_result in {"1/2-1/2", "1/2 - 1/2", "½-½"}:
+        if normalized_result in {"1/2-1/2", "1/2 - 1/2", "\u00bd-\u00bd"}:
             return "draw"
         if normalized_result.startswith("draw"):
             return "draw"
@@ -651,11 +676,6 @@ def summarize_counts(summary: Dict[str, int], labels: Sequence[str]) -> str:
 
 
 def run_batch(args: argparse.Namespace) -> int:
-    fight_script = Path(__file__).resolve().with_name("fight_against_engine.py")
-    if not fight_script.exists():
-        print(f"Fight script not found at {fight_script}", file=sys.stderr)
-        return 2
-
     wall_start = time.perf_counter()
 
     connection: Optional[sqlite3.Connection] = None
@@ -693,6 +713,8 @@ def run_batch(args: argparse.Namespace) -> int:
             "opponent": args.opponent,
             "opponent_params": args.opponent_params,
             "opponent_nnue": args.opponent_nnue,
+            "engine_eval": args.engine_eval,
+            "opponent_eval": args.opponent_eval,
             "opponent_depth_factor": args.opponent_depth_factor,
             "handicap_factor": args.handicap_factor,
             "handicap_depth": args.handicap_depth,
@@ -747,7 +769,7 @@ def run_batch(args: argparse.Namespace) -> int:
         sys.stdout.flush()
 
         executable = sys.executable
-        command = [str(fight_script), *base_args]
+        command = ["-m", "skaks_opt.fight", *base_args]
 
         white_engine = args.engine if args.engine else "skaks"
         black_engine = args.opponent if args.opponent else "stockfish"

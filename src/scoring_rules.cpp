@@ -579,13 +579,12 @@ int evaluate_rook_file_control(const Board& board) {
 EvalVector compute_eval_vector(const Board& b) {
   EvalVector v{};
   v.f[static_cast<int>(TermId::Material)] = evaluate_material(b);
-  v.f[static_cast<int>(TermId::PawnCenter)] =
-      0; // evaluate_pawn_center_control(b);
+  v.f[static_cast<int>(TermId::PawnCenter)] = evaluate_pawn_center_control(b);
   v.f[static_cast<int>(TermId::CenterControl)] = evaluate_center_control(b);
   v.f[static_cast<int>(TermId::Attacking)] = evaluate_attacking_pieces(b);
   v.f[static_cast<int>(TermId::KingSafety)] = evaluate_king_safety(b);
   v.f[static_cast<int>(TermId::KingMobility)] = evaluate_king_mobility(b);
-  v.f[static_cast<int>(TermId::Pins)] = 0; // evaluate_pins(b);
+  v.f[static_cast<int>(TermId::Pins)] = evaluate_pins(b);
 
   const int mg_phase = std::min(b.phase, kPstPhaseMax);
   const int eg_phase = kPstPhaseMax - mg_phase;

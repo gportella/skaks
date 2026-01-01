@@ -998,4 +998,61 @@ Evaluating baseline performance against external opponent...Baseline score=0.00
 [BATCH START] iter=1 cand=1/12 games=20 depth=5 external=True opponent=sunfish
 | ♔                iter 1/1 cand 1/12 repeat 1/1 t=0.0s/  ♕               iter 1/1 cand 1/12 repeat 1/1 t=11.6s✓ iter=1 cand=1/12 score=0.225 WLD=0/11/9 elo~-214.8 time=11.6s
 [BATCH START] iter=1 cand=2/12 games=20 depth=5 external=True opponent=sunfish
--   ♖              iter 1/1 cand 2/12 repeat 1/1 t=0.0s
+-   ♖              iter 1/1 cand 2/12 repeat 1/1 t=0.0s\    ♗             iter 1/1 cand 2/12 repeat 1/1 t=11.5s✓ iter=1 cand=2/12 score=0.275 WLD=0/9/11 elo~-168.4 time=11.5s
+[BATCH START] iter=1 cand=3/12 games=20 depth=5 external=True opponent=sunfish
+|     ♘            iter 1/1 cand 3/12 repeat 1/1 t=0.0s/      ♙           iter 1/1 cand 3/12 repeat 1/1 t=9.7s✓ iter=1 cand=3/12 score=0.125 WLD=1/16/3 elo~-338.0 time=9.7s
+[BATCH START] iter=1 cand=4/12 games=20 depth=5 external=True opponent=sunfish
+-       ♚          iter 1/1 cand 4/12 repeat 1/1 t=0.0s\        ♛         iter 1/1 cand 4/12 repeat 1/1 t=10.1s✓ iter=1 cand=4/12 score=0.350 WLD=2/8/10 elo~-107.5 time=10.1s
+[BATCH START] iter=1 cand=5/12 games=20 depth=5 external=True opponent=sunfish
+|         ♜        iter 1/1 cand 5/12 repeat 1/1 t=0.0s/          ♝       iter 1/1 cand 5/12 repeat 1/1 t=10.7s✓ iter=1 cand=5/12 score=0.250 WLD=0/10/10 elo~-190.8 time=10.7s
+[BATCH START] iter=1 cand=6/12 games=20 depth=5 external=True opponent=sunfish
+-           ♞      iter 1/1 cand 6/12 repeat 1/1 t=0.0s\            ♟     iter 1/1 cand 6/12 repeat 1/1 t=10.6s✓ iter=1 cand=6/12 score=0.175 WLD=1/14/5 elo~-269.4 time=10.5s
+[BATCH START] iter=1 cand=7/12 games=20 depth=5 external=True opponent=sunfish
+|             ♔    iter 1/1 cand 7/12 repeat 1/1 t=0.0s/              ♕   iter 1/1 cand 7/12 repeat 1/1 t=11.5s✓ iter=1 cand=7/12 score=0.250 WLD=1/11/8 elo~-190.8 time=11.5s
+[BATCH START] iter=1 cand=8/12 games=20 depth=5 external=True opponent=sunfish
+-               ♖  iter 1/1 cand 8/12 repeat 1/1 t=0.0s\                ♗ iter 1/1 cand 8/12 repeat 1/1 t=10.1s✓ iter=1 cand=8/12 score=0.225 WLD=1/12/7 elo~-214.8 time=10.1s
+[BATCH START] iter=1 cand=9/12 games=20 depth=5 external=True opponent=sunfish
+| ♘                iter 1/1 cand 9/12 repeat 1/1 t=0.0s/  ♙               iter 1/1 cand 9/12 repeat 1/1 t=11.3s✓ iter=1 cand=9/12 score=0.325 WLD=0/7/13 elo~-127.0 time=11.2s
+[BATCH START] iter=1 cand=10/12 games=20 depth=5 external=True opponent=sunfish
+-   ♚              iter 1/1 cand 10/12 repeat 1/1 t=0.0sTraceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/ktxc111/work/repos/skaks/tuning/param_optimize.py", line 1298, in <module>
+    main()
+  File "/Users/ktxc111/work/repos/skaks/tuning/param_optimize.py", line 1292, in main
+    optimize_loop(args)
+  File "/Users/ktxc111/work/repos/skaks/tuning/param_optimize.py", line 858, in optimize_loop
+    score, (w, losses, d), wall = evaluate_candidate_repeats(
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/tuning/param_optimize.py", line 598, in evaluate_candidate_repeats
+    score, (w, losses, d), wall = evaluate_candidate(
+                                  ^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/tuning/param_optimize.py", line 502, in evaluate_candidate
+    s1 = run_batch(
+         ^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/tuning/param_optimize.py", line 355, in run_batch
+    raise RuntimeError(msg)
+RuntimeError: batch runner failed with code 1
+stdout:
+
+
+stderr:
+Traceback (most recent call last):
+  File "/Users/ktxc111/work/repos/skaks/validation_moves/batch_stockfish_matches.py", line 909, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/validation_moves/batch_stockfish_matches.py", line 905, in main
+    return run_batch(args)
+           ^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/work/repos/skaks/validation_moves/batch_stockfish_matches.py", line 661, in run_batch
+    db_path = Path(args.database).expanduser().resolve()
+              ^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktxc111/miniconda3/lib/python3.12/pathlib.py", line 1162, in __init__
+    super().__init__(*args)
+  File "/Users/ktxc111/miniconda3/lib/python3.12/pathlib.py", line 373, in __init__
+    raise TypeError(
+TypeError: argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'NoneType'
+
+
+summary_json:None
+

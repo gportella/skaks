@@ -3,12 +3,26 @@ Unified CLI entry point for Skaks optimization and fitting.
 """
 
 import argparse
+import sys
 from pathlib import Path
 from typing import List, Optional
 
-from skaks_opt.texel import add_subparser as add_texel_subparser, run_texel
 from skaks_opt.fit import add_subparser as add_fit_subparser, run_fit
 from skaks_opt.selfplay import SelfPlayConfig, run_selfplay
+from skaks_opt.arena import add_subparser as add_arena_subparser, run_arena
+from skaks_opt.arena_sweep import (
+    add_subparser as add_arena_sweep_subparser,
+    run_sweep as run_arena_sweep,
+)
+from skaks_opt.dataset import (
+    add_subparser as add_dataset_subparser,
+    run_dataset,
+)
+from skaks_opt.param_optimize import (
+    add_subparser as add_param_optimize_subparser,
+    run_param_optimize,
+)
+from skaks_opt.texel import add_subparser as add_texel_subparser, run_texel
 
 
 def main():
@@ -53,6 +67,18 @@ def main():
         default=6,
         help="Search depth for skaks --perf (default: %(default)s)",
     )
+
+    # Arena matches subcommand
+    add_arena_subparser(subparsers)
+
+    # Arena sweep subcommand
+    add_arena_sweep_subparser(subparsers)
+
+    # Dataset sampling subcommand
+    add_dataset_subparser(subparsers)
+
+    # Param optimizer subcommand
+    add_param_optimize_subparser(subparsers)
 
     # Texel fitting subcommand
     add_texel_subparser(subparsers)
@@ -214,8 +240,22 @@ def main():
     args = parser.parse_args()
     if args.command == "texel":
         run_texel(args)
+    elif args.command == "arena":
+        try:
+            exit_code = run_arena(args)
+        except ValueError as exc:
+            print(f"arena: {exc}", file=sys.stderr)
+            sys.exit(2)
+        if exit_code:
+            sys.exit(exit_code)
+    elif args.command == "arena-sweep":
+        run_arena_sweep(args)
+    elif args.command == "dataset-sample":
+        run_dataset(args)
     elif args.command == "fit":
         run_fit(args)
+    elif args.command == "param-optimize":
+        run_param_optimize(args)
     elif args.command == "selfplay":
 
         def _to_path(value: Optional[str]) -> Optional[Path]:

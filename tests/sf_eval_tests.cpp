@@ -33,3 +33,16 @@ TEST(SF_Eval, BlackAdvantage) {
   auto r = evaluate(bd);
   EXPECT_LT(r.score, 0);
 }
+
+TEST(SF_Eval, PieceSquareTablesMirrorForBlack) {
+  Board white_knight;
+  ASSERT_TRUE(parse_fen("8/8/8/8/8/2N5/8/8 w - - 0 1", white_knight));
+  const auto white_score = evaluate(white_knight).score;
+  ASSERT_GT(white_score, 0);
+
+  Board black_knight;
+  ASSERT_TRUE(parse_fen("8/8/2n5/8/8/8/8/8 w - - 0 1", black_knight));
+  const auto black_score = evaluate(black_knight).score;
+
+  EXPECT_EQ(white_score, -black_score);
+}

@@ -74,7 +74,7 @@ EvalResult evaluate(const Board& board) noexcept {
     int mat = kSunfishMaterial[static_cast<std::size_t>(idx)];
     score += white ? mat : -mat;
     int type_index = idx - 1;
-    int oriented_sq =
+    const int oriented_sq =
         white ? static_cast<int>(sq) : chess::mirror_rank(static_cast<int>(sq));
     int mg_entry =
         chess::kMidgamePstSunfish[static_cast<std::size_t>(type_index)]

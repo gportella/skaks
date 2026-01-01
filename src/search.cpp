@@ -59,8 +59,8 @@ inline SearchResult make_aborted_result() {
   return aborted;
 }
 
-inline void store_heuristic(SearchScratch& scratch, const Move& move,
-                            int depth) {
+inline void update_history(SearchScratch& scratch, const Move& move, int depth,
+                           bool success) {
   const bool is_quiet = (move.captured_pc == OccupancyType::empty) &&
                         (move.promo_pc == OccupancyType::empty) &&
                         !flag_is_ep(move.flags) && !flag_is_castle(move.flags) &&
@@ -73,8 +73,12 @@ inline void store_heuristic(SearchScratch& scratch, const Move& move,
   const std::size_t to = static_cast<std::size_t>(move.to);
   int& entry = scratch.history_heuristic[from][to];
 
-  const int bonus = depth * depth;
-  entry = std::min(kHistoryMax, entry + bonus);
+  const int delta = depth * depth;
+  if (success) {
+    entry = std::min(kHistoryMax, entry + delta);
+  } else {
+    entry = std::max(0, entry - delta);
+  }
 }
 
 inline void store_killer_move(SearchScratch& scratch, int ply, const Move& move,
@@ -245,6 +249,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         evaluator, scratch, ply + 1, repetition_start, ply_from_root + 1, false,
         nodes, nullptr, 0);
     if (null_result.aborted) {
+      undo_null_move(board, undo_null);
       return null_result;
     }
     const int score_after_null = normalize_mate_score(null_result.score, ply);
@@ -370,9 +375,22 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
     int reduction = 0;
     const bool is_capture = undo.captured_pc != OccupancyType::empty;
-    if (child_depth > 2 && depth >= 0 && moves_tried > 3 && !is_capture &&
-        !in_check_after_move) {
-      reduction = 1;
+    const bool is_promo = move.promo_pc != OccupancyType::empty;
+    const bool quiet_like = !is_capture && !is_promo;
+    if (quiet_like && !in_check_after_move && child_depth >= 3 &&
+        moves_tried > 3) {
+      static constexpr int lmr_table[8][8] = {
+          {0, 0, 1, 1, 1, 1, 1, 1}, {0, 0, 1, 1, 1, 1, 1, 1},
+          {0, 0, 1, 1, 1, 1, 1, 1}, {0, 1, 1, 1, 1, 1, 1, 1},
+          {0, 1, 1, 2, 2, 2, 2, 2}, {0, 1, 1, 2, 2, 2, 2, 2},
+          {0, 1, 2, 2, 2, 2, 2, 2}, {0, 1, 2, 2, 2, 2, 2, 2},
+      };
+      const int depth_idx = std::min(child_depth, 7);
+      const int move_idx = std::min(moves_tried, 7);
+      reduction = lmr_table[depth_idx][move_idx];
+      if (is_pv) {
+        reduction = std::max(0, reduction - 1);
+      }
     }
 
     int search_depth = std::max(0, child_depth);
@@ -480,6 +498,13 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
           }
         }
       }
+      update_history(scratch, move, depth, true);
+    } else {
+      const bool fail_low = (stm == SideToMove::White) ? (score <= alpha_base)
+                                                       : (score >= beta_base);
+      if (fail_low) {
+        update_history(scratch, move, depth, false);
+      }
     }
 
     if (stm == SideToMove::White) {
@@ -488,7 +513,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       }
       if (alpha >= beta) {
         store_killer_move(scratch, ply, move, undo);
-        store_heuristic(scratch, move, depth);
+        update_history(scratch, move, depth, true);
         break;
       }
     } else {
@@ -497,7 +522,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       }
       if (beta <= alpha) {
         store_killer_move(scratch, ply, move, undo);
-        store_heuristic(scratch, move, depth);
+        update_history(scratch, move, depth, true);
         break;
       }
     }
