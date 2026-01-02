@@ -18,7 +18,13 @@ eval_pairs*.csv
 validation_moves/.skaks_elo.json
 tuning/optuna.db
 optuna.db
+optuna_texel.db
+tuning/*.db
 *.sqlite3
+tuning/*.sqlite3
+*.sqlite3-*
+eval_data/
+validation_moves/
 tuning/datasets/lichess_elite/
 
 # IDE/editor state
