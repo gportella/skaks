@@ -19,6 +19,7 @@ validation_moves/.skaks_elo.json
 tuning/optuna.db
 optuna.db
 *.sqlite3
+tuning/datasets/lichess_elite/
 
 # IDE/editor state
 .vscode/
