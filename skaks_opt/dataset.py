@@ -349,7 +349,7 @@ def _iter_chunks(
                     continue
                 chunk.append(
                     Sample(
-                        game_index=count,
+                        game_index=game_idx,
                         ply=ply,
                         fen=board.fen(),
                         white_to_move=board.turn == chess.WHITE,

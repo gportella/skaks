@@ -15,6 +15,7 @@ CTestTestfile.cmake
 # my own stuff
 validation_matches.sqlite3
 eval_pairs*.csv
+validation_moves/.skaks_elo.json
 tuning/optuna.db
 optuna.db
 *.sqlite3

@@ -3,7 +3,7 @@
 # Self-play script to optimize Skaks params against Sunfish
 # Use Stockfish with reduced time for handicap
 
-python -m tuning.param_optimize \
+python -m skaks_opt.cli param-optimize \
   --engine skaks \
   --baseline-params besty.yaml \
   --start-params besty.yaml \

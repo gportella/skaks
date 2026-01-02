@@ -122,8 +122,8 @@ python -m skaks_opt fit \
 	--best-out tuning/best_params_phase.yaml
 
 # Self-play optimizer
-python -m tuning.param_optimize \
-	--config tuning/best_params.yaml \
+skaks-opt param-optimize \
+	--start-params tuning/best_params.yaml \
 	--phase-weights-only \
 	--output tuning/best_params_phase.yaml
 

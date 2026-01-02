@@ -6,15 +6,17 @@ Parameter tuning for skaks engine using the Python binding `skaks_eval`.
 
 1) Install the binding (from repo root):
    ```bash
-   cd bindings/python && pip install -v .
+   cd bindings/python
+   pip install -v .
    ```
-2) Install the optimizer package (editable recommended during iteration):
+2) Install the unified CLI from the project root:
    ```bash
-   cd tuning && uv pip install -e .
+   cd ../..
+   uv pip install -e .
    ```
-3) Optional: self-play helpers (PGN/FEN sampling, Dask fan-out, checkpointing):
+3) Optional extras for self-play / dataset tooling:
    ```bash
-   cd tuning && uv pip install -e .[selfplay]
+   uv pip install -e .[selfplay]
    ```
 
 ## Dataset format
@@ -34,32 +36,28 @@ rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1,0,w,1.0
 
 ## Run optimization
 
-```bash
-cd tuning
-skaks-opt --data ../path/to/data.csv \
-  --trials 100 \
-  --jobs 4 \
-  --threads 8 \
-  --batch-size 512 \
-   --error-penalty 2000 \
-   --cp-cap 3000 \
-   --pov side \
-   --val-split 0.1 \
-   --mtpe \
+```
+skaks-opt texel \
+   --data tuning/eval_pairs_eval_scale800.csv \
+   --trials 150 \
+   --jobs 4 \
+   --threads 8 \
+   --batch-size 512 \
+   --cp-cap 2000 \
+   --param-set full \
+   --sampler cmaes \
+   --pruner median \
+   --error-penalty 6.0 \
    --quiet \
-   --metrics-out metrics.csv \
-   --plot-out loss.png \
-  --best-out best_params.yaml
+   --metrics-out tuning/out/texel_metrics.csv \
+   --best-out tuning/out/texel_params.yaml
 ```
 
-- `--jobs` controls Optuna parallelism in this process.
-- `--threads` controls threads used inside `skaks_eval.eval_fens`.
-- `--include-arrays` also tunes the large array parameters (bigger search space).
-- `--mtpe` enables multivariate TPE (grouped) which can converge faster on correlated params, especially with multiple `--jobs`.
-- `--val-split` holds out a fraction of the rows for validation; training loss is optimized, validation metrics are reported to metrics.csv and the best summary.
-- `--cp-cap` clamps targets and predictions to the given centipawn magnitude before computing metrics (useful to soften mate-score outliers).
-- `--pov side` (default) matches engine outputs for the exact side to move; use `--pov white` if your targets are normalized to White.
-- `--storage sqlite:///optuna.db --study-name skaks-opt` enables distributed tuning; run multiple `skaks-opt` processes pointing to the same storage to scale across machines.
+- `--jobs` controls Optuna parallelism within the process.
+- `--threads` selects worker threads for `skaks_eval.eval_fens`.
+- `--include-arrays` expands tuning to PST arrays and other vectors (slower).
+- `--pov side` (default) scores from the mover’s perspective; use `--pov white` for absolute scores.
+- `--storage sqlite:///optuna.db --study-name skaks-texel` enables distributed tuning.
 
 ## Outputs
 
@@ -73,4 +71,4 @@ skaks-opt --data ../path/to/data.csv \
 
 - The search space defaults cover scalar eval + search parameters. Array parameters are opt-in to keep dimensionality manageable.
 - Failed FEN evaluations are penalized by `--error-penalty` per occurrence.
-- Random seed is configurable (`--seed`) 
+- Random seed is configurable (`--seed`).

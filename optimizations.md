@@ -16,7 +16,7 @@ python -m skaks_opt fit \
   --best-out tuning/best_params_phase.yaml
 
 # Self-play optimizer
-python -m tuning.param_optimize \
+skaks-opt param-optimize \
   --start-params tuning/best_params.yaml \
   --phase-weights-only \
   --output tuning/best_params_phase.yaml
@@ -32,7 +32,7 @@ Use the internal arena binding (`--use-arena-binding`) to avoid spinning up exte
 Requirements: Python bindings built/installed (`pip install ./bindings/python` from repo root) and a PGN file to sample from.
 
 ```bash
-python -m tuning.param_optimize \
+skaks-opt param-optimize \
   --start-params tuning/best_params.yaml \
   --include-prefix evaluation.mobility_scaling \
   --use-arena-binding \

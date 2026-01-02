@@ -37,6 +37,13 @@ struct EvaluationParams {
   int castle_urgency = 0;
   int early_queen_penalty = 0;
   int flank_pawn_penalty = 0;
+  int knight_mobility_scale = 0;
+  int bishop_mobility_scale = 0;
+  int rook_mobility_scale = 0;
+  int queen_mobility_scale = 0;
+  int doubled_pawn_penalty = 0;
+  int isolated_pawn_penalty = 0;
+  int backward_pawn_penalty = 0;
   std::array<int, kPieceCount> king_attack_weights{};
   std::array<int, static_cast<std::size_t>(OccupancyType::bK) + 1> threat_base{};
   PinPenalty bishop_pin_penalty{};
@@ -76,6 +83,13 @@ inline EvaluationParams default_evaluation_params() {
   params.castle_urgency = 20;
   params.early_queen_penalty = 16;
   params.flank_pawn_penalty = 8;
+  params.knight_mobility_scale = 4;
+  params.bishop_mobility_scale = 5;
+  params.rook_mobility_scale = 3;
+  params.queen_mobility_scale = 1;
+  params.doubled_pawn_penalty = 12;
+  params.isolated_pawn_penalty = 16;
+  params.backward_pawn_penalty = 10;
   params.king_attack_weights = {14, 32, 30, 44, 74, 20, 14, 32, 30, 44, 74, 20};
   params.threat_base = {0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540};
   params.bishop_pin_penalty = {12, 2};

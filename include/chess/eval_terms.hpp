@@ -20,6 +20,8 @@ enum class TermId : int {
   KingRing,
   BishopPair,
   RookFiles,
+  MinorMobility,
+  PawnStructure,
   Count
 };
 

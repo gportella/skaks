@@ -28,12 +28,12 @@ Use offline regression on labeled centipawn data.
   Add `--phase-weights-only` to confine the search to `evaluation.phase_weights_mg/eg`.
 - Notes: `--include-arrays` adds king_attack/threat/phase arrays; without it, only scalars tune. Use `--cp-cap` to clip mate scores.
 
-## Self-Play Optimizer — `tuning/param_optimize.py`
+## Self-Play Optimizer — `skaks-opt param-optimize`
 Explores params via self-play vs baseline.
 
 - **Beam (fast feedback, shallower search)**
   ```
-  python -m tuning.param_optimize \
+  skaks-opt param-optimize \
     --engine build/debug/bin/skaks \
     --baseline-params tuning/best_params.yaml \
     --start-params tuning/best_params.yaml \
@@ -44,7 +44,7 @@ Explores params via self-play vs baseline.
   ```
 - **CMA (broader search)**
   ```
-  python -m tuning.param_optimize \
+  skaks-opt param-optimize \
     --engine build/debug/bin/skaks \
     --baseline-params tuning/best_params.yaml \
     --start-params tuning/best_params.yaml \
@@ -98,29 +98,26 @@ Offline halfkp trainer over FEN/CP CSVs.
 - Controls: `--delta` (Huber), `--sample-fraction`, `--max-rows`, `--pov` (side/white). Uses Huber loss with MAE/corr reporting.
 
 ## Texel / Sigmoid Fits (alt regressions)
-Alternate regression heads (sigmoid/logistic) for eval fitting.
+Run the unified CLI to train logistic Texel fits with Optuna:
 
-- **Sigmoid fit**:
-  ```
-  python -m tuning.texel_fit \
-    --data eval_pairs_pvs_ply8_80_cp2k.csv \
-    --loss sigmoid \
-    --cp-cap 2000 \
-    --lr 1e-3 \
-    --epochs 5 \
-    --out tuning/out/texel_sigmoid.yaml
-  ```
-- **Plain Texel (L2/Huber)**:
-  ```
-  python -m tuning.texel_fit \
-    --data eval_pairs_pvs_ply8_80_cp2k.csv \
-    --loss huber \
-    --delta 64 \
-    --cp-cap 2000 \
-    --lr 1e-3 \
-    --epochs 5 \
-    --out tuning/out/texel_huber.yaml
-  ```
+```
+skaks-opt texel \
+  --data eval_pairs_pvs_ply8_80_cp2k.csv \
+  --trials 200 \
+  --jobs 4 \
+  --threads 8 \
+  --cp-cap 2000 \
+  --param-set full \
+  --sampler cmaes \
+  --pruner median \
+  --error-penalty 8.0 \
+  --best-out tuning/out/texel_sigmoid.yaml \
+  --metrics-out tuning/out/texel_metrics.csv
+```
+- `--param-set` narrows the tuned parameter subset (`full`, `phase`, `offense`, `defense`).
+- `--include-arrays` expands the search space to PST arrays and other vectors when enabled.
+- `--require-quiet` plus `--quiet-batch` filters to calm positions (needs `skaks_eval`).
+- Set `--storage sqlite:///optuna.db` to distribute trials across multiple runs.
 
 ## Validation Data Generation — `validation_moves/eval_from_pgn.py`
 Harvest labeled positions from PGN with Stockfish and skaks static evals.

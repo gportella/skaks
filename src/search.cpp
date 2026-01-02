@@ -1,5 +1,6 @@
 #include "chess/search.hpp"
 
+#include "chess/complexity.hpp"
 #include "chess/moves.hpp"
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -353,14 +355,31 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   best.outcome = SearchResult::Outcome::InProgress;
   best.pv_length = 0;
 
+  const bool parent_in_check = is_check(board, stm);
   int moves_tried = 0;
 
   for (uint16_t i = 0; i < move_count; ++i) {
     int child_depth = depth - 1;
-    moves_tried += 1;
-    const bool is_first_move = (moves_tried == 1);
 
     Move move = decode_move(moves[i]);
+    const std::size_t from_idx = static_cast<std::size_t>(move.from);
+    const std::size_t to_idx = static_cast<std::size_t>(move.to);
+    const bool is_capture = move.captured_pc != OccupancyType::empty;
+    const bool is_promo = move.promo_pc != OccupancyType::empty;
+    const bool quiet_like = !is_capture && !is_promo;
+    const int move_number = moves_tried + 1;
+
+    if (!is_pv && !parent_in_check && quiet_like && child_depth > 0 &&
+        child_depth <= 3) {
+      static constexpr int lmp_limits[4] = {0, 4, 8, 12};
+      if (move_number > lmp_limits[child_depth]) {
+        continue;
+      }
+    }
+
+    moves_tried = move_number;
+    const bool is_first_move = (move_number == 1);
+
     Undo undo = make_move(board, move);
 
     const bool irreversible = move_is_irreversible(move);
@@ -373,22 +392,27 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       child_depth = 1;
     }
 
+    const int history_score =
+        static_cast<int>(scratch.history_heuristic[from_idx][to_idx]);
+
     int reduction = 0;
-    const bool is_capture = undo.captured_pc != OccupancyType::empty;
-    const bool is_promo = move.promo_pc != OccupancyType::empty;
-    const bool quiet_like = !is_capture && !is_promo;
-    if (quiet_like && !in_check_after_move && child_depth >= 3 &&
-        moves_tried > 3) {
-      static constexpr int lmr_table[8][8] = {
-          {0, 0, 1, 1, 1, 1, 1, 1}, {0, 0, 1, 1, 1, 1, 1, 1},
-          {0, 0, 1, 1, 1, 1, 1, 1}, {0, 1, 1, 1, 1, 1, 1, 1},
-          {0, 1, 1, 2, 2, 2, 2, 2}, {0, 1, 1, 2, 2, 2, 2, 2},
-          {0, 1, 2, 2, 2, 2, 2, 2}, {0, 1, 2, 2, 2, 2, 2, 2},
-      };
-      const int depth_idx = std::min(child_depth, 7);
-      const int move_idx = std::min(moves_tried, 7);
-      reduction = lmr_table[depth_idx][move_idx];
+    if (quiet_like && !in_check_after_move && child_depth >= 2 &&
+        move_number > 1) {
+      const int capped_depth = std::min(child_depth, 63);
+      const int capped_order = std::min(move_number, 63);
+      const double depth_factor = std::log1p(static_cast<double>(capped_depth));
+      const double order_factor = std::log1p(static_cast<double>(capped_order));
+      const int tentative =
+          static_cast<int>((depth_factor * order_factor) * 0.75);
+      const int max_reduction = std::max(0, child_depth - 1);
+      reduction = std::min(tentative, max_reduction);
       if (is_pv) {
+        reduction = std::max(0, reduction - 1);
+      }
+      if (history_score > 8000) {
+        reduction = std::max(0, reduction - 1);
+      }
+      if (history_score > 16000) {
         reduction = std::max(0, reduction - 1);
       }
     }
@@ -587,6 +611,13 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
   scratch.pv_table.resize(MAX_PLY * MAX_PLY);
 
+  double root_complexity_hint = 0.0;
+  if (params.time_manager) {
+    const ComplexityMetrics metrics = compute_complexity(board, stm);
+    root_complexity_hint = normalize_complexity(metrics);
+    params.time_manager->set_complexity_hint(root_complexity_hint);
+  }
+
   int max_root_moves = 0;
   uint16_t move_count = 0;
 
@@ -682,6 +713,8 @@ SearchResult search_position(Board& board, SideToMove stm,
       int window = aspiration_window;
       int attempts = 0;
       bool forced_full_window = false;
+      bool iteration_fail_low = false;
+      bool iteration_fail_high = false;
       while (true) {
         ++attempts;
         const bool is_pv = true;
@@ -696,6 +729,7 @@ SearchResult search_position(Board& board, SideToMove stm,
           break;
         }
         if (result.score <= alpha) {
+          iteration_fail_low = true;
           if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
             alpha = -INF;
             beta = INF;
@@ -726,6 +760,7 @@ SearchResult search_position(Board& board, SideToMove stm,
           }
         }
         if (result.score >= beta) {
+          iteration_fail_high = true;
           if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
             alpha = -INF;
             beta = INF;
@@ -764,7 +799,16 @@ SearchResult search_position(Board& board, SideToMove stm,
           best_result = result;
           best_score = result.score;
         }
-        aspiration_window = window;
+        if (iteration_fail_low || iteration_fail_high) {
+          aspiration_window =
+              std::min(window * 2, sparams.aspiration_window_max);
+        } else if (current_depth > 2 &&
+                   window > sparams.aspiration_window_initial) {
+          aspiration_window =
+              std::max(sparams.aspiration_window_initial, window / 2);
+        } else {
+          aspiration_window = window;
+        }
         break;
       }
 
@@ -788,7 +832,15 @@ SearchResult search_position(Board& board, SideToMove stm,
         continue;
       }
 
-      aspiration_window = window;
+      if (iteration_fail_low || iteration_fail_high) {
+        aspiration_window = std::min(window * 2, sparams.aspiration_window_max);
+      } else if (current_depth > 2 &&
+                 window > sparams.aspiration_window_initial) {
+        aspiration_window =
+            std::max(sparams.aspiration_window_initial, window / 2);
+      } else {
+        aspiration_window = window;
+      }
       break;
     }
 

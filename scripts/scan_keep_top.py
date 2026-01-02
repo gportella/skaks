@@ -119,18 +119,22 @@ def make_temp_start(base_yaml, mg_scale, eg_scale):
         raise SystemExit("base yaml missing phase_weights arrays")
     new = dict(base)
 
-    def expand_group_scales(group_scales, length=15):
+    target_len = len(mg) if isinstance(mg, (list, tuple)) else 0
+
+    def expand_group_scales(group_scales, length=target_len):
         if group_scales is None:
             return None
         gs = [float(x) for x in group_scales]
         if len(gs) == length:
             return gs
         if len(gs) == 7:
-            out = []
-            for i in range(6):
-                out.extend([gs[i], gs[i]])
-            out.extend([gs[6], gs[6], gs[6]])
-            return out[:length]
+            mapping = {
+                15: [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6],
+                17: [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6, 6, 6],
+            }.get(length)
+            if mapping is None:
+                raise SystemExit("unsupported target length for group expansion")
+            return [gs[idx] for idx in mapping]
         raise SystemExit("unsupported group length for expansion")
 
     mg_per = (

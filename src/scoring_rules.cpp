@@ -576,6 +576,172 @@ int evaluate_rook_file_control(const Board& board) {
   return score;
 }
 
+int evaluate_piece_mobility(const Board& board) {
+  const auto& params = evaluation_params();
+  if (params.knight_mobility_scale == 0 && params.bishop_mobility_scale == 0 &&
+      params.rook_mobility_scale == 0 && params.queen_mobility_scale == 0) {
+    return 0;
+  }
+
+  int score = 0;
+  for (int sq = 0; sq < 64; ++sq) {
+    const OccupancyType occ = board.pieces[static_cast<std::size_t>(sq)];
+    if (occ == OccupancyType::empty) {
+      continue;
+    }
+
+    const bool white_piece = is_white(occ);
+    const SideToMove side = white_piece ? SideToMove::White : SideToMove::Black;
+    int contribution = 0;
+
+    switch (occ) {
+    case OccupancyType::wN:
+    case OccupancyType::bN: {
+      if (params.knight_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          knight_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.knight_mobility_scale;
+      break;
+    }
+    case OccupancyType::wB:
+    case OccupancyType::bB: {
+      if (params.bishop_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          bishop_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.bishop_mobility_scale;
+      break;
+    }
+    case OccupancyType::wR:
+    case OccupancyType::bR: {
+      if (params.rook_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          rook_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.rook_mobility_scale;
+      break;
+    }
+    case OccupancyType::wQ:
+    case OccupancyType::bQ: {
+      if (params.queen_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          queen_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.queen_mobility_scale;
+      break;
+    }
+    default:
+      break;
+    }
+
+    if (contribution == 0) {
+      continue;
+    }
+    score += white_piece ? contribution : -contribution;
+  }
+
+  return score;
+}
+
+int evaluate_pawn_structure(const Board& board) {
+  const auto& params = evaluation_params();
+  if (params.doubled_pawn_penalty == 0 && params.isolated_pawn_penalty == 0 &&
+      params.backward_pawn_penalty == 0) {
+    return 0;
+  }
+
+  auto compute_penalty = [&](PieceColor color) -> int {
+    const auto& list = board.pawn_list[to_index(color)];
+    std::array<int, 8> file_counts{};
+    for (std::uint8_t i = 0; i < list.count; ++i) {
+      const int sq = static_cast<int>(list.squares[i]);
+      const int file = file_of(sq);
+      ++file_counts[static_cast<std::size_t>(file)];
+    }
+
+    int penalty = 0;
+    for (int file = 0; file < 8; ++file) {
+      const int count = file_counts[static_cast<std::size_t>(file)];
+      if (count == 0) {
+        continue;
+      }
+      if (params.doubled_pawn_penalty > 0 && count > 1) {
+        penalty += (count - 1) * params.doubled_pawn_penalty;
+      }
+      if (params.isolated_pawn_penalty > 0) {
+        const bool has_left =
+            (file > 0) && (file_counts[static_cast<std::size_t>(file - 1)] > 0);
+        const bool has_right =
+            (file < 7) && (file_counts[static_cast<std::size_t>(file + 1)] > 0);
+        if (!has_left && !has_right) {
+          penalty += count * params.isolated_pawn_penalty;
+        }
+      }
+    }
+
+    if (params.backward_pawn_penalty > 0 && list.count > 0) {
+      const bool white = (color == PieceColor::White);
+      const int dir = white ? 1 : -1;
+      for (std::uint8_t i = 0; i < list.count; ++i) {
+        const int sq = static_cast<int>(list.squares[i]);
+        const int file = file_of(sq);
+        const int rank = rank_of(sq);
+        const int next_rank = rank + dir;
+        if (next_rank < 0 || next_rank > 7) {
+          continue;
+        }
+        const int forward_sq = next_rank * 8 + file;
+        const OccupancyType forward_occ =
+            board.pieces[static_cast<std::size_t>(forward_sq)];
+        const bool blocked_by_enemy = forward_occ != OccupancyType::empty &&
+                                      (is_white(forward_occ) != white);
+        if (!blocked_by_enemy) {
+          continue;
+        }
+
+        bool supporting_pawn = false;
+        for (int df : {-1, 1}) {
+          const int adj_file = file + df;
+          if (adj_file < 0 || adj_file > 7) {
+            continue;
+          }
+          for (int step = rank; white ? (step <= 7) : (step >= 0); step += dir) {
+            const int probe_sq = step * 8 + adj_file;
+            const OccupancyType occ =
+                board.pieces[static_cast<std::size_t>(probe_sq)];
+            if (occ == (white ? OccupancyType::wP : OccupancyType::bP)) {
+              supporting_pawn = true;
+              break;
+            }
+          }
+          if (supporting_pawn) {
+            break;
+          }
+        }
+
+        if (!supporting_pawn) {
+          penalty += params.backward_pawn_penalty;
+        }
+      }
+    }
+
+    return penalty;
+  };
+
+  const int white_penalty = compute_penalty(PieceColor::White);
+  const int black_penalty = compute_penalty(PieceColor::Black);
+  return black_penalty - white_penalty;
+}
+
 EvalVector compute_eval_vector(const Board& b) {
   EvalVector v{};
   v.f[static_cast<int>(TermId::Material)] = evaluate_material(b);
@@ -597,6 +763,8 @@ EvalVector compute_eval_vector(const Board& b) {
   v.f[static_cast<int>(TermId::KingRing)] = evaluate_king_ring_pressure(b);
   v.f[static_cast<int>(TermId::BishopPair)] = evaluate_bishop_pair(b);
   v.f[static_cast<int>(TermId::RookFiles)] = evaluate_rook_file_control(b);
+  v.f[static_cast<int>(TermId::MinorMobility)] = evaluate_piece_mobility(b);
+  v.f[static_cast<int>(TermId::PawnStructure)] = evaluate_pawn_structure(b);
 
   v.mg_phase = mg_phase;
   v.eg_phase = eg_phase;

@@ -9,7 +9,7 @@ SESSION_NAME="skaks-optimize"
 LOG_DIR="$WORKDIR/logs"
 mkdir -p "$LOG_DIR"
 
-DEFAULT_CMD=(python "$WORKDIR/tuning/param_optimize.py" --weights-only --iterations 50 --games 40)
+DEFAULT_CMD=(python -m skaks_opt.cli param-optimize --weights-only --iterations 50 --games 40)
 
 start() {
   # Any extra args passed after 'start' are forwarded to the optimizer
@@ -31,7 +31,7 @@ start() {
     EXTRA_ARGS="$*"
   fi
   # Build a shell command string so extra args are passed through cleanly.
-  CMD_STR="caffeinate -dims python '$WORKDIR/tuning/param_optimize.py' --weights-only --iterations 50 --games 40 $EXTRA_ARGS"
+  CMD_STR="caffeinate -dims python -m skaks_opt.cli param-optimize --weights-only --iterations 50 --games 40 $EXTRA_ARGS"
   tmux new-session -d -s "$SESSION_NAME" bash -lc "cd '$WORKDIR' && $CMD_STR 2>&1 | tee '$LOG'"
   echo "Started optimizer in tmux session $SESSION_NAME; log=$LOG"
 }
@@ -73,7 +73,7 @@ runonce() {
     fi
     EXTRA_ARGS="$*"
   fi
-  CMD_STR="python '$WORKDIR/tuning/param_optimize.py' --weights-only --iterations 50 --games 40 $EXTRA_ARGS"
+  CMD_STR="python -m skaks_opt.cli param-optimize --weights-only --iterations 50 --games 40 $EXTRA_ARGS"
   (cd "$WORKDIR" && eval $CMD_STR)
 }
 

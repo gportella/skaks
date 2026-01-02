@@ -1,0 +1,5 @@
+source,game_index,ply,fen,side_to_move,stockfish_cp,result,outcome,winner,weight
+lichess_elite_2014-04.pgn,0,72,3k4/1p2r1pp/3nB3/4R3/8/6PP/5P2/6K1 w - - 5 37,w,0.0,1/2-1/2,0.5,d,1.0
+lichess_elite_2014-04.pgn,1,56,3r2k1/5ppp/4p3/1R2P3/5P2/P2qBK1P/1P6/2R5 w - - 3 29,w,-282.0,1-0,1.0,w,1.0
+lichess_elite_2014-04.pgn,1,64,3q4/5ppk/4p3/4P2p/5P2/P3B2P/1P3K2/2R5 w - - 0 33,w,-195.0,1-0,1.0,w,1.0
+lichess_elite_2014-04.pgn,2,72,5rk1/2p5/1p1p3p/p1nPp1p1/2P1P1b1/4PN2/1P1NK1P1/2R5 w - - 0 37,w,-401.0,0-1,0.0,b,1.0

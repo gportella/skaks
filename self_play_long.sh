@@ -111,7 +111,7 @@ run_phase() {
     # `evaluation.phase_weights_mg` and `evaluation.phase_weights_eg`.
     INCLUDE_FLAGS=" --weights-only"
     log "Running weights-only optimizer for phase=$phase_name (weights-only mode, baseline-decay=${BASELINE_DECAY})"
-    CMD="python -m tuning.param_optimize --external-opponent $COMMON_FLAGS --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --beam-size '$beam' --noise '$noise' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
+    CMD="python -m skaks_opt.cli param-optimize --external-opponent $COMMON_FLAGS --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --beam-size '$beam' --noise '$noise' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
     eval "$CMD" 2>&1 | tee -a "$LOG_DIR/${phase_name}_iter_${i}.log"
 
     # estimate games played this iteration

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Simple launchd/tmux wrapper to run the weights-only parameter optimizer
 # Usage: scripts/weights_optimize_launchd_wrapper.sh [--tmux-session NAME] [--] [<param_optimize args>]
-# By default runs: python tuning/param_optimize.py --weights-only --start-params tuning/default_start.yaml
+# By default runs: skaks-opt param-optimize --weights-only --start-params tuning/default_start.yaml
 
 set -euo pipefail
 
@@ -44,7 +44,7 @@ if [[ ${#EXTRA_ARGS[@]} -gt 0 && "${EXTRA_ARGS[0]}" == "--" ]]; then
 fi
 
 # Use unbuffered python output so logs appear promptly
-PY_CMD=("python" "-u" "tuning/param_optimize.py" "${EXTRA_ARGS[@]}")
+PY_CMD=("python" "-u" "-m" "skaks_opt.cli" "param-optimize" "${EXTRA_ARGS[@]}")
 
 # Build the shell line that caffeinate will run (redirect to tee)
 RUN_SH_LINE="${PY_CMD[@]} 2>&1 | tee -a \"$LOGFILE\""
@@ -110,7 +110,7 @@ status() {
     if command -v tmux >/dev/null 2>&1; then
         tmux ls 2>/dev/null || echo "no tmux sessions"
     fi
-    ps aux | grep -E "param_optimize|tuning/param_optimize" | grep -v grep || true
+    ps aux | grep -E "param-optimize|skaks_opt" | grep -v grep || true
 }
 
 case ${ACTION:-start} in

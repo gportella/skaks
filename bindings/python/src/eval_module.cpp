@@ -52,11 +52,12 @@ void assign_array_double_if_present(const py::dict& src, const char* key,
                                     std::array<double, N>& target) {
   if (src.contains(key)) {
     auto seq = py::cast<py::sequence>(src[key]);
-    if (seq.size() != static_cast<py::ssize_t>(N)) {
-      throw std::invalid_argument(std::string(key) + " must have " +
-                                  std::to_string(N) + " elements");
+    if (seq.size() > static_cast<py::ssize_t>(N)) {
+      throw std::invalid_argument(
+          std::string(key) + " must have <= " + std::to_string(N) + " elements");
     }
-    for (std::size_t i = 0; i < N; ++i) {
+    const std::size_t limit = static_cast<std::size_t>(seq.size());
+    for (std::size_t i = 0; i < limit; ++i) {
       target[i] = py::cast<double>(seq[i]);
     }
   }
@@ -133,6 +134,20 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.evaluation.early_queen_penalty);
     assign_if_present(ev, "flank_pawn_penalty",
                       params.evaluation.flank_pawn_penalty);
+    assign_if_present(ev, "knight_mobility_scale",
+                      params.evaluation.knight_mobility_scale);
+    assign_if_present(ev, "bishop_mobility_scale",
+                      params.evaluation.bishop_mobility_scale);
+    assign_if_present(ev, "rook_mobility_scale",
+                      params.evaluation.rook_mobility_scale);
+    assign_if_present(ev, "queen_mobility_scale",
+                      params.evaluation.queen_mobility_scale);
+    assign_if_present(ev, "doubled_pawn_penalty",
+                      params.evaluation.doubled_pawn_penalty);
+    assign_if_present(ev, "isolated_pawn_penalty",
+                      params.evaluation.isolated_pawn_penalty);
+    assign_if_present(ev, "backward_pawn_penalty",
+                      params.evaluation.backward_pawn_penalty);
     assign_array_if_present(ev, "king_attack_weights",
                             params.evaluation.king_attack_weights);
     assign_array_if_present(ev, "threat_base", params.evaluation.threat_base);
