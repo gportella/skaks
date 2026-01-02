@@ -151,6 +151,23 @@ bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval
     return false;
   if (!parse_field("flank_pawn_penalty", eval.flank_pawn_penalty))
     return false;
+<<<<<<< HEAD
+=======
+  if (!parse_field("knight_mobility_scale", eval.knight_mobility_scale))
+    return false;
+  if (!parse_field("bishop_mobility_scale", eval.bishop_mobility_scale))
+    return false;
+  if (!parse_field("rook_mobility_scale", eval.rook_mobility_scale))
+    return false;
+  if (!parse_field("queen_mobility_scale", eval.queen_mobility_scale))
+    return false;
+  if (!parse_field("doubled_pawn_penalty", eval.doubled_pawn_penalty))
+    return false;
+  if (!parse_field("isolated_pawn_penalty", eval.isolated_pawn_penalty))
+    return false;
+  if (!parse_field("backward_pawn_penalty", eval.backward_pawn_penalty))
+    return false;
+>>>>>>> nnue_version
 
   if (!parse_int_array(eval_node, "king_attack_weights",
                        eval.king_attack_weights, error))

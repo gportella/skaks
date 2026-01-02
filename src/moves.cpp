@@ -58,7 +58,7 @@ void sort_moves(const Board& board,
                 uint16_t move_count, uint32_t tt_code,
                 const KillerTable* killers,
                 const std::array<std::array<int, 64>, 64>* history_heuristic,
-                int ply) {
+                int ply, uint32_t counter_move_code) {
   std::array<MoveKey, kMaxMovementCount> keys;
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -89,6 +89,9 @@ void sort_moves(const Board& board,
           const auto from = static_cast<std::size_t>(move_from(m));
           const auto to = static_cast<std::size_t>(move_to(m));
           key += (*history_heuristic)[from][to];
+        }
+        if (counter_move_code != 0 && m == counter_move_code) {
+          key += 30'000;
         }
       }
     }
@@ -142,6 +145,35 @@ generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count) {
   }
 #endif
   return legal_moves;
+}
+
+bool is_quiet_position(Board& board, SideToMove stm) {
+  if (is_check(board, stm)) {
+    return false; // in check is never quiet
+  }
+
+  uint16_t move_count = 0;
+  auto moves = generate_legal_moves(board, stm, move_count);
+  for (uint16_t i = 0; i < move_count; ++i) {
+    const Move m = decode_move(moves[i]);
+    const bool tactical = (m.captured_pc != OccupancyType::empty) ||
+                          (m.promo_pc != OccupancyType::empty) ||
+                          flag_is_ep(m.flags) || flag_is_castle(m.flags) ||
+                          flag_is_long_castle(m.flags);
+    if (tactical) {
+      return false;
+    }
+
+    // Check if the move gives check; if so, position has tactical tension.
+    const Undo u = make_move(board, m);
+    const bool gives_check = is_check(board, board.side_to_move);
+    undo_move(board, u);
+    if (gives_check) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // mostly copied from make_move but only for captures and minimal state tracking

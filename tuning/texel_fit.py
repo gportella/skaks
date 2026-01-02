@@ -4,6 +4,11 @@ import argparse
 import csv
 import json
 import math
+<<<<<<< HEAD
+=======
+import sys
+import time
+>>>>>>> nnue_version
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,7 +18,15 @@ import numpy as np
 import optuna
 import yaml
 
+<<<<<<< HEAD
 from skaks_opt.params import DEFAULT_PARAMS, apply_param_updates, default_param_space
+=======
+from skaks_opt.params import (
+    DEFAULT_PARAMS,
+    apply_param_updates,
+    param_space_for_mode,
+)
+>>>>>>> nnue_version
 
 
 def _logit_prob(cp: np.ndarray, scale: float) -> np.ndarray:
@@ -97,11 +110,52 @@ def load_texel_csv(path: Path | str, limit: int | None = None) -> TexelDataset:
     )
 
 
+<<<<<<< HEAD
 def quantized_suggest(trial: optuna.Trial, spec, sampler: str) -> int:
+=======
+def filter_quiet(dataset: TexelDataset, batch_size: int) -> TexelDataset:
+    try:
+        import skaks_eval as sk
+    except Exception:  # pragma: no cover - optional dependency
+        warnings.warn("skaks_eval not available; skipping quiet filtering")
+        return dataset
+
+    keep_mask = np.zeros(len(dataset.fens), dtype=bool)
+    for start in range(0, len(dataset.fens), batch_size):
+        end = min(start + batch_size, len(dataset.fens))
+        chunk = dataset.fens[start:end]
+        flags = sk.is_quiet_batch(chunk)
+        for idx, flag in enumerate(flags):
+            keep_mask[start + idx] = bool(flag) if flag is not None else False
+
+    if keep_mask.all():
+        return dataset
+    if not keep_mask.any():
+        raise ValueError("quiet filtering removed all positions")
+
+    return TexelDataset(
+        fens=[f for f, keep in zip(dataset.fens, keep_mask) if keep],
+        outcomes=dataset.outcomes[keep_mask],
+        weights=dataset.weights[keep_mask],
+        side=dataset.side[keep_mask],
+    )
+
+
+def quantized_suggest(trial: optuna.Trial, spec, sampler: str):
+    # Float params should stay float regardless of sampler choice.
+    if spec.is_float:
+        step = spec.step if isinstance(spec.step, float) else None
+        return trial.suggest_float(spec.name, spec.low, spec.high, step=step)
+
+>>>>>>> nnue_version
     if sampler == "cmaes":
         raw = trial.suggest_float(spec.name, spec.low, spec.high)
         stepped = round((raw - spec.low) / spec.step) * spec.step + spec.low
         return int(max(spec.low, min(spec.high, stepped)))
+<<<<<<< HEAD
+=======
+
+>>>>>>> nnue_version
     return int(trial.suggest_int(spec.name, spec.low, spec.high, step=spec.step))
 
 
@@ -186,6 +240,38 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--study-name", default="skaks-texel", help="Study name")
     p.add_argument("--timeout", type=int, default=None, help="Timeout seconds")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
+<<<<<<< HEAD
+=======
+    p.add_argument(
+        "--require-quiet",
+        action="store_true",
+        help="Filter to positions with no captures/checks/castling from side to move",
+    )
+    p.add_argument(
+        "--quiet-batch",
+        type=int,
+        default=2048,
+        help="Batch size for quiet filtering (only if skaks_eval available)",
+    )
+    p.add_argument(
+        "--progress-every",
+        type=int,
+        default=0,
+        help="Print progress every N completed trials (0 disables)",
+    )
+    p.add_argument(
+        "--progress-style",
+        choices=["simple", "fancy"],
+        default="simple",
+        help="Progress output style (simple=fixed line, fancy=animated bar)",
+    )
+    p.add_argument(
+        "--progress-color",
+        choices=["auto", "ansi", "none"],
+        default="auto",
+        help="Colorize progress output (auto=tty only)",
+    )
+>>>>>>> nnue_version
     p.add_argument("--best-out", type=Path, help="Write best params to YAML")
     p.add_argument("--metrics-out", type=Path, help="Write per-trial metrics to CSV")
     p.add_argument("--plot-out", type=Path, help="Loss plot output (png)")
@@ -208,6 +294,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=6.0,
         help="Loss added for failed evals (per weighted sample)",
     )
+<<<<<<< HEAD
+=======
+    p.add_argument(
+        "--param-set",
+        choices=["full", "phase", "offense", "defense"],
+        default="full",
+        help="Limit tuned params to a subset (phase weights only, offensive, or defensive)",
+    )
+>>>>>>> nnue_version
     p.add_argument("--include-arrays", action="store_true", help="Tune array params")
     p.add_argument(
         "--base-params",
@@ -230,7 +325,16 @@ def main(argv: List[str] | None = None) -> None:
         warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
     dataset = load_texel_csv(args.data, limit=args.limit)
+<<<<<<< HEAD
     param_space = default_param_space(include_arrays=args.include_arrays)
+=======
+    if args.require_quiet:
+        dataset = filter_quiet(dataset, batch_size=args.quiet_batch)
+        print(f"Filtered to {len(dataset)} quiet positions")
+    param_space = param_space_for_mode(
+        mode=args.param_set, include_arrays=args.include_arrays
+    )
+>>>>>>> nnue_version
 
     if args.base_params and Path(args.base_params).exists():
         with Path(args.base_params).open("r") as fh:
@@ -272,6 +376,19 @@ def main(argv: List[str] | None = None) -> None:
         load_if_exists=True,
     )
 
+<<<<<<< HEAD
+=======
+    start_time = time.time()
+    initial_completed = sum(
+        1 for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+    )
+    planned_new = args.trials if args.trials is not None else None
+    planned_total = initial_completed + planned_new if planned_new is not None else None
+    color_enabled = args.progress_color in {"ansi"} or (
+        args.progress_color == "auto" and sys.stdout.isatty()
+    )
+
+>>>>>>> nnue_version
     def objective(trial: optuna.Trial) -> float:
         updates = {
             spec.name: quantized_suggest(trial, spec, args.sampler)
@@ -295,10 +412,108 @@ def main(argv: List[str] | None = None) -> None:
         trial.set_user_attr("texel_scale", scale)
         return loss
 
+<<<<<<< HEAD
     study.optimize(
         objective, n_trials=args.trials, timeout=args.timeout, n_jobs=args.jobs
     )
 
+=======
+    def _progress_callback(
+        study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+    ) -> None:
+        if args.progress_every <= 0:
+            return
+        # trial.number is zero-based; add 1 for human-friendly count
+        if (trial.number + 1) % args.progress_every != 0:
+            return
+        best = study.best_trial
+        best_val = getattr(best, "value", None)
+        best_loss = f"{best_val:.4f}" if best_val is not None else "-"
+        scale_val = trial.user_attrs.get("texel_scale")
+        scale_txt = f"{scale_val:.1f}" if scale_val is not None else "-"
+        err_cnt = trial.user_attrs.get("error_count", 0)
+        completed_all = sum(
+            1 for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+        )
+        session_completed = max(0, completed_all - initial_completed)
+        total = planned_new if planned_new is not None else "?"
+        elapsed = time.time() - start_time
+
+        # Colors
+        green = "\x1b[32m" if color_enabled else ""
+        yellow = "\x1b[33m" if color_enabled else ""
+        cyan = "\x1b[36m" if color_enabled else ""
+        reset = "\x1b[0m" if color_enabled else ""
+
+        improving = False
+        try:
+            if best_val is not None and trial.value <= best_val + 1e-9:
+                improving = True
+        except Exception:
+            improving = False
+
+        if args.progress_style == "fancy":
+            width = 30
+            # Unicode chess glyphs for a friendlier animation
+            pieces = [
+                "♔",
+                "♕",
+                "♖",
+                "♗",
+                "♘",
+                "♙",
+                "♚",
+                "♛",
+                "♜",
+                "♝",
+                "♞",
+                "♟",
+            ]
+            # Move piece position based on trial number; mod to stay in bounds
+            pos = (trial.number * 3) % width
+            piece = pieces[trial.number % len(pieces)]
+            track = "".join(piece if idx == pos else "·" for idx in range(width))
+            track_colored = f"{cyan}{track}{reset}" if color_enabled else track
+            loss_txt = (
+                f"{green if improving else yellow}{trial.value:.4f}{reset}"
+                if color_enabled
+                else f"{trial.value:.4f}"
+            )
+            best_txt = f"{green}{best_loss}{reset}" if color_enabled else best_loss
+            line = (
+                f"\r[progress] {session_completed}/{total} (total {completed_all}) [{track_colored}] "
+                f"loss={loss_txt} best={best_txt} "
+                f"scale={scale_txt} errors={err_cnt} "
+                f"elapsed={elapsed:.1f}s"
+            )
+        else:
+            loss_txt = (
+                f"{green if improving else yellow}{trial.value:.4f}{reset}"
+                if color_enabled
+                else f"{trial.value:.4f}"
+            )
+            best_txt = f"{green}{best_loss}{reset}" if color_enabled else best_loss
+            line = (
+                f"\r[progress] {session_completed}/{total} (total {completed_all}) "
+                f"loss={loss_txt} best={best_txt} "
+                f"scale={scale_txt} errors={err_cnt} "
+                f"elapsed={elapsed:.1f}s"
+            )
+
+        print(line, end="", flush=True)
+
+    study.optimize(
+        objective,
+        n_trials=args.trials,
+        timeout=args.timeout,
+        n_jobs=args.jobs,
+        callbacks=[_progress_callback],
+    )
+
+    if args.progress_every > 0:
+        print()
+
+>>>>>>> nnue_version
     best = study.best_trial
     merged = apply_param_updates(base_params, best.params)
     best_record = {

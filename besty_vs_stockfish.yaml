@@ -1,0 +1,108 @@
+evaluation:
+  bishop_dev_bonus: 29
+  bishop_pair_bonus: 81
+  bishop_pin_penalty:
+    base: 38
+    mobility: 1
+  castle_urgency: 40
+  castling_bonus: 6
+  central_pawn_bonus: 56
+  check_penalty: 57
+  connect_rooks_bonus: 16
+  early_queen_penalty: 24
+  flank_pawn_penalty: 15
+  hanging_divisor: 3
+  hanging_min_penalty: 52
+  king_attack_weights:
+  - 7
+  - 16
+  - 15
+  - 40
+  - 46
+  - 16
+  - 28
+  - 31
+  - 41
+  - 96
+  - 46
+  - 25
+  king_ring_base: 2
+  king_ring_defended_scale: 12
+  king_ring_enemy_occupier: 2
+  king_ring_enemy_piece_material_scale: 10
+  knight_dev_bonus: 15
+  knight_pin_penalty:
+    base: 41
+    mobility: 3
+  mobility_scaling: 9
+  passed_pawn_advance: 33
+  passed_pawn_base: 4
+  pawn_pin_diagonal_penalty:
+    base: 11
+    mobility: 9
+  pawn_pin_straight_penalty:
+    base: 16
+    mobility: 11
+  pawn_shield_bonus: 2
+  phase_weights_eg:
+  - 0.39597356524271
+  - 0.7125361052157835
+  - 0.7602032390648567
+  - 0.9835851970653414
+  - 86.85064143897213
+  - 0.7648857925629693
+  - 0.05393406048294696
+  - 6.719894724570687
+  - 2.28745709285359
+  - 1.3294871275389566
+  - 22.0331800016607
+  - 0.053618120105190764
+  - 0.6455775790258342
+  - 3.4979715853101347
+  - 133.6885431599948
+  phase_weights_mg:
+  - 0.6307915838644109
+  - 0.20271222713933432
+  - 1522.809461546327
+  - 20.949141079384294
+  - 0.05118544125121485
+  - 1.3174639676039699
+  - 60.850293860536766
+  - 0.21808324653218952
+  - 20.477683995942915
+  - 0.3853585537686821
+  - 0.2502024093730082
+  - 2.308138956463673
+  - 1.83725068133325
+  - 0.04087295836112485
+  - 40.759160645803576
+  rook_open_file_bonus: 37
+  rook_pin_penalty:
+    base: 41
+    mobility: 3
+  rook_semi_open_file_bonus: 20
+  tempo_bonus: 11
+  threat_base:
+  - 1
+  - 13
+  - 10
+  - 64
+  - 94
+  - 162
+  - 343
+  - 13
+  - 74
+  - 81
+  - 43
+  - 196
+  - 996
+  threat_weight: 7
+search:
+  aspiration_window_initial: 1573
+  aspiration_window_max: 6571
+  null_move_min_depth: 6
+  null_move_reduction: 3
+  quiescence_delta_margin: 319
+  quiescence_max_noisy_moves: 19
+  quiescence_max_ply: 8
+  quiescence_zero_gain_skip_index: 6

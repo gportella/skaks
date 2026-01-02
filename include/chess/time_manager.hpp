@@ -15,6 +15,7 @@ public:
 
   void configure(SideToMove stm, const SearchLimits& limits);
   void start();
+  void set_complexity_hint(double hint);
 
   [[nodiscard]] bool enabled() const {
     return enabled_;
@@ -40,6 +41,7 @@ private:
   bool enabled_ = false;
   std::uint64_t soft_limit_ms_ = 0;
   std::uint64_t hard_limit_ms_ = 0;
+  bool complexity_scale_applied_ = false;
 };
 
 } // namespace chess

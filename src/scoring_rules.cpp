@@ -4,16 +4,71 @@
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
 #include "chess/evaluation_params.hpp"
+#include "chess/nnue.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/pins.hpp"
 #include "chess/pst_tables.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 
-#include <algorithm>
-#include <array>
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
+// Conditionally include ARM NEON only when available and safe to include.
+#if defined(__aarch64__)
+#if defined(__has_include)
+#if __has_include(<arm_neon.h>)
+#include <arm_neon.h>
+#define SKAKS_HAVE_NEON 1
+#else
+#define SKAKS_HAVE_NEON 0
+#endif
+#else
+#define SKAKS_HAVE_NEON 0
+#endif
+#else
+#define SKAKS_HAVE_NEON 0
+#endif
+
+namespace {
+constexpr std::size_t kTermCount =
+    static_cast<std::size_t>(chess::TermId::Count);
+
+chess::PhaseWeights& phase_weight_store() {
+  static chess::PhaseWeights w = [] {
+    chess::PhaseWeights init{};
+    for (std::size_t i = 0; i < kTermCount; ++i) {
+      init.mg[i] = 1.0f;
+      init.eg[i] = 1.0f;
+    }
+    return init;
+  }();
+  return w;
+}
+} // namespace
 
 namespace chess {
+
+PhaseWeights& mutable_phase_weights() {
+  return phase_weight_store();
+}
+
+const PhaseWeights& phase_weights() {
+  return phase_weight_store();
+}
+
+void set_phase_weights(const PhaseWeights& w) {
+  phase_weight_store() = w;
+}
+
+void reset_phase_weights() {
+  PhaseWeights w{};
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    w.mg[i] = 1.0;
+    w.eg[i] = 1.0;
+  }
+  phase_weight_store() = w;
+}
 
 // Helper: White-centric check queries
 inline bool white_in_check(const Board& board) {
@@ -521,6 +576,277 @@ int evaluate_rook_file_control(const Board& board) {
   return score;
 }
 
+int evaluate_piece_mobility(const Board& board) {
+  const auto& params = evaluation_params();
+  if (params.knight_mobility_scale == 0 && params.bishop_mobility_scale == 0 &&
+      params.rook_mobility_scale == 0 && params.queen_mobility_scale == 0) {
+    return 0;
+  }
+
+  int score = 0;
+  for (int sq = 0; sq < 64; ++sq) {
+    const OccupancyType occ = board.pieces[static_cast<std::size_t>(sq)];
+    if (occ == OccupancyType::empty) {
+      continue;
+    }
+
+    const bool white_piece = is_white(occ);
+    const SideToMove side = white_piece ? SideToMove::White : SideToMove::Black;
+    int contribution = 0;
+
+    switch (occ) {
+    case OccupancyType::wN:
+    case OccupancyType::bN: {
+      if (params.knight_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          knight_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.knight_mobility_scale;
+      break;
+    }
+    case OccupancyType::wB:
+    case OccupancyType::bB: {
+      if (params.bishop_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          bishop_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.bishop_mobility_scale;
+      break;
+    }
+    case OccupancyType::wR:
+    case OccupancyType::bR: {
+      if (params.rook_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          rook_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.rook_mobility_scale;
+      break;
+    }
+    case OccupancyType::wQ:
+    case OccupancyType::bQ: {
+      if (params.queen_mobility_scale == 0) {
+        break;
+      }
+      const Bitboard attacks =
+          queen_attack_bm(board, static_cast<std::uint8_t>(sq), side);
+      const int moves = popcount_bitboard(attacks);
+      contribution = moves * params.queen_mobility_scale;
+      break;
+    }
+    default:
+      break;
+    }
+
+    if (contribution == 0) {
+      continue;
+    }
+    score += white_piece ? contribution : -contribution;
+  }
+
+  return score;
+}
+
+int evaluate_pawn_structure(const Board& board) {
+  const auto& params = evaluation_params();
+  if (params.doubled_pawn_penalty == 0 && params.isolated_pawn_penalty == 0 &&
+      params.backward_pawn_penalty == 0) {
+    return 0;
+  }
+
+  auto compute_penalty = [&](PieceColor color) -> int {
+    const auto& list = board.pawn_list[to_index(color)];
+    std::array<int, 8> file_counts{};
+    for (std::uint8_t i = 0; i < list.count; ++i) {
+      const int sq = static_cast<int>(list.squares[i]);
+      const int file = file_of(sq);
+      ++file_counts[static_cast<std::size_t>(file)];
+    }
+
+    int penalty = 0;
+    for (int file = 0; file < 8; ++file) {
+      const int count = file_counts[static_cast<std::size_t>(file)];
+      if (count == 0) {
+        continue;
+      }
+      if (params.doubled_pawn_penalty > 0 && count > 1) {
+        penalty += (count - 1) * params.doubled_pawn_penalty;
+      }
+      if (params.isolated_pawn_penalty > 0) {
+        const bool has_left =
+            (file > 0) && (file_counts[static_cast<std::size_t>(file - 1)] > 0);
+        const bool has_right =
+            (file < 7) && (file_counts[static_cast<std::size_t>(file + 1)] > 0);
+        if (!has_left && !has_right) {
+          penalty += count * params.isolated_pawn_penalty;
+        }
+      }
+    }
+
+    if (params.backward_pawn_penalty > 0 && list.count > 0) {
+      const bool white = (color == PieceColor::White);
+      const int dir = white ? 1 : -1;
+      for (std::uint8_t i = 0; i < list.count; ++i) {
+        const int sq = static_cast<int>(list.squares[i]);
+        const int file = file_of(sq);
+        const int rank = rank_of(sq);
+        const int next_rank = rank + dir;
+        if (next_rank < 0 || next_rank > 7) {
+          continue;
+        }
+        const int forward_sq = next_rank * 8 + file;
+        const OccupancyType forward_occ =
+            board.pieces[static_cast<std::size_t>(forward_sq)];
+        const bool blocked_by_enemy = forward_occ != OccupancyType::empty &&
+                                      (is_white(forward_occ) != white);
+        if (!blocked_by_enemy) {
+          continue;
+        }
+
+        bool supporting_pawn = false;
+        for (int df : {-1, 1}) {
+          const int adj_file = file + df;
+          if (adj_file < 0 || adj_file > 7) {
+            continue;
+          }
+          for (int step = rank; white ? (step <= 7) : (step >= 0); step += dir) {
+            const int probe_sq = step * 8 + adj_file;
+            const OccupancyType occ =
+                board.pieces[static_cast<std::size_t>(probe_sq)];
+            if (occ == (white ? OccupancyType::wP : OccupancyType::bP)) {
+              supporting_pawn = true;
+              break;
+            }
+          }
+          if (supporting_pawn) {
+            break;
+          }
+        }
+
+        if (!supporting_pawn) {
+          penalty += params.backward_pawn_penalty;
+        }
+      }
+    }
+
+    return penalty;
+  };
+
+  const int white_penalty = compute_penalty(PieceColor::White);
+  const int black_penalty = compute_penalty(PieceColor::Black);
+  return black_penalty - white_penalty;
+}
+
+EvalVector compute_eval_vector(const Board& b) {
+  EvalVector v{};
+  v.f[static_cast<int>(TermId::Material)] = evaluate_material(b);
+  v.f[static_cast<int>(TermId::PawnCenter)] = evaluate_pawn_center_control(b);
+  v.f[static_cast<int>(TermId::CenterControl)] = evaluate_center_control(b);
+  v.f[static_cast<int>(TermId::Attacking)] = evaluate_attacking_pieces(b);
+  v.f[static_cast<int>(TermId::KingSafety)] = evaluate_king_safety(b);
+  v.f[static_cast<int>(TermId::KingMobility)] = evaluate_king_mobility(b);
+  v.f[static_cast<int>(TermId::Pins)] = evaluate_pins(b);
+
+  const int mg_phase = std::min(b.phase, kPstPhaseMax);
+  const int eg_phase = kPstPhaseMax - mg_phase;
+  v.f[static_cast<int>(TermId::PstMg)] = b.pst_midgame_score;
+  v.f[static_cast<int>(TermId::PstEg)] = b.pst_endgame_score;
+
+  v.f[static_cast<int>(TermId::PassedPawns)] = evaluate_passed_pawns(b);
+  v.f[static_cast<int>(TermId::Initiative)] = evaluate_initiative(b);
+  v.f[static_cast<int>(TermId::Hanging)] = evaluate_hanging_pieces(b);
+  v.f[static_cast<int>(TermId::KingRing)] = evaluate_king_ring_pressure(b);
+  v.f[static_cast<int>(TermId::BishopPair)] = evaluate_bishop_pair(b);
+  v.f[static_cast<int>(TermId::RookFiles)] = evaluate_rook_file_control(b);
+  v.f[static_cast<int>(TermId::MinorMobility)] = evaluate_piece_mobility(b);
+  v.f[static_cast<int>(TermId::PawnStructure)] = evaluate_pawn_structure(b);
+
+  v.mg_phase = mg_phase;
+  v.eg_phase = eg_phase;
+  return v;
+}
+
+int eval_linear(const EvalVector& v, const PhaseWeights& W) {
+  const float mgw =
+      static_cast<float>(v.mg_phase) / static_cast<float>(kPstPhaseMax);
+  const float egw =
+      static_cast<float>(v.eg_phase) / static_cast<float>(kPstPhaseMax);
+
+  // Precompute interpolated weights into a small contiguous float array to
+  // allow efficient vectorized dot-product implementations and to make the
+  // code easier to port to other SIMD ISAs (NEON).
+  alignas(32) float wbuf[kTermCount];
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    wbuf[i] = W.mg[i] * mgw + W.eg[i] * egw;
+  }
+
+#if defined(__x86_64__)
+  // AVX2 path (existing) — process 8 floats at a time
+  __m256 sum_vec = _mm256_setzero_ps();
+  std::size_t i = 0;
+  for (; i + 7 < kTermCount; i += 8) {
+    __m256 wi_vec = _mm256_loadu_ps(&wbuf[i]);
+    __m256 fi_vec = _mm256_cvtepi32_ps(
+        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&v.f[i])));
+    sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(wi_vec, fi_vec));
+  }
+  float sum = 0.0f;
+  float sum_arr[8];
+  _mm256_storeu_ps(sum_arr, sum_vec);
+  for (int j = 0; j < 8; ++j)
+    sum += sum_arr[j];
+  for (; i < kTermCount; ++i) {
+    sum += wbuf[i] * static_cast<float>(v.f[i]);
+  }
+#elif SKAKS_HAVE_NEON
+  // NEON path for aarch64 — process 4 floats at a time
+  float32x4_t sumv = vdupq_n_f32(0.0f);
+  std::size_t i = 0;
+  for (; i + 3 < kTermCount; i += 4) {
+    float32x4_t wv = vld1q_f32(&wbuf[i]);
+    // load int32 values and convert to float32
+    int32x4_t iv = vld1q_s32(reinterpret_cast<const int32_t*>(&v.f[i]));
+    float32x4_t fv = vcvtq_f32_s32(iv);
+    sumv = vmlaq_f32(sumv, wv, fv);
+  }
+  float sum = 0.0f;
+  float temp[4];
+  vst1q_f32(temp, sumv);
+  for (int j = 0; j < 4; ++j)
+    sum += temp[j];
+  for (; i < kTermCount; ++i) {
+    sum += wbuf[i] * static_cast<float>(v.f[i]);
+  }
+#else
+  // Portable scalar fallback
+  float sum = 0.0f;
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    sum += wbuf[i] * static_cast<float>(v.f[i]);
+  }
+#endif
+
+  return static_cast<int>(std::lround(sum));
+}
+
+// Helper: compute per-term contributions (wi * fi) into out array. Useful
+// for incremental updates where only a few terms or the phase changes.
+void compute_term_contributions(const EvalVector& v, const PhaseWeights& W,
+                                float out[kTermCount]) {
+  const float mgw =
+      static_cast<float>(v.mg_phase) / static_cast<float>(kPstPhaseMax);
+  const float egw =
+      static_cast<float>(v.eg_phase) / static_cast<float>(kPstPhaseMax);
+  for (std::size_t i = 0; i < kTermCount; ++i) {
+    const float wi = W.mg[i] * mgw + W.eg[i] * egw;
+    out[i] = wi * static_cast<float>(v.f[i]);
+  }
+}
+
 int evaluate_opening_principles(const Board& board) {
   const auto& params = evaluation_params();
   const int open_w = opening_phase(board);
@@ -674,23 +1000,18 @@ int evaluate_board(const Board& board) {
     return 100000; // White wins
   }
 
-  int total_eval = 0;
-  total_eval += evaluate_material(board);
-  total_eval += evaluate_pawn_center_control(board);
-  total_eval += evaluate_center_control(board);
-  total_eval += evaluate_attacking_pieces(board);
-  total_eval += evaluate_king_safety(board);
-  total_eval += evaluate_king_mobility(board);
-  total_eval += evaluate_pins(board);
-  total_eval += evaluate_pst(board);
-  total_eval += evaluate_passed_pawns(board);
-  total_eval += evaluate_initiative(board);
-  total_eval += evaluate_hanging_pieces(board);
-  total_eval += evaluate_king_ring_pressure(board);
-  total_eval += evaluate_bishop_pair(board);
-  total_eval += evaluate_rook_file_control(board);
+  if (sf_nnue_active()) {
+    return evaluate_sf_nnue(board);
+  }
 
-  return total_eval;
+  if (const auto net = active_nnue()) {
+    const auto feat = make_nnue_features(board);
+    const float eval = net->forward(feat);
+    return static_cast<int>(std::lround(eval));
+  }
+
+  const auto v = compute_eval_vector(board);
+  return eval_linear(v, phase_weights());
 }
 
 } // namespace chess

@@ -24,7 +24,15 @@ def parse_pgn_games(pgn_path: Path) -> Iterator[chess.pgn.Game]:
 
 
 def count_sampled_positions(
+<<<<<<< HEAD
     pgn_path: Path, sample_stride: int, max_positions: Optional[int]
+=======
+    pgn_path: Path,
+    sample_stride: int,
+    max_positions: Optional[int],
+    min_ply: Optional[int],
+    max_ply: Optional[int],
+>>>>>>> nnue_version
 ) -> int:
     """Count how many positions will be sampled given stride and cap."""
     total = 0
@@ -34,33 +42,122 @@ def count_sampled_positions(
             board.push(move)
             if ply % sample_stride != 0:
                 continue
+<<<<<<< HEAD
+=======
+            if min_ply is not None and ply + 1 < min_ply:
+                continue
+            if max_ply is not None and ply + 1 > max_ply:
+                continue
+>>>>>>> nnue_version
             total += 1
             if max_positions is not None and total >= max_positions:
                 return total
     return total
 
 
+<<<<<<< HEAD
 def collect_positions(
     pgn_path: Path, sample_stride: int, max_positions: Optional[int]
 ) -> List[Tuple[int, int, str, bool]]:
     """Collect sampled positions as (game_idx, ply, fen, white_to_move)."""
     positions: List[Tuple[int, int, str, bool]] = []
     for game_idx, game in enumerate(parse_pgn_games(pgn_path)):
+=======
+def _parse_result(raw: str) -> Tuple[str, Optional[float], Optional[str]]:
+    """Normalize a PGN result string and derive outcome/winner.
+
+    Returns (normalized_result, outcome, winner), where outcome is in [0,1]
+    with 1.0 = white win, 0.0 = black win, 0.5 = draw. winner is one of
+    "w", "b", "d" or None if unknown.
+    """
+
+    normalized = raw.strip() if raw else ""
+    if normalized in {"1-0", "1/2-1/2", "0-1"}:
+        if normalized == "1-0":
+            return normalized, 1.0, "w"
+        if normalized == "0-1":
+            return normalized, 0.0, "b"
+        return normalized, 0.5, "d"
+    return normalized or "*", None, None
+
+
+def collect_positions(
+    pgn_path: Path,
+    sample_stride: int,
+    max_positions: Optional[int],
+    min_ply: Optional[int],
+    max_ply: Optional[int],
+) -> List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]]:
+    """Collect sampled positions as (game_idx, ply, fen, white_to_move, result, outcome, winner)."""
+
+    positions: List[
+        Tuple[int, int, str, bool, str, Optional[float], Optional[str]]
+    ] = []
+    for game_idx, game in enumerate(parse_pgn_games(pgn_path)):
+        result_raw = game.headers.get("Result", "")
+        result_norm, outcome, winner = _parse_result(result_raw)
+>>>>>>> nnue_version
         board = game.board()
         for ply, move in enumerate(game.mainline_moves()):
             board.push(move)
             if ply % sample_stride != 0:
                 continue
+<<<<<<< HEAD
             positions.append(
                 (game_idx, ply + 1, board.fen(), board.turn == chess.WHITE)
+=======
+            if min_ply is not None and ply + 1 < min_ply:
+                continue
+            if max_ply is not None and ply + 1 > max_ply:
+                continue
+            positions.append(
+                (
+                    game_idx,
+                    ply + 1,
+                    board.fen(),
+                    board.turn == chess.WHITE,
+                    result_norm,
+                    outcome,
+                    winner,
+                )
+>>>>>>> nnue_version
             )
             if max_positions is not None and len(positions) >= max_positions:
                 return positions
     return positions
 
 
+<<<<<<< HEAD
 def process_chunk(
     chunk: Sequence[Tuple[int, int, str, bool]],
+=======
+def filter_quiet_positions(
+    positions: List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]],
+    batch_size: int,
+) -> List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]]:
+    try:
+        import skaks_eval as sk
+    except Exception:
+        print("[warn] skaks_eval not available; skipping quiet filtering")
+        return positions
+
+    keep: List[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]] = []
+    for start in range(0, len(positions), batch_size):
+        end = min(start + batch_size, len(positions))
+        chunk = positions[start:end]
+        fens = [p[2] for p in chunk]
+        flags = sk.is_quiet_batch(fens)
+        for pos, flag in zip(chunk, flags):
+            if flag is True:
+                keep.append(pos)
+    if not keep:
+        print("[warn] quiet filtering removed all positions")
+    return keep
+
+
+def process_chunk(
+    chunk: Sequence[Tuple[int, int, str, bool, str, Optional[float], Optional[str]]],
+>>>>>>> nnue_version
     stockfish_path: Path,
     skaks_path: Path,
     stockfish_depth: int,
@@ -78,7 +175,11 @@ def process_chunk(
             add_uci_arg=True,
         ) as sk,
     ):
+<<<<<<< HEAD
         for game_idx, ply, fen, white_to_move in chunk:
+=======
+        for game_idx, ply, fen, white_to_move, result, outcome, winner in chunk:
+>>>>>>> nnue_version
             sf_white = sf.search_eval_white(fen)
             sk_white = sk.static_eval_white(fen)
             if sf_white is None or sk_white is None:
@@ -101,6 +202,12 @@ def process_chunk(
                     "fen": fen,
                     "stockfish_cp": sf_cp,
                     "skaks_cp": sk_cp,
+<<<<<<< HEAD
+=======
+                    "result": result,
+                    "outcome": outcome,
+                    "winner": winner,
+>>>>>>> nnue_version
                 }
             )
     return rows, failures
@@ -396,6 +503,11 @@ def process_games(
     skaks_path: Path,
     sample_stride: int,
     max_positions: Optional[int],
+<<<<<<< HEAD
+=======
+    min_ply: Optional[int],
+    max_ply: Optional[int],
+>>>>>>> nnue_version
     output_path: Path,
     total_expected: Optional[int],
     pov: str,
@@ -403,6 +515,11 @@ def process_games(
     stockfish_depth: int,
     workers: int,
     chunk_size: int,
+<<<<<<< HEAD
+=======
+    require_quiet: bool,
+    quiet_batch: int,
+>>>>>>> nnue_version
 ) -> None:
     out_fields = [
         "game_index",
@@ -411,9 +528,24 @@ def process_games(
         "fen",
         "stockfish_cp",
         "skaks_cp",
+<<<<<<< HEAD
     ]
 
     positions = collect_positions(pgn_path, sample_stride, max_positions)
+=======
+        "result",
+        "outcome",
+        "winner",
+    ]
+
+    positions = collect_positions(
+        pgn_path, sample_stride, max_positions, min_ply, max_ply
+    )
+    if require_quiet:
+        positions = filter_quiet_positions(positions, batch_size=quiet_batch)
+        if total_expected is None:
+            total_expected = len(positions)
+>>>>>>> nnue_version
 
     total = 0
     failures: List[str] = []
@@ -424,6 +556,7 @@ def process_games(
             writer.writeheader()
 
         if workers <= 1:
+<<<<<<< HEAD
             rows, chunk_failures = process_chunk(
                 positions,
                 stockfish_path,
@@ -435,6 +568,28 @@ def process_games(
             writer.writerows(rows)
             total += len(rows)
             failures.extend(chunk_failures)
+=======
+            # Stream sequentially in chunks so we see progress and avoid holding all rows.
+            for idx in range(0, len(positions), chunk_size):
+                chunk = positions[idx : idx + chunk_size]
+                rows, chunk_failures = process_chunk(
+                    chunk,
+                    stockfish_path,
+                    skaks_path,
+                    stockfish_depth,
+                    skaks_params,
+                    pov,
+                )
+                writer.writerows(rows)
+                total += len(rows)
+                failures.extend(chunk_failures)
+                if total % 100 == 0 or total == 1:
+                    expected = total_expected if total_expected is not None else "?"
+                    print(
+                        f"[progress] {total}/{expected} positions", end="\r", flush=True
+                    )
+            print()
+>>>>>>> nnue_version
         else:
             with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
                 futures = []
@@ -469,12 +624,20 @@ def process_games(
         expected = total_expected if total_expected is not None else "?"
         print(f"[progress] {total}/{expected} positions", flush=True)
 
+<<<<<<< HEAD
     if failures > 0:
         print(f"[warn] skipped {failures} positions with engine errors")
         if failure_samples:
             print("[warn] sample failing FENs:")
             for fen in failure_samples:
                 print(f"  {fen}")
+=======
+    if failures:
+        print(f"[warn] skipped {len(failures)} positions with engine errors")
+        print("[warn] sample failing FENs:")
+        for fen in failures[:20]:
+            print(f"  {fen}")
+>>>>>>> nnue_version
 
 
 def main() -> None:
@@ -507,6 +670,15 @@ def main() -> None:
         "--max-positions", type=int, default=None, help="Cap total positions (optional)"
     )
     parser.add_argument(
+<<<<<<< HEAD
+=======
+        "--min-ply", type=int, default=None, help="Minimum ply to sample (1-based)"
+    )
+    parser.add_argument(
+        "--max-ply", type=int, default=None, help="Maximum ply to sample (1-based)"
+    )
+    parser.add_argument(
+>>>>>>> nnue_version
         "--output", type=Path, default=Path("eval_pairs.csv"), help="Output CSV path"
     )
     parser.add_argument(
@@ -539,6 +711,20 @@ def main() -> None:
         default=32,
         help="Positions per worker chunk when using parallel mode",
     )
+<<<<<<< HEAD
+=======
+    parser.add_argument(
+        "--require-quiet",
+        action="store_true",
+        help="Filter to quiet positions (requires skaks_eval)",
+    )
+    parser.add_argument(
+        "--quiet-batch",
+        type=int,
+        default=2048,
+        help="Batch size for quiet filtering",
+    )
+>>>>>>> nnue_version
     args = parser.parse_args()
 
     if not args.pgn.exists():
@@ -556,6 +742,11 @@ def main() -> None:
         pgn_path=args.pgn,
         sample_stride=args.sample_stride,
         max_positions=args.max_positions,
+<<<<<<< HEAD
+=======
+        min_ply=args.min_ply,
+        max_ply=args.max_ply,
+>>>>>>> nnue_version
     )
     print(f"Planning to sample up to {total_expected} positions")
 
@@ -566,6 +757,11 @@ def main() -> None:
         skaks_path=sk_path,
         sample_stride=args.sample_stride,
         max_positions=args.max_positions,
+<<<<<<< HEAD
+=======
+        min_ply=args.min_ply,
+        max_ply=args.max_ply,
+>>>>>>> nnue_version
         output_path=args.output,
         total_expected=total_expected,
         pov=args.pov,
@@ -573,6 +769,11 @@ def main() -> None:
         stockfish_depth=args.stockfish_depth,
         workers=max(1, args.workers),
         chunk_size=max(1, args.chunk_size),
+<<<<<<< HEAD
+=======
+        require_quiet=args.require_quiet,
+        quiet_batch=max(1, args.quiet_batch),
+>>>>>>> nnue_version
     )
 
 

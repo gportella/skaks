@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Batch runner that stores fight results (including PGNs) into SQLite."""
+"""Batch runner for validation matches with optional SQLite storage."""
 
 from __future__ import annotations
 
@@ -19,9 +19,13 @@ from typing import Dict, List, Optional, Sequence, Tuple
 DEFAULT_GAMES = 100
 DEFAULT_MATCH_LIMIT = 500
 DEFAULT_DEPTH = 8
-DEFAULT_DB_NAME = "validation_matches.sqlite3"
+RECOMMENDED_DB_NAME = "validation_matches.sqlite3"
 PGN_HEADER = "PGN:"
+<<<<<<< HEAD
 SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
+=======
+DEFAULT_SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
+>>>>>>> nnue_version
 DEFAULT_ELO_START = 1500.0
 DEFAULT_ELO_OPPONENT = 2600.0
 DEFAULT_ELO_K_FACTOR = 20.0
@@ -171,11 +175,42 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Path to params file for the reference engine (passed as --engine-params)",
     )
     parser.add_argument(
+<<<<<<< HEAD
+=======
+        "--engine-nnue",
+        type=str,
+        help="Path to NNUE weights for the reference engine (passed as --engine-nnue)",
+    )
+    parser.add_argument(
+        "--engine-label",
+        type=str,
+        help="Display label for the reference engine in summary/Elo (default: engine basename)",
+    )
+    parser.add_argument(
+>>>>>>> nnue_version
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --opponent-params)",
     )
     parser.add_argument(
+<<<<<<< HEAD
+=======
+        "--opponent-nnue",
+        type=str,
+        help="Path to NNUE weights for the opponent engine (passed as --opponent-nnue)",
+    )
+    parser.add_argument(
+        "--opponent-depth-factor",
+        type=positive_float,
+        help="Scale factor applied to depth for the opponent (e.g. 0.6)",
+    )
+    parser.add_argument(
+        "--opponent-label",
+        type=str,
+        help="Display label for the opponent engine in summary/Elo (default: opponent basename)",
+    )
+    parser.add_argument(
+>>>>>>> nnue_version
         "--stockfish",
         action="store_true",
         help="Shortcut for --opponent stockfish",
@@ -183,8 +218,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--database",
         type=str,
-        default=DEFAULT_DB_NAME,
-        help=f"SQLite database file path (default: {DEFAULT_DB_NAME})",
+        help=(
+            "SQLite database file path (recommended: "
+            f"{RECOMMENDED_DB_NAME}); omit to disable persistence"
+        ),
     )
     parser.add_argument(
         "--concurrency",
@@ -252,13 +289,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--handicap-factor",
         type=positive_float,
-        default=0.35,
+        default=0.65,
         help="Scaling factor applied to opponent time when handicap is enabled",
     )
     parser.add_argument(
         "--handicap-depth",
         type=non_negative_int,
-        default=6,
+        default=3,
         help="Depth advantage retained by reference engine when handicap is enabled",
     )
     parser.add_argument(
@@ -298,6 +335,14 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Skip loading/saving Elo state; compute only for this batch",
     )
+<<<<<<< HEAD
+=======
+    parser.add_argument(
+        "--summary-json",
+        type=str,
+        help="Optional path to write a JSON summary (counts, Elo, timings)",
+    )
+>>>>>>> nnue_version
 
     args = parser.parse_args(argv)
 
@@ -305,6 +350,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         parser.error("--stockfish may not be combined with --opponent")
     if args.stockfish:
         args.opponent = "stockfish"
+    if args.resume and not args.database:
+        parser.error("--resume requires --database")
 
     mode_count = sum(
         flag is not None for flag in (args.depth, args.time_per_move, args.clock)
@@ -314,8 +361,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     if mode_count > 1:
         parser.error("choose exactly one of --depth, --time-per-move, or --clock")
 
-    if args.time_per_move is None and args.opponent_time_per_move is not None:
-        parser.error("--opponent-time-per-move requires --time-per-move")
+    # if args.time_per_move is None and args.opponent_time_per_move is not None:
+    #     parser.error("--opponent-time-per-move requires --time-per-move")
     if args.clock is None and args.opponent_clock is not None:
         parser.error("--opponent-clock requires --clock")
     if args.clock is None and (
@@ -359,14 +406,29 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         if args.moves_to_go is not None:
             base_args.extend(["--moves-to-go", str(args.moves_to_go)])
 
+    if args.opponent_time_per_move is not None:
+        base_args.extend(["--opponent-time-per-move", str(args.opponent_time_per_move)])
+    if getattr(args, "opponent_depth_factor", None) is not None:
+        base_args.extend(["--opponent-depth-factor", str(args.opponent_depth_factor)])
+
     if args.engine:
         base_args.extend(["--engine", args.engine])
     if args.engine_params:
         base_args.extend(["--engine-params", args.engine_params])
+<<<<<<< HEAD
+=======
+    if args.engine_nnue:
+        base_args.extend(["--engine-nnue", args.engine_nnue])
+>>>>>>> nnue_version
     if args.opponent:
         base_args.extend(["--opponent", args.opponent])
     if args.opponent_params:
         base_args.extend(["--opponent-params", args.opponent_params])
+<<<<<<< HEAD
+=======
+    if args.opponent_nnue:
+        base_args.extend(["--opponent-nnue", args.opponent_nnue])
+>>>>>>> nnue_version
     if args.no_handicap:
         base_args.append("--no-handicap")
     if args.handicap_factor is not None:
@@ -491,29 +553,37 @@ def extract_metadata(
 def determine_winner_label(
     result_value: Optional[str],
     winner_value: Optional[str],
+    white_label: str,
+    black_label: str,
 ) -> str:
+    def _normalize(name: str) -> str:
+        return Path(str(name)).name.lower()
+
+    white_tokens = {_normalize(white_label), white_label.lower()}
+    black_tokens = {_normalize(black_label), black_label.lower()}
+
     if winner_value:
         normalized = winner_value.strip().lower()
         if normalized:
             if normalized.startswith("draw"):
                 return "draw"
-            if "skaks" in normalized:
-                return "skaks"
-            if "stockfish" in normalized:
-                return "stockfish"
+            if any(token in normalized for token in white_tokens):
+                return white_label
+            if any(token in normalized for token in black_tokens):
+                return black_label
             tokens = normalized.replace("-", " ").split()
             if "white" in tokens:
-                return "skaks"
+                return white_label
             if "black" in tokens:
-                return "stockfish"
+                return black_label
             if normalized == "unknown":
                 return "unknown"
     if result_value:
         normalized_result = result_value.strip().lower()
         if normalized_result in {"1-0", "1 - 0"}:
-            return "skaks"
+            return white_label
         if normalized_result in {"0-1", "0 - 1"}:
-            return "stockfish"
+            return black_label
         if normalized_result in {"1/2-1/2", "1/2 - 1/2", "½-½"}:
             return "draw"
         if normalized_result.startswith("draw"):
@@ -592,11 +662,11 @@ def choose_starting_index(
     return int(row[0]) + 1
 
 
-def summarize_counts(summary: Dict[str, int]) -> str:
-    ordered_labels = list(SUMMARY_LABELS)
-    extra_labels = [label for label in summary if label not in SUMMARY_LABELS]
-    labels = ordered_labels + sorted(extra_labels)
-    return ", ".join(f"{label}={summary.get(label, 0)}" for label in labels)
+def summarize_counts(summary: Dict[str, int], labels: Sequence[str]) -> str:
+    ordered_labels = list(labels)
+    extra_labels = [label for label in summary if label not in labels]
+    display_labels = ordered_labels + sorted(extra_labels)
+    return ", ".join(f"{label}={summary.get(label, 0)}" for label in display_labels)
 
 
 def run_batch(args: argparse.Namespace) -> int:
@@ -605,11 +675,25 @@ def run_batch(args: argparse.Namespace) -> int:
         print(f"Fight script not found at {fight_script}", file=sys.stderr)
         return 2
 
-    db_path = Path(args.database).expanduser().resolve()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(str(db_path))
+    wall_start = time.perf_counter()
+
+    connection: Optional[sqlite3.Connection] = None
+    db_path: Optional[Path] = None
     try:
-        prepare_database(connection)
+        if args.database:
+            db_path = Path(args.database).expanduser().resolve()
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(str(db_path))
+            prepare_database(connection)
+
+        rating_path = Path(args.elo_store)
+        if not rating_path.is_absolute():
+            rating_path = Path(__file__).resolve().parent / rating_path
+        rating_before = (
+            args.elo_start
+            if args.no_elo_store
+            else load_rating(rating_path, fallback=args.elo_start)
+        )
 
         rating_path = Path(args.elo_store)
         if not rating_path.is_absolute():
@@ -633,8 +717,16 @@ def run_batch(args: argparse.Namespace) -> int:
             "moves_to_go": args.moves_to_go,
             "engine": args.engine,
             "engine_params": args.engine_params,
+<<<<<<< HEAD
             "opponent": args.opponent,
             "opponent_params": args.opponent_params,
+=======
+            "engine_nnue": args.engine_nnue,
+            "opponent": args.opponent,
+            "opponent_params": args.opponent_params,
+            "opponent_nnue": args.opponent_nnue,
+            "opponent_depth_factor": args.opponent_depth_factor,
+>>>>>>> nnue_version
             "handicap_factor": args.handicap_factor,
             "handicap_depth": args.handicap_depth,
             "handicap_enabled": args.handicap_enabled,
@@ -644,15 +736,36 @@ def run_batch(args: argparse.Namespace) -> int:
             parameters_snapshot, sort_keys=True, separators=(",", ":")
         )
 
-        start_index = choose_starting_index(
-            connection, parameters_blob=parameters_blob, resume=args.resume
+        start_index = (
+            choose_starting_index(
+                connection, parameters_blob=parameters_blob, resume=args.resume
+            )
+            if connection is not None
+            else 1
         )
         indices = list(range(start_index, start_index + args.games))
         if not indices:
             print("No games scheduled (games=0). Nothing to do.")
             return 0
 
-        summary: Dict[str, int] = {label: 0 for label in SUMMARY_LABELS}
+        white_label = (
+            args.engine_label
+            if args.engine_label
+            else (Path(args.engine).name if args.engine else DEFAULT_SUMMARY_LABELS[0])
+        )
+        black_label = (
+            args.opponent_label
+            if args.opponent_label
+            else (
+                Path(args.opponent).name if args.opponent else DEFAULT_SUMMARY_LABELS[1]
+            )
+        )
+        if white_label == black_label:
+            white_label = f"{white_label}_white"
+            black_label = f"{black_label}_black"
+
+        summary_labels = (white_label, black_label, "draw", "unknown")
+        summary: Dict[str, int] = {label: 0 for label in summary_labels}
         failures = 0
         completed = 0
 
@@ -660,7 +773,10 @@ def run_batch(args: argparse.Namespace) -> int:
             f"Running {len(indices)} games "
             f"(depth={args.depth}, limit={args.limit}, concurrency={args.concurrency})"
         )
-        print(f"Database: {db_path}")
+        if db_path is not None:
+            print(f"Database: {db_path}")
+        else:
+            print("Database: disabled (no SQLite persistence)")
         sys.stdout.flush()
 
         executable = sys.executable
@@ -692,25 +808,28 @@ def run_batch(args: argparse.Namespace) -> int:
                         parsed_result = "unknown"
                     if parsed_winner is None:
                         parsed_winner = "unknown"
-                    winner_label = determine_winner_label(parsed_result, parsed_winner)
+                    winner_label = determine_winner_label(
+                        parsed_result, parsed_winner, white_label, black_label
+                    )
                     failed = match.exit_code != 0 or illegal_flag
                     if failed:
                         failures += 1
                         summary["unknown"] = summary.get("unknown", 0) + 1
                     else:
                         summary[winner_label] = summary.get(winner_label, 0) + 1
-                    record_match(
-                        connection,
-                        result=match,
-                        depth=args.depth,
-                        limit_plies=args.limit,
-                        parameters_blob=parameters_blob,
-                        parsed_result=parsed_result,
-                        parsed_winner=parsed_winner,
-                        pgn_text=pgn_text,
-                        white_engine=white_engine,
-                        black_engine=black_engine,
-                    )
+                    if connection is not None:
+                        record_match(
+                            connection,
+                            result=match,
+                            depth=args.depth,
+                            limit_plies=args.limit,
+                            parameters_blob=parameters_blob,
+                            parsed_result=parsed_result,
+                            parsed_winner=parsed_winner,
+                            pgn_text=pgn_text,
+                            white_engine=white_engine,
+                            black_engine=black_engine,
+                        )
                     completed += 1
 
                     status = "FAIL" if failed else "OK"
@@ -755,12 +874,20 @@ def run_batch(args: argparse.Namespace) -> int:
                 return 130
 
         print()
-        print(f"Stored results in {db_path}")
-        print(f"Summary: {summarize_counts(summary)}")
+        if db_path is not None:
+            print(f"Stored results in {db_path}")
+        else:
+            print("SQLite persistence disabled (no --database provided)")
+        print(f"Summary: {summarize_counts(summary, summary_labels)}")
         print(f"Failures: {failures} / {len(indices)}")
 
+<<<<<<< HEAD
         wins = summary.get("skaks", 0)
         losses = summary.get("stockfish", 0)
+=======
+        wins = summary.get(white_label, 0)
+        losses = summary.get(black_label, 0)
+>>>>>>> nnue_version
         draws = summary.get("draw", 0)
         elo = compute_elo(
             rating=rating_before,
@@ -786,9 +913,47 @@ def run_batch(args: argparse.Namespace) -> int:
         else:
             print("Elo: no completed games to rate")
 
+<<<<<<< HEAD
+=======
+        if args.summary_json:
+            summary_payload = {
+                "games": len(indices),
+                "completed": completed,
+                "failures": failures,
+                "summary": summary,
+                "labels": {
+                    "white": white_label,
+                    "black": black_label,
+                },
+                "elo": {
+                    "start": elo.rating_before,
+                    "opponent": elo.opponent_rating,
+                    "delta": elo.delta,
+                    "new": elo.rating_after,
+                    "expected_score": elo.expected_score,
+                    "actual_score": elo.actual_score,
+                    "games": elo.games,
+                    "wins": elo.wins,
+                    "losses": elo.losses,
+                    "draws": elo.draws,
+                },
+                "timing_sec": time.perf_counter() - wall_start,
+                "parameters": parameters_snapshot,
+            }
+            try:
+                Path(args.summary_json).expanduser().write_text(
+                    json.dumps(summary_payload, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                print(f"Wrote summary JSON to {args.summary_json}")
+            except OSError as exc:
+                print(f"Failed to write summary JSON: {exc}", file=sys.stderr)
+
+>>>>>>> nnue_version
         return 0 if failures == 0 else 1
     finally:
-        connection.close()
+        if connection is not None:
+            connection.close()
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

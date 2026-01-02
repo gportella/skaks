@@ -18,6 +18,7 @@ add_executable(chess_engine_tests
   engine_tests.cpp
   incremental_tests.cpp
   move_tests.cpp
+  move_ordering_tests.cpp
   scoring_tests.cpp
   attack_tests.cpp
   exchange_tests.cpp
@@ -27,6 +28,20 @@ add_executable(chess_engine_tests
   time_manager_tests.cpp
   zobrist_tests.cpp
   params_loader_tests.cpp
+<<<<<<< HEAD
+=======
+  nnue_features_tests.cpp
+  nnue_sf_tests.cpp
+  sf_eval_tests.cpp
+)
+
+set_source_files_properties(
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/sf_nnue/nnue.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/sf_nnue/misc.cpp
+  PROPERTIES
+  COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-sign-conversion;-Wno-implicit-int-conversion;-Wno-vla-cxx-extension"
+  COMPILE_DEFINITIONS "USE_NEON;IS_64BIT=1"
+>>>>>>> nnue_version
 )
 
 target_link_libraries(chess_engine_tests

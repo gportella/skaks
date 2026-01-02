@@ -2,6 +2,7 @@
 
 #include "chess/scoring_rules.hpp"
 #include "chess/time_manager.hpp"
+#include "sf_eval.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -21,7 +22,19 @@ SearchResult Engine::search(Board& board, const SearchParameters& params) {
 int Engine::evaluate(const Board& board) const {
   // Placeholder: future versions will blend features based on eval_config_
   (void)eval_config_;
+  if (eval_mode_ == EvaluationMode::Sunfish) {
+    sf_eval::Board simple{};
+    simple.fill(0);
+    for (std::size_t sq = 0; sq < 64; ++sq) {
+      simple[sq] = sf_eval::encode_piece(board.pieces[sq]);
+    }
+    return sf_eval::evaluate(simple).score;
+  }
   return evaluate_board(board);
+}
+
+void Engine::set_evaluation_mode(EvaluationMode mode) {
+  eval_mode_ = mode;
 }
 
 Engine::SearchSession Engine::create_session(Board& board) {

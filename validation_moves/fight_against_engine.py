@@ -4,6 +4,7 @@
 import argparse
 import os
 import select
+import shutil
 import subprocess
 import sys
 import time
@@ -20,6 +21,27 @@ DEFAULT_ENGINE = "skaks"
 DEFAULT_HANDICAP_FACTOR = 0.35
 DEFAULT_HANDICAP_DEPTH = 6
 MIN_CLOCK_MS = 1
+
+
+def _resolve_engine(path_str: str) -> str:
+    """Resolve an engine binary path, searching common build locations and PATH."""
+    candidate = Path(path_str)
+    search = []
+    if candidate.is_absolute():
+        search.append(candidate)
+    else:
+        search.append(Path.cwd() / candidate)
+        repo_root = Path(__file__).resolve().parent.parent
+        search.append(repo_root / candidate)
+        search.append(repo_root / "build" / "debug" / "bin" / candidate.name)
+        search.append(repo_root / "build" / "release" / "bin" / candidate.name)
+    for cand in search:
+        if cand.exists():
+            return str(cand.resolve())
+    which = shutil.which(path_str)
+    if which:
+        return which
+    raise FileNotFoundError(f"Engine binary not found: {path_str}")
 
 
 @dataclass
@@ -239,10 +261,22 @@ def _non_negative_int(value: str) -> int:
     return parsed
 
 
+<<<<<<< HEAD
 def _params_argv(path: Optional[str]) -> Optional[list[str]]:
     if path is None:
         return None
     return ["--params", path]
+=======
+def _extra_args(
+    params_path: Optional[str], nnue_path: Optional[str]
+) -> Optional[list[str]]:
+    argv: list[str] = []
+    if params_path:
+        argv.extend(["--params", params_path])
+    if nnue_path:
+        argv.extend(["--nnue", nnue_path])
+    return argv or None
+>>>>>>> nnue_version
 
 
 def _needs_uci_arg(binary: str) -> bool:
@@ -265,12 +299,18 @@ def run_game(
     opponent_engine: str,
     reference_params: Optional[str],
     opponent_params: Optional[str],
+<<<<<<< HEAD
+=======
+    reference_nnue: Optional[str],
+    opponent_nnue: Optional[str],
+>>>>>>> nnue_version
     handicap_factor: float,
     handicap_depth: int,
+    opponent_depth_factor: Optional[float],
     handicap_enabled: bool,
 ) -> int:
-    reference_path = reference_engine
-    opponent_path = opponent_engine
+    reference_path = _resolve_engine(reference_engine)
+    opponent_path = _resolve_engine(opponent_engine)
 
     white_name = Path(reference_path).name
     black_name = Path(opponent_path).name
@@ -298,13 +338,21 @@ def run_game(
                 opponent_path,
                 timeout=240.0,
                 add_uci_arg=_needs_uci_arg(opponent_path),
+<<<<<<< HEAD
                 extra_args=_params_argv(opponent_params),
+=======
+                extra_args=_extra_args(opponent_params, opponent_nnue),
+>>>>>>> nnue_version
             ) as opponent,
             UciEngine(
                 reference_path,
                 timeout=240.0,
                 add_uci_arg=_needs_uci_arg(reference_path),
+<<<<<<< HEAD
                 extra_args=_params_argv(reference_params),
+=======
+                extra_args=_extra_args(reference_params, reference_nnue),
+>>>>>>> nnue_version
             ) as reference,
         ):
             clock: Optional[MatchClock] = None
@@ -384,10 +432,17 @@ def run_game(
                         )
                     else:
                         assert depth is not None
-                        if mover_color == chess.WHITE or depth_penalty == 0:
+                        if mover_color == chess.WHITE:
                             chosen_depth = depth
                         else:
-                            chosen_depth = max(depth - depth_penalty, 1)
+                            if opponent_depth_factor is not None:
+                                chosen_depth = max(
+                                    1, int(round(depth * opponent_depth_factor))
+                                )
+                            elif depth_penalty != 0:
+                                chosen_depth = max(depth - depth_penalty, 1)
+                            else:
+                                chosen_depth = depth
                         search_start = None
                         search_end = None
                         best_move = engine.bestmove(
@@ -501,11 +556,27 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Path to YAML/JSON params for the reference engine (passed as --params)",
     )
     parser.add_argument(
+<<<<<<< HEAD
+=======
+        "--engine-nnue",
+        type=str,
+        help="Path to NNUE weights for the reference engine (passed as --nnue)",
+    )
+    parser.add_argument(
+>>>>>>> nnue_version
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --params)",
     )
     parser.add_argument(
+<<<<<<< HEAD
+=======
+        "--opponent-nnue",
+        type=str,
+        help="Path to NNUE weights for the opponent engine (passed as --nnue)",
+    )
+    parser.add_argument(
+>>>>>>> nnue_version
         "--stockfish",
         action="store_true",
         help="Shortcut to set the opponent to Stockfish",
@@ -532,6 +603,11 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         dest="opponent_time_per_move",
         type=_positive_float,
         help="Seconds per move for the opponent when using time controls",
+    )
+    parser.add_argument(
+        "--opponent-depth-factor",
+        type=_positive_float,
+        help="Scale factor applied to depth for the opponent (e.g. 0.6 gives opponent depth=round(depth*0.6))",
     )
     parser.add_argument(
         "--opponent-clock",
@@ -607,8 +683,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     elif mode_count > 1:
         parser.error("choose exactly one of --depth, --time-per-move, or --clock")
 
-    if args.time_per_move is None and args.opponent_time_per_move is not None:
-        parser.error("--opponent-time-per-move requires --time-per-move")
+    # if args.time_per_move is None and args.opponent_time_per_move is not None:
+    #     parser.error("--opponent-time-per-move requires --time-per-move")
     if args.clock is None and args.opponent_clock is not None:
         parser.error("--opponent-clock requires --clock")
     if args.clock is None and (
@@ -642,8 +718,14 @@ def main(argv: List[str]) -> int:
         opponent_engine=args.opponent,
         reference_params=args.engine_params,
         opponent_params=args.opponent_params,
+<<<<<<< HEAD
+=======
+        reference_nnue=args.engine_nnue,
+        opponent_nnue=args.opponent_nnue,
+>>>>>>> nnue_version
         handicap_factor=args.handicap_factor,
         handicap_depth=args.handicap_depth,
+        opponent_depth_factor=args.opponent_depth_factor,
         handicap_enabled=args.handicap_enabled,
     )
 

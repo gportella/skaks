@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chess/defaults.hpp"
+#include "chess/eval_mode.hpp"
 
 #include <cstdint>
 #include <string>
@@ -32,6 +33,11 @@ struct CliOptions {
   bool polyglot_book_override = false;
   bool params_override = false;
   std::string params_path;
+<<<<<<< HEAD
+=======
+  bool nnue_override = false;
+  std::string nnue_path;
+>>>>>>> nnue_version
   bool perf_mode = false;
   int perf_iterations = 3;
   int version_requests = 0;
@@ -40,6 +46,9 @@ struct CliOptions {
   bool static_eval = false;
   std::string executable_path;
   bool best_move = false;
+  bool arena_mode = false;
+  int arena_games = 20;
+  EvaluationMode eval_mode = EvaluationMode::Native;
   TimeControlOptions time_control;
 };
 

@@ -106,6 +106,34 @@ ctest --test-dir build/debug --output-on-failure
 
 - The `tuning/` scripts consume those score pairs to train new eval parameters and write YAML configs you can pass back to the engine. After collecting more data, rerun tuning to update the parameters.
 
+<<<<<<< HEAD
+=======
+### Phase-weight-only tuning
+
+Use these when you only want to optimize the phase weights (`phase_weights_mg` / `phase_weights_eg`) already present in `tuning/best_params.yaml`.
+
+```bash
+# CP regression on eval_pairs CSV (Optuna)
+python -m skaks_opt fit \
+	--data eval_pairs_pvs_with_results.csv \
+	--phase-weights-only \
+	--trials 80 \
+	--threads 0 \
+	--batch-size 512 \
+	--pov side \
+	--best-out tuning/best_params_phase.yaml
+
+# Self-play optimizer
+skaks-opt param-optimize \
+	--start-params tuning/best_params.yaml \
+	--phase-weights-only \
+	--output tuning/best_params_phase.yaml
+
+# Quick internal arena (baseline vs tuned params)
+./build/debug/bin/skaks --arena --params tuning/best_params_phase.yaml --arena-games 200
+```
+
+>>>>>>> nnue_version
 ## Cross-compiling
 
 Two sample toolchain presets are provided for Linux x86_64 and arm64 targets (`cmake/toolchains/clang-linux-*.cmake`). Update the sysroot paths to match your environment, then configure:

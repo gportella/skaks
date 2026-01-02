@@ -89,23 +89,29 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   }
 
   uint16_t move_count = 0;
-  auto moves = generate_legal_moves(board, stm, move_count);
-
-  // Filter to noisy moves when not in check
-  if (!in_check) {
-    uint16_t w = 0;
+  std::array<uint32_t, kMaxMovementCount> moves{};
+  if (in_check) {
+    moves = generate_legal_moves(board, stm, move_count);
+  } else {
+    moves = generate_all_moves(board, stm, move_count);
+    uint16_t write_idx = 0;
     for (uint16_t i = 0; i < move_count; ++i) {
       Move m = decode_move(moves[i]);
       const bool is_capture = m.captured_pc != OccupancyType::empty;
       const bool is_promo = m.promo_pc != OccupancyType::empty;
-      if (is_capture || is_promo) {
-        moves[w++] = moves[i];
+      if (!(is_capture || is_promo)) {
+        continue;
+      }
+      Undo u = make_move(board, m);
+      const bool legal = !is_check(board, flip_side(board.side_to_move));
+      undo_move(board, u);
+      if (legal) {
+        moves[write_idx++] = moves[i];
       }
     }
-    move_count = w;
+    move_count = write_idx;
   }
 
-  // Sort captures/promotions
   sort_moves(board, moves, move_count, 0);
 
   // Hard cap noisy moves per node when not in check to avoid explosion

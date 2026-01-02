@@ -2,6 +2,10 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/evaluation_params.hpp"
+<<<<<<< HEAD
+=======
+#include "chess/moves.hpp"
+>>>>>>> nnue_version
 #include "chess/search.hpp"
 #include "chess/search_params.hpp"
 
@@ -11,6 +15,10 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+<<<<<<< HEAD
+=======
+#include <stdexcept>
+>>>>>>> nnue_version
 #include <string>
 #include <thread>
 #include <vector>
@@ -18,6 +26,12 @@
 namespace py = pybind11;
 using namespace pybind11::literals;
 
+<<<<<<< HEAD
+=======
+// From nnue_module.cpp
+void bind_nnue(py::module_& m);
+
+>>>>>>> nnue_version
 namespace {
 
 template <typename T>
@@ -42,6 +56,25 @@ void assign_array_if_present(const py::dict& src, const char* key,
   }
 }
 
+<<<<<<< HEAD
+=======
+template <std::size_t N>
+void assign_array_double_if_present(const py::dict& src, const char* key,
+                                    std::array<double, N>& target) {
+  if (src.contains(key)) {
+    auto seq = py::cast<py::sequence>(src[key]);
+    if (seq.size() > static_cast<py::ssize_t>(N)) {
+      throw std::invalid_argument(
+          std::string(key) + " must have <= " + std::to_string(N) + " elements");
+    }
+    const std::size_t limit = static_cast<std::size_t>(seq.size());
+    for (std::size_t i = 0; i < limit; ++i) {
+      target[i] = py::cast<double>(seq[i]);
+    }
+  }
+}
+
+>>>>>>> nnue_version
 struct PinPair {
   int base;
   int mobility;
@@ -113,10 +146,35 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.evaluation.early_queen_penalty);
     assign_if_present(ev, "flank_pawn_penalty",
                       params.evaluation.flank_pawn_penalty);
+<<<<<<< HEAD
+=======
+    assign_if_present(ev, "knight_mobility_scale",
+                      params.evaluation.knight_mobility_scale);
+    assign_if_present(ev, "bishop_mobility_scale",
+                      params.evaluation.bishop_mobility_scale);
+    assign_if_present(ev, "rook_mobility_scale",
+                      params.evaluation.rook_mobility_scale);
+    assign_if_present(ev, "queen_mobility_scale",
+                      params.evaluation.queen_mobility_scale);
+    assign_if_present(ev, "doubled_pawn_penalty",
+                      params.evaluation.doubled_pawn_penalty);
+    assign_if_present(ev, "isolated_pawn_penalty",
+                      params.evaluation.isolated_pawn_penalty);
+    assign_if_present(ev, "backward_pawn_penalty",
+                      params.evaluation.backward_pawn_penalty);
+>>>>>>> nnue_version
     assign_array_if_present(ev, "king_attack_weights",
                             params.evaluation.king_attack_weights);
     assign_array_if_present(ev, "threat_base", params.evaluation.threat_base);
 
+<<<<<<< HEAD
+=======
+    assign_array_double_if_present(ev, "phase_weights_mg",
+                                   params.evaluation.phase_weights_mg);
+    assign_array_double_if_present(ev, "phase_weights_eg",
+                                   params.evaluation.phase_weights_eg);
+
+>>>>>>> nnue_version
     if (ev.contains("bishop_pin_penalty")) {
       auto pair = parse_pin_pair(ev["bishop_pin_penalty"], "bishop_pin_penalty");
       params.evaluation.bishop_pin_penalty.base = pair.base;
@@ -257,6 +315,27 @@ py::object eval_fen_single(const std::string& fen,
   return py::dict("ok"_a = true, "cp"_a = res.cp);
 }
 
+<<<<<<< HEAD
+=======
+bool quiet_fen(const std::string& fen) {
+  chess::Board b = chess::initial_board(fen);
+  return chess::is_quiet_position(b, b.side_to_move);
+}
+
+py::list quiet_fens(const std::vector<std::string>& fens) {
+  py::list out;
+  for (const auto& fen : fens) {
+    try {
+      chess::Board b = chess::initial_board(fen);
+      out.append(py::bool_(chess::is_quiet_position(b, b.side_to_move)));
+    } catch (const std::exception& ex) {
+      out.append(py::none()); // signal parse error
+    }
+  }
+  return out;
+}
+
+>>>>>>> nnue_version
 struct SelfPlayOptions {
   int depth = 4;
   std::uint64_t movetime_ms = 0; // 0 means unused
@@ -271,6 +350,17 @@ struct SelfPlayResult {
   int games_played = 0;
 };
 
+<<<<<<< HEAD
+=======
+struct ArenaResult {
+  int wins = 0;
+  int losses = 0;
+  int draws = 0;
+  int games = 0;
+  double score = 0.0;
+};
+
+>>>>>>> nnue_version
 double game_outcome(chess::Board board) {
   const bool king_captured = board.king_captured != chess::PieceColor::None;
   const bool has_moves = chess::has_legal_moves(board, board.side_to_move);
@@ -362,11 +452,271 @@ SelfPlayResult selfplay_many(const std::vector<std::string>& start_fens,
   return out;
 }
 
+<<<<<<< HEAD
+=======
+ArenaResult arena_selfplay(const std::vector<std::string>& start_fens,
+                           const std::optional<py::dict>& base_params_dict,
+                           const std::optional<py::dict>& cand_params_dict,
+                           int games, int depth, int movetime_ms,
+                           int max_plies) {
+  if (games <= 0) {
+    throw std::invalid_argument("games must be positive");
+  }
+  if (start_fens.empty()) {
+    throw std::invalid_argument("start_fens must not be empty");
+  }
+  if ((depth <= 0 && movetime_ms <= 0) || (depth > 0 && movetime_ms > 0)) {
+    throw std::invalid_argument(
+        "exactly one of depth or movetime_ms must be set");
+  }
+  if (max_plies <= 0) {
+    throw std::invalid_argument("max_plies must be positive");
+  }
+
+  chess::EngineParams base_params = base_params_dict
+                                        ? params_from_dict(*base_params_dict)
+                                        : chess::default_engine_params();
+  chess::EngineParams cand_params =
+      cand_params_dict ? params_from_dict(*cand_params_dict) : base_params;
+
+  ArenaResult res{};
+  chess::Engine engine;
+
+  for (int game_idx = 0; game_idx < games; ++game_idx) {
+    const auto& fen =
+        start_fens[static_cast<std::size_t>(game_idx) % start_fens.size()];
+    chess::Board board = chess::initial_board(fen);
+    engine.reset_history(board);
+
+    const bool cand_white = (game_idx % 2 == 0);
+    int plies_played = 0;
+
+    while (plies_played < max_plies) {
+      const bool cand_to_move = (board.side_to_move == chess::SideToMove::White)
+                                    ? cand_white
+                                    : !cand_white;
+      if (cand_to_move) {
+        chess::set_engine_params(cand_params);
+      } else {
+        chess::set_engine_params(base_params);
+      }
+
+      chess::SearchParameters search_params{};
+      if (movetime_ms > 0) {
+        search_params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        chess::SearchLimits limits{};
+        limits.use_time = true;
+        limits.per_move = true;
+        limits.move_time_ms = static_cast<std::uint64_t>(movetime_ms);
+        search_params.limits = limits;
+      } else {
+        search_params.depth = depth;
+      }
+      search_params.alpha = -10000;
+      search_params.beta = 10000;
+
+      auto search_result = engine.search(board, search_params);
+      const bool has_move =
+          search_result.best_move.moving_pc != chess::OccupancyType::empty;
+      if (!has_move) {
+        break;
+      }
+
+      const bool irreversible =
+          chess::move_is_irreversible(search_result.best_move);
+      chess::make_move(board, search_result.best_move);
+      engine.record_position(board.position_key, irreversible);
+      ++plies_played;
+
+      if (board.is_terminal()) {
+        break;
+      }
+    }
+
+    const double outcome = game_outcome(board);
+    if (outcome > 0.5) {
+      res.wins += 1;
+    } else if (outcome < 0.5) {
+      res.losses += 1;
+    } else {
+      res.draws += 1;
+    }
+    res.games += 1;
+  }
+
+  const int total = res.wins + res.losses + res.draws;
+  res.score = (total > 0) ? (res.wins + 0.5 * res.draws) / total : 0.0;
+  return res;
+}
+
+struct ClockControls {
+  std::uint64_t wtime = 0;
+  std::uint64_t btime = 0;
+  std::uint64_t increment = 0;
+  int moves_to_go = 40;
+};
+
+ArenaResult arena_selfplay_clock(const std::vector<std::string>& start_fens,
+                                 const std::optional<py::dict>& base_params_dict,
+                                 const std::optional<py::dict>& cand_params_dict,
+                                 int games, int depth, int movetime_ms,
+                                 int max_plies, std::uint64_t wtime,
+                                 std::uint64_t btime, std::uint64_t increment,
+                                 int moves_to_go) {
+  if (games <= 0) {
+    throw std::invalid_argument("games must be positive");
+  }
+  if (start_fens.empty()) {
+    throw std::invalid_argument("start_fens must not be empty");
+  }
+  // Only enforce depth/movetime_ms check if not in clock mode
+  if ((wtime == 0 && btime == 0)) {
+    if ((depth <= 0 && movetime_ms <= 0) || (depth > 0 && movetime_ms > 0)) {
+      throw std::invalid_argument(
+          "exactly one of depth or movetime_ms must be set");
+    }
+  }
+  if (max_plies <= 0) {
+    throw std::invalid_argument("max_plies must be positive");
+  }
+
+  chess::EngineParams base_params = base_params_dict
+                                        ? params_from_dict(*base_params_dict)
+                                        : chess::default_engine_params();
+  chess::EngineParams cand_params =
+      cand_params_dict ? params_from_dict(*cand_params_dict) : base_params;
+
+  ArenaResult res{};
+  chess::Engine engine;
+
+  for (int game_idx = 0; game_idx < games; ++game_idx) {
+    const auto& fen =
+        start_fens[static_cast<std::size_t>(game_idx) % start_fens.size()];
+    chess::Board board = chess::initial_board(fen);
+    engine.reset_history(board);
+
+    const bool cand_white = (game_idx % 2 == 0);
+    int plies_played = 0;
+    std::uint64_t wtime_left = wtime;
+    std::uint64_t btime_left = btime;
+    int moves_left = moves_to_go;
+
+    while (plies_played < max_plies) {
+      // Periodically check for Python signals (KeyboardInterrupt)
+      if (plies_played % 4 == 0) { // check every 4 plies for efficiency
+        py::gil_scoped_acquire gil;
+        if (PyErr_CheckSignals() != 0) {
+          throw py::error_already_set();
+        }
+      }
+      const bool cand_to_move = (board.side_to_move == chess::SideToMove::White)
+                                    ? cand_white
+                                    : !cand_white;
+      if (cand_to_move) {
+        chess::set_engine_params(cand_params);
+      } else {
+        chess::set_engine_params(base_params);
+      }
+
+      chess::SearchParameters search_params{};
+      chess::SearchLimits limits{};
+      if (wtime > 0 || btime > 0) {
+        // If both clocks are zero, force a minimal search to avoid infinite
+        // search
+        if (wtime_left == 0 && btime_left == 0) {
+          search_params.depth = 1;
+        } else {
+          limits.use_time = true;
+          limits.per_move = false;
+          limits.white_time_ms = wtime_left;
+          limits.black_time_ms = btime_left;
+          limits.white_increment_ms = increment;
+          limits.black_increment_ms = increment;
+          limits.moves_to_go = moves_left;
+          search_params.limits = limits;
+          search_params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        }
+      } else if (movetime_ms > 0) {
+        search_params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        limits.use_time = true;
+        limits.per_move = true;
+        limits.move_time_ms = static_cast<std::uint64_t>(movetime_ms);
+        search_params.limits = limits;
+      } else {
+        search_params.depth = depth;
+      }
+      search_params.alpha = -10000;
+      search_params.beta = 10000;
+
+      auto before = std::chrono::steady_clock::now();
+      auto search_result = engine.search(board, search_params);
+      auto after = std::chrono::steady_clock::now();
+      std::uint64_t elapsed =
+          std::chrono::duration_cast<std::chrono::milliseconds>(after - before)
+              .count();
+
+      const bool has_move =
+          search_result.best_move.moving_pc != chess::OccupancyType::empty;
+      if (!has_move) {
+        break;
+      }
+
+      // Update clocks
+      if (wtime > 0 || btime > 0) {
+        if (board.side_to_move == chess::SideToMove::White) {
+          wtime_left =
+              (wtime_left > elapsed ? wtime_left - elapsed : 0) + increment;
+        } else {
+          btime_left =
+              (btime_left > elapsed ? btime_left - elapsed : 0) + increment;
+        }
+        if (moves_left > 1)
+          moves_left--;
+      }
+
+      const bool irreversible =
+          chess::move_is_irreversible(search_result.best_move);
+      chess::make_move(board, search_result.best_move);
+      engine.record_position(board.position_key, irreversible);
+      ++plies_played;
+
+      if (board.is_terminal()) {
+        break;
+      }
+    }
+
+    const double outcome = game_outcome(board);
+    if (outcome > 0.5) {
+      res.wins += 1;
+    } else if (outcome < 0.5) {
+      res.losses += 1;
+    } else {
+      res.draws += 1;
+    }
+    res.games += 1;
+  }
+
+  const int total = res.wins + res.losses + res.draws;
+  res.score = (total > 0) ? (res.wins + 0.5 * res.draws) / total : 0.0;
+  return res;
+}
+>>>>>>> nnue_version
 } // namespace
 
 PYBIND11_MODULE(skaks_eval, m) {
   m.doc() = "skaks evaluation bindings";
 
+<<<<<<< HEAD
+=======
+  bind_nnue(m);
+
+  m.def("is_quiet", &quiet_fen, py::arg("fen"),
+        "Return True if side-to-move is not in check and has no captures,"
+        " promotions, castling, en-passant, or checking moves.");
+  m.def("is_quiet_batch", &quiet_fens, py::arg("fens"),
+        "Vectorized is_quiet; returns list of bool, None on parse errors.");
+
+>>>>>>> nnue_version
   m.def("eval_fens", &eval_fens, py::arg("fens"),
         py::arg("params") = std::nullopt, py::arg("threads") = 0,
         "Evaluate many FENs in parallel. params is an optional dict with"
@@ -397,4 +747,32 @@ PYBIND11_MODULE(skaks_eval, m) {
       py::arg("max_plies") = 160, py::arg("sample_stride") = 4,
       "Run internal self-play over start_fens and return sampled FENs."
       " Exactly one of depth or movetime_ms must be positive.");
+<<<<<<< HEAD
+=======
+
+  m.def(
+      "arena",
+      [](const std::vector<std::string>& start_fens,
+         const std::optional<py::dict>& base_params,
+         const std::optional<py::dict>& cand_params, int games, int depth,
+         int movetime_ms, int max_plies, std::uint64_t wtime,
+         std::uint64_t btime, std::uint64_t increment, int moves_to_go) {
+        auto res = arena_selfplay_clock(start_fens, base_params, cand_params,
+                                        games, depth, movetime_ms, max_plies,
+                                        wtime, btime, increment, moves_to_go);
+        return py::dict("score"_a = res.score, "wins"_a = res.wins,
+                        "losses"_a = res.losses, "draws"_a = res.draws,
+                        "games"_a = res.games);
+      },
+      py::arg("start_fens"), py::arg("base_params") = std::nullopt,
+      py::arg("cand_params") = std::nullopt, py::arg("games") = 20,
+      py::arg("depth") = 4, py::arg("movetime_ms") = 0,
+      py::arg("max_plies") = 160, py::arg("wtime") = 0, py::arg("btime") = 0,
+      py::arg("increment") = 0, py::arg("moves_to_go") = 40,
+      "Run baseline-vs-candidate arena with clock controls. Baseline defaults "
+      "to the"
+      " built-in params unless base_params is provided; cand_params overrides"
+      " the candidate (fallbacks to baseline). Exactly one of depth or"
+      " movetime_ms or clock must be positive.");
+>>>>>>> nnue_version
 }

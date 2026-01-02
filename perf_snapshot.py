@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Capture skaks version info and perf snapshots for a handful of FENs."""
 
+import argparse
 import datetime
 import os
 import shutil
@@ -61,6 +62,10 @@ def run_command(args):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Capture skaks perf snapshots")
+    parser.add_argument("--nnue", help="Path to NNUE file to use")
+    args = parser.parse_args()
+
     binary = locate_skaks()
     timestamp = datetime.datetime.now().isoformat(timespec="seconds")
 
@@ -69,6 +74,8 @@ def main():
     lines.append(f"binary: {binary}")
 
     version_output = run_command([binary, "-vv"]).stdout.strip()
+    if args.nnue:
+        version_output += f" NNUE: {args.nnue}"
     lines.append("--- version ---")
     lines.extend(version_output.splitlines())
 
@@ -85,6 +92,8 @@ def main():
                 "--fen",
                 fen,
             ]
+            if args.nnue:
+                cmd.extend(["--nnue", args.nnue])
             result = run_command(cmd)
             lines.append(f"[case] {name}")
             lines.extend(result.stdout.strip().splitlines())

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chess/board.hpp"
+#include "chess/eval_mode.hpp"
 #include "chess/history.hpp"
 #include "chess/search.hpp"
 #include "chess/transposition_table.hpp"
@@ -22,8 +23,13 @@ public:
 
   Engine();
 
-  [[nodiscard]] SearchResult search(Board& board, const SearchParameters& params);
+  [[nodiscard]] SearchResult search(Board& board,
+                                    const SearchParameters& params);
   [[nodiscard]] int evaluate(const Board& board) const;
+  void set_evaluation_mode(EvaluationMode mode);
+  [[nodiscard]] EvaluationMode evaluation_mode() const {
+    return eval_mode_;
+  }
 
   [[nodiscard]] SearchSession create_session(Board& board);
 
@@ -38,6 +44,7 @@ public:
 
 private:
   EvaluationConfig eval_config_;
+  EvaluationMode eval_mode_ = EvaluationMode::Native;
   MoveHistory history_;
   TranspositionTable tt_;
 };

@@ -1,0 +1,28 @@
+Evaluating baseline performance against external opponent...Baseline score=0.000 WLD=0/20/0
+[BATCH START] iter=1 cand=1/12 games=20 depth=5 external=True opponent=sunfish
+| ♔                iter 1/1 cand 1/12 repeat 1/1 t=0.0s/  ♕               iter 1/1 cand 1/12 repeat 1/1 t=11.0s✓ iter=1 cand=1/12 score=0.175 WLD=0/13/7 elo~-269.4 time=11.0s
+[BATCH START] iter=1 cand=2/12 games=20 depth=5 external=True opponent=sunfish
+-   ♖              iter 1/1 cand 2/12 repeat 1/1 t=0.0s\    ♗             iter 1/1 cand 2/12 repeat 1/1 t=9.4s✓ iter=1 cand=2/12 score=0.150 WLD=0/14/6 elo~-301.3 time=9.3s
+[BATCH START] iter=1 cand=3/12 games=20 depth=5 external=True opponent=sunfish
+|     ♘            iter 1/1 cand 3/12 repeat 1/1 t=0.0s/      ♙           iter 1/1 cand 3/12 repeat 1/1 t=10.1s✓ iter=1 cand=3/12 score=0.075 WLD=1/18/1 elo~-436.4 time=10.0s
+[BATCH START] iter=1 cand=4/12 games=20 depth=5 external=True opponent=sunfish
+-       ♚          iter 1/1 cand 4/12 repeat 1/1 t=0.0s\        ♛         iter 1/1 cand 4/12 repeat 1/1 t=10.6s✓ iter=1 cand=4/12 score=0.150 WLD=0/14/6 elo~-301.3 time=10.6s
+[BATCH START] iter=1 cand=5/12 games=20 depth=5 external=True opponent=sunfish
+|         ♜        iter 1/1 cand 5/12 repeat 1/1 t=0.0s/          ♝       iter 1/1 cand 5/12 repeat 1/1 t=10.1s✓ iter=1 cand=5/12 score=0.150 WLD=0/14/6 elo~-301.3 time=10.0s
+[BATCH START] iter=1 cand=6/12 games=20 depth=5 external=True opponent=sunfish
+-           ♞      iter 1/1 cand 6/12 repeat 1/1 t=0.0s\            ♟     iter 1/1 cand 6/12 repeat 1/1 t=9.9s✓ iter=1 cand=6/12 score=0.200 WLD=1/13/6 elo~-240.8 time=9.8s
+[BATCH START] iter=1 cand=7/12 games=20 depth=5 external=True opponent=sunfish
+|             ♔    iter 1/1 cand 7/12 repeat 1/1 t=0.0s/              ♕   iter 1/1 cand 7/12 repeat 1/1 t=9.5s✓ iter=1 cand=7/12 score=0.100 WLD=0/16/4 elo~-381.7 time=9.4s
+[BATCH START] iter=1 cand=8/12 games=20 depth=5 external=True opponent=sunfish
+-               ♖  iter 1/1 cand 8/12 repeat 1/1 t=0.0s\                ♗ iter 1/1 cand 8/12 repeat 1/1 t=10.1s✓ iter=1 cand=8/12 score=0.125 WLD=0/15/5 elo~-338.0 time=10.0s
+[BATCH START] iter=1 cand=9/12 games=20 depth=5 external=True opponent=sunfish
+| ♘                iter 1/1 cand 9/12 repeat 1/1 t=0.0s/  ♙               iter 1/1 cand 9/12 repeat 1/1 t=9.9s✓ iter=1 cand=9/12 score=0.075 WLD=0/17/3 elo~-436.4 time=9.8s
+[BATCH START] iter=1 cand=10/12 games=20 depth=5 external=True opponent=sunfish
+-   ♚              iter 1/1 cand 10/12 repeat 1/1 t=0.0s\    ♛             iter 1/1 cand 10/12 repeat 1/1 t=10.4s✓ iter=1 cand=10/12 score=0.200 WLD=0/12/8 elo~-240.8 time=10.3s
+[BATCH START] iter=1 cand=11/12 games=20 depth=5 external=True opponent=sunfish
+|     ♜            iter 1/1 cand 11/12 repeat 1/1 t=0.0s/      ♝           iter 1/1 cand 11/12 repeat 1/1 t=10.4s✓ iter=1 cand=11/12 score=0.200 WLD=0/12/8 elo~-240.8 time=10.3s
+[BATCH START] iter=1 cand=12/12 games=20 depth=5 external=True opponent=sunfish
+-       ♞          iter 1/1 cand 12/12 repeat 1/1 t=0.0s\        ♟         iter 1/1 cand 12/12 repeat 1/1 t=11.0s✓ iter=1 cand=12/12 score=0.225 WLD=0/11/9 elo~-214.8 time=11.0s
+🏁 Best score=0.500, params at /Users/ktxc111/work/repos/skaks/logs/EXPLORE_best.yaml
+(baseline-decay=0.05)
+→ Wrote best params to /Users/ktxc111/work/repos/skaks/logs/EXPLORE_best.yaml

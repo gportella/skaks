@@ -6,9 +6,15 @@
 namespace chess {
 
 inline constexpr std::string_view kEngineName = "skaks";
+<<<<<<< HEAD
 inline constexpr std::string_view kEngineVersion = "0.9.5";
 
 inline constexpr std::array<std::string_view, 16> kOptimizationFeatures{
+=======
+inline constexpr std::string_view kEngineVersion = "0.11.0";
+
+inline constexpr std::array<std::string_view, 18> kOptimizationFeatures{
+>>>>>>> nnue_version
     "Bitboard move generation with precomputed attack masks",
     "Alpha-beta search with transposition table caching",
     "Zobrist hashing for incremental board state keys",
@@ -25,7 +31,36 @@ inline constexpr std::array<std::string_view, 16> kOptimizationFeatures{
     "MVV-LVA and SEE for capture move ordering",
     "Threaded UCI search support, with pondering",
     "Parammeter loading from external file",
+<<<<<<< HEAD
+=======
+    "NNUE evaluation function, self play training infrastructure, and network "
+    "quantization",
+    "SIMD optimizations for bitboard operations"
+>>>>>>> nnue_version
 
 };
 
 } // namespace chess
+
+// Detect whether NEON headers are available at compile time (for aarch64).
+#if defined(__aarch64__)
+#if defined(__has_include)
+#if __has_include(<arm_neon.h>)
+namespace chess {
+inline constexpr bool kCompiledWithNeon = true;
+} // namespace chess
+#else
+namespace chess {
+inline constexpr bool kCompiledWithNeon = false;
+} // namespace chess
+#endif
+#else
+namespace chess {
+inline constexpr bool kCompiledWithNeon = false;
+} // namespace chess
+#endif
+#else
+namespace chess {
+inline constexpr bool kCompiledWithNeon = false;
+} // namespace chess
+#endif

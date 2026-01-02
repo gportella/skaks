@@ -188,10 +188,14 @@ std::array<uint32_t, kMaxMovementCount>
 generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count);
 std::array<uint32_t, kMaxMovementCount>
 generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count);
+bool is_quiet_position(Board& board, SideToMove stm);
+inline bool is_quiet_position(Board& board) {
+  return is_quiet_position(board, board.side_to_move);
+}
 void sort_moves(
-    const Board& board, std::array<uint32_t, kMaxMovementCount>& moves,
-    uint16_t move_count, uint32_t tt_code = 0,
-    const KillerTable* killers = nullptr,
-    const std::array<std::array<int, 64>, 64>* history_heuristic = nullptr,
-    int ply = -1);
+  const Board& board, std::array<uint32_t, kMaxMovementCount>& moves,
+  uint16_t move_count, uint32_t tt_code = 0,
+  const KillerTable* killers = nullptr,
+  const std::array<std::array<int, 64>, 64>* history_heuristic = nullptr,
+  int ply = -1, uint32_t counter_move_code = 0);
 } // namespace chess

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chess/eval_terms.hpp"
 #include "chess/types.hpp"
 
 #include <array>
@@ -36,6 +37,13 @@ struct EvaluationParams {
   int castle_urgency = 0;
   int early_queen_penalty = 0;
   int flank_pawn_penalty = 0;
+  int knight_mobility_scale = 0;
+  int bishop_mobility_scale = 0;
+  int rook_mobility_scale = 0;
+  int queen_mobility_scale = 0;
+  int doubled_pawn_penalty = 0;
+  int isolated_pawn_penalty = 0;
+  int backward_pawn_penalty = 0;
   std::array<int, kPieceCount> king_attack_weights{};
   std::array<int, static_cast<std::size_t>(OccupancyType::bK) + 1> threat_base{};
   PinPenalty bishop_pin_penalty{};
@@ -43,6 +51,10 @@ struct EvaluationParams {
   PinPenalty knight_pin_penalty{};
   PinPenalty pawn_pin_straight_penalty{};
   PinPenalty pawn_pin_diagonal_penalty{};
+  std::array<double, static_cast<std::size_t>(OccupancyType::bK) + 1>
+      reserved{}; // placeholder to preserve layout
+  std::array<float, static_cast<std::size_t>(TermId::Count)> phase_weights_mg{};
+  std::array<float, static_cast<std::size_t>(TermId::Count)> phase_weights_eg{};
 };
 
 inline EvaluationParams default_evaluation_params() {
@@ -71,6 +83,13 @@ inline EvaluationParams default_evaluation_params() {
   params.castle_urgency = 20;
   params.early_queen_penalty = 16;
   params.flank_pawn_penalty = 8;
+  params.knight_mobility_scale = 4;
+  params.bishop_mobility_scale = 5;
+  params.rook_mobility_scale = 3;
+  params.queen_mobility_scale = 1;
+  params.doubled_pawn_penalty = 12;
+  params.isolated_pawn_penalty = 16;
+  params.backward_pawn_penalty = 10;
   params.king_attack_weights = {14, 32, 30, 44, 74, 20, 14, 32, 30, 44, 74, 20};
   params.threat_base = {0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540};
   params.bishop_pin_penalty = {12, 2};
@@ -78,6 +97,10 @@ inline EvaluationParams default_evaluation_params() {
   params.knight_pin_penalty = {15, 0};
   params.pawn_pin_straight_penalty = {6, 2};
   params.pawn_pin_diagonal_penalty = {10, 2};
+  for (std::size_t i = 0; i < params.phase_weights_mg.size(); ++i) {
+    params.phase_weights_mg[i] = 1.0f;
+    params.phase_weights_eg[i] = 1.0f;
+  }
   return params;
 }
 

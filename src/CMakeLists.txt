@@ -1,11 +1,13 @@
 add_library(chess_engine_core STATIC
   attack_masks.cpp
   board.cpp
+  complexity.cpp
   demo_debug.cpp
   engine.cpp
   exchange.cpp
   cli.cpp
   moves.cpp
+    move_ordering.cpp
   pins.cpp
   perf.cpp
   polyglot.cpp
@@ -15,11 +17,27 @@ add_library(chess_engine_core STATIC
   search.cpp
   time_manager.cpp
   zobrist.cpp
+  nnue.cpp
+  sf_nnue/misc.cpp
+  sf_nnue/nnue.cpp
+  sf_eval.cpp
+)
+
+set_source_files_properties(sf_nnue/nnue.cpp PROPERTIES
+  COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-sign-conversion;-Wno-implicit-int-conversion;-Wno-vla-cxx-extension"
+  COMPILE_DEFINITIONS "USE_NEON;IS_64BIT=1"
+)
+
+# SF NNUE source originates from Stockfish and uses legacy casts; relax a few
+# warnings locally to keep the main target strict.
+set_source_files_properties(sf_nnue/nnue.cpp PROPERTIES
+  COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-implicit-int-conversion"
 )
 
 target_include_directories(chess_engine_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/sf_nnue
     ${SKAKS_GENERATED_INCLUDE_DIR}
 )
 
