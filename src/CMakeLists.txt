@@ -7,6 +7,7 @@ add_library(chess_engine_core STATIC
   exchange.cpp
   cli.cpp
   moves.cpp
+    move_ordering.cpp
   pins.cpp
   perf.cpp
   polyglot.cpp

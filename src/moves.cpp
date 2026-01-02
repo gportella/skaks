@@ -58,7 +58,7 @@ void sort_moves(const Board& board,
                 uint16_t move_count, uint32_t tt_code,
                 const KillerTable* killers,
                 const std::array<std::array<int, 64>, 64>* history_heuristic,
-                int ply) {
+                int ply, uint32_t counter_move_code) {
   std::array<MoveKey, kMaxMovementCount> keys;
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -89,6 +89,9 @@ void sort_moves(const Board& board,
           const auto from = static_cast<std::size_t>(move_from(m));
           const auto to = static_cast<std::size_t>(move_to(m));
           key += (*history_heuristic)[from][to];
+        }
+        if (counter_move_code != 0 && m == counter_move_code) {
+          key += 30'000;
         }
       }
     }

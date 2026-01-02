@@ -3426,3 +3426,133 @@ Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
 [perf] iter=2/3 nodes=2916 elapsed_ms=2 nps=1458000
 [perf] iter=3/3 nodes=2916 elapsed_ms=2 nps=1458000
 [perf] total_nodes=8748 total_ms=7 total_nps=1249714 avg_nodes=2916 avg_ms=2
+=== perf snapshot 2026-01-02T18:24:35 ===
+binary: /usr/local/bin/skaks
+--- version ---
+skaks version 0.11.0
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parammeter loading from external file
+ - NNUE evaluation function, self play training infrastructure, and network quantization
+ - SIMD optimizations for bitboard operations
+ - Compiled with NEON eval_linear path
+--- perf ---
+[case] startpos
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=1 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=41 elapsed_ms=1 nps=41000
+[perf] iter=2/3 nodes=41 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=41 elapsed_ms=0 nps=0
+[perf] total_nodes=123 total_ms=1 total_nps=123000 avg_nodes=41 avg_ms=0
+[case] balanced_midgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=1 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=110 elapsed_ms=3 nps=36666
+[perf] iter=2/3 nodes=110 elapsed_ms=1 nps=110000
+[perf] iter=3/3 nodes=110 elapsed_ms=1 nps=110000
+[perf] total_nodes=330 total_ms=5 total_nps=66000 avg_nodes=110 avg_ms=1
+[case] simplified_endgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=1 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=20 elapsed_ms=1 nps=20000
+[perf] iter=2/3 nodes=20 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=20 elapsed_ms=0 nps=0
+[perf] total_nodes=60 total_ms=1 total_nps=60000 avg_nodes=20 avg_ms=0
+[case] startpos
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=2 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=183 elapsed_ms=1 nps=183000
+[perf] iter=2/3 nodes=183 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=183 elapsed_ms=0 nps=0
+[perf] total_nodes=549 total_ms=1 total_nps=549000 avg_nodes=183 avg_ms=0
+[case] balanced_midgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=2 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=696 elapsed_ms=3 nps=232000
+[perf] iter=2/3 nodes=696 elapsed_ms=3 nps=232000
+[perf] iter=3/3 nodes=696 elapsed_ms=2 nps=348000
+[perf] total_nodes=2088 total_ms=8 total_nps=261000 avg_nodes=696 avg_ms=2
+[case] simplified_endgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=2 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=76 elapsed_ms=1 nps=76000
+[perf] iter=2/3 nodes=76 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=76 elapsed_ms=0 nps=0
+[perf] total_nodes=228 total_ms=1 total_nps=228000 avg_nodes=76 avg_ms=0
+[case] startpos
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=3 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=1083 elapsed_ms=3 nps=361000
+[perf] iter=2/3 nodes=1083 elapsed_ms=2 nps=541500
+[perf] iter=3/3 nodes=1083 elapsed_ms=2 nps=541500
+[perf] total_nodes=3249 total_ms=7 total_nps=464142 avg_nodes=1083 avg_ms=2
+[case] balanced_midgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=3 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=5422 elapsed_ms=26 nps=208538
+[perf] iter=2/3 nodes=5422 elapsed_ms=64 nps=84718
+[perf] iter=3/3 nodes=5422 elapsed_ms=23 nps=235739
+[perf] total_nodes=16266 total_ms=113 total_nps=143946 avg_nodes=5422 avg_ms=37
+[case] simplified_endgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=3 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=290 elapsed_ms=4 nps=72500
+[perf] iter=2/3 nodes=290 elapsed_ms=1 nps=290000
+[perf] iter=3/3 nodes=290 elapsed_ms=0 nps=0
+[perf] total_nodes=870 total_ms=5 total_nps=174000 avg_nodes=290 avg_ms=1
+[case] startpos
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=4 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=2365 elapsed_ms=11 nps=215000
+[perf] iter=2/3 nodes=2365 elapsed_ms=10 nps=236500
+[perf] iter=3/3 nodes=2365 elapsed_ms=6 nps=394166
+[perf] total_nodes=7095 total_ms=27 total_nps=262777 avg_nodes=2365 avg_ms=9
+[case] balanced_midgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=4 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=9522 elapsed_ms=35 nps=272057
+[perf] iter=2/3 nodes=9522 elapsed_ms=50 nps=190440
+[perf] iter=3/3 nodes=9522 elapsed_ms=48 nps=198375
+[perf] total_nodes=28566 total_ms=133 total_nps=214781 avg_nodes=9522 avg_ms=44
+[case] simplified_endgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=4 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=515 elapsed_ms=2 nps=257500
+[perf] iter=2/3 nodes=515 elapsed_ms=0 nps=0
+[perf] iter=3/3 nodes=515 elapsed_ms=0 nps=0
+[perf] total_nodes=1545 total_ms=2 total_nps=772500 avg_nodes=515 avg_ms=0
+[case] startpos
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=8 iterations=3 fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] iter=1/3 nodes=39680 elapsed_ms=126 nps=314920
+[perf] iter=2/3 nodes=39680 elapsed_ms=117 nps=339145
+[perf] iter=3/3 nodes=39680 elapsed_ms=125 nps=317440
+[perf] total_nodes=119040 total_ms=368 total_nps=323478 avg_nodes=39680 avg_ms=122
+[case] balanced_midgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=8 iterations=3 fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] iter=1/3 nodes=252005 elapsed_ms=1138 nps=221445
+[perf] iter=2/3 nodes=252005 elapsed_ms=918 nps=274515
+[perf] iter=3/3 nodes=252005 elapsed_ms=896 nps=281255
+[perf] total_nodes=756015 total_ms=2952 total_nps=256102 avg_nodes=252005 avg_ms=984
+[case] simplified_endgame
+Polyglot book loaded from /Users/ktxc111/work/repos/skaks/book/baron30.bin
+[perf] depth=8 iterations=3 fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] iter=1/3 nodes=2917 elapsed_ms=4 nps=729250
+[perf] iter=2/3 nodes=2917 elapsed_ms=4 nps=729250
+[perf] iter=3/3 nodes=2917 elapsed_ms=3 nps=972333
+[perf] total_nodes=8751 total_ms=11 total_nps=795545 avg_nodes=2917 avg_ms=3

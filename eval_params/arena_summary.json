@@ -1,16 +1,16 @@
 {
   "completed": 20,
   "elo": {
-    "actual_score": 9.5,
-    "delta": 3.5940801059426164,
+    "actual_score": 10.5,
+    "delta": 23.594080105942616,
     "draws": 19,
     "expected_score": 9.32029599470287,
     "games": 20,
-    "losses": 1,
-    "new": 2579.942275632624,
+    "losses": 0,
+    "new": 2599.942275632624,
     "opponent": 2600.0,
     "start": 2576.348195526681,
-    "wins": 0
+    "wins": 1
   },
   "failures": 0,
   "games": 20,
@@ -22,9 +22,9 @@
     "clock": null,
     "depth": 6,
     "engine": "skaks",
-    "engine_eval": "sunfish",
+    "engine_eval": null,
     "engine_nnue": null,
-    "engine_params": null,
+    "engine_params": "tuning/best_params_optimized.yaml",
     "handicap_depth": 3,
     "handicap_enabled": true,
     "handicap_factor": 0.65,
@@ -44,9 +44,9 @@
   },
   "summary": {
     "draw": 19,
-    "skaks": 0,
-    "sunfish": 1,
+    "skaks": 1,
+    "sunfish": 0,
     "unknown": 0
   },
-  "timing_sec": 7.264443999999912
+  "timing_sec": 12.067370875000051
 }

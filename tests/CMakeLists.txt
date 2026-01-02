@@ -18,6 +18,7 @@ add_executable(chess_engine_tests
   engine_tests.cpp
   incremental_tests.cpp
   move_tests.cpp
+  move_ordering_tests.cpp
   scoring_tests.cpp
   attack_tests.cpp
   exchange_tests.cpp
