@@ -19,6 +19,7 @@
 #include <deque>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -375,7 +376,22 @@ struct LazySmpTask {
   bool has_parent_move = false;
   Move parent_move_storage{};
   std::atomic<bool>* abort_flag = nullptr;
+
+  static void* operator new(std::size_t size) {
+    return ::operator new(size, std::align_val_t{alignof(LazySmpTask)});
+  }
+
+  static void operator delete(void* ptr) noexcept {
+    ::operator delete(ptr, std::align_val_t{alignof(LazySmpTask)});
+  }
+
+  static void operator delete(void* ptr, std::size_t size) noexcept {
+    ::operator delete(ptr, size, std::align_val_t{alignof(LazySmpTask)});
+  }
 };
+
+static_assert(alignof(LazySmpTask) >= alignof(NNUEdata),
+              "LazySmpTask must satisfy NNUE alignment requirements");
 
 struct LazySmpContext {
   std::mutex queue_mutex;
@@ -1046,11 +1062,14 @@ SearchResult search_position(Board& board, SideToMove stm,
   scratch.local_abort = nullptr;
   scratch.thread = tls_lazy_thread;
 
-  SfNnueStack nnue_stack;
-  ScopedNnueThreadContext nnue_guard(sf_nnue_active() ? &nnue_stack : nullptr);
+  std::unique_ptr<SfNnueStack> nnue_stack;
+  SfNnueStack* nnue_stack_ptr = nullptr;
   if (sf_nnue_active()) {
-    nnue_stack.reset();
+    nnue_stack = std::make_unique<SfNnueStack>();
+    nnue_stack->reset();
+    nnue_stack_ptr = nnue_stack.get();
   }
+  ScopedNnueThreadContext nnue_guard(nnue_stack_ptr);
 
   double root_complexity_hint = 0.0;
   if (params.time_manager) {

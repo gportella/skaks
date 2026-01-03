@@ -181,12 +181,18 @@ const NNUEdata& SfNnueStack::current_data() const {
 
 std::array<NNUEdata*, 3> SfNnueStack::pointer_triplet() {
   NNUEdata* current = &stack_[top_];
+  NNUEdata* prev = current;
+  NNUEdata* prev_prev = current;
+  if (top_ > 0) {
+    prev = &stack_[top_ - 1];
+    prev_prev = (top_ > 1) ? &stack_[top_ - 2] : prev;
+  }
   if (force_refresh_[top_]) {
     force_refresh_[top_] = false;
-    return {current, nullptr, nullptr};
+    clear_entry_impl(*current);
+    prev = current;
+    prev_prev = current;
   }
-  NNUEdata* prev = (top_ > 0) ? &stack_[top_ - 1] : nullptr;
-  NNUEdata* prev_prev = (top_ > 1) ? &stack_[top_ - 2] : nullptr;
   return {current, prev, prev_prev};
 }
 

@@ -82,9 +82,6 @@ uint32_t PieceToIndex[2][14] = {
     {0, 0, PS_B_QUEEN, PS_B_ROOK, PS_B_BISHOP, PS_B_KNIGHT, PS_B_PAWN, 0,
      PS_W_QUEEN, PS_W_ROOK, PS_W_BISHOP, PS_W_KNIGHT, PS_W_PAWN, 0}};
 
-// Version of the evaluation file
-static const uint32_t NnueVersion = 0x7AF32F16u;
-
 // Constants used in evaluation value calculation
 enum { FV_SCALE = 16, SHIFT = 6 };
 
@@ -1230,32 +1227,65 @@ static void permute_biases(int32_t* biases) {
 }
 #endif
 
-enum {
-  TransformerStart = 3 * 4 + 177,
-  NetworkStart = TransformerStart + 4 + 2 * 256 + 2 * 256 * 64 * 641
-};
+static constexpr uint32_t kVersionSunfish = 0x7AF32F16u;
+static constexpr uint32_t kVersionStockfish = 0x7AF32F20u;
+static constexpr uint32_t kTransformerHashSunfish = 0x5d69d7b8u;
+static constexpr uint32_t kTransformerHashStockfish = 0x8f2344b8u;
+static constexpr uint32_t kNetworkHashSunfish = 0x63337156u;
+static constexpr uint32_t kNetworkHashStockfish = 0x63116d7du;
+
+static constexpr size_t kLegacyTransformerStart = 3u * 4u + 177u;
+static constexpr size_t kTransformerHeaderSize = 4u;
+static constexpr size_t kTransformerBiasBytes = 2u * kHalfDimensions;
+static constexpr size_t kTransformerWeightBytes =
+    2u * kHalfDimensions * static_cast<size_t>(FtInDims);
+
+static size_t g_transformer_start = kLegacyTransformerStart;
 
 static bool verify_net(const void* evalData, size_t size) {
-  if (size != 21022697)
+  const char* d = (const char*)evalData;
+  const uint32_t version = readu_le_u32(d);
+  if (version != kVersionSunfish && version != kVersionStockfish)
     return false;
 
-  const char* d = (const char*)evalData;
-  if (readu_le_u32(d) != NnueVersion)
+  const uint32_t net_hash = readu_le_u32(d + 4);
+  if (net_hash != 0x3e5aa6eeU && net_hash != 0xec102ef2U)
     return false;
-  if (readu_le_u32(d + 4) != 0x3e5aa6eeU)
+
+  const uint32_t desc_len = readu_le_u32(d + 8);
+  if (static_cast<size_t>(desc_len) > size)
     return false;
-  if (readu_le_u32(d + 8) != 177)
+
+  const size_t transformer_start = 12u + static_cast<size_t>(desc_len);
+  if (transformer_start + kTransformerHeaderSize > size)
     return false;
-  if (readu_le_u32(d + TransformerStart) != 0x5d69d7b8)
+
+  const uint32_t transformer_hash = readu_le_u32(d + transformer_start);
+  if (transformer_hash != kTransformerHashSunfish &&
+      transformer_hash != kTransformerHashStockfish)
     return false;
-  if (readu_le_u32(d + NetworkStart) != 0x63337156)
+
+  const size_t network_start =
+      transformer_start + kTransformerHeaderSize + kTransformerBiasBytes +
+      kTransformerWeightBytes;
+
+  const size_t minimum_required =
+      network_start + 4u + 32u * 4u + 32u * 512u + 32u * 4u + 32u * 32u + 32u;
+  if (size < minimum_required)
     return false;
+
+  const uint32_t network_hash = readu_le_u32(d + network_start);
+  if (network_hash != kNetworkHashSunfish &&
+      network_hash != kNetworkHashStockfish)
+    return false;
+
+  g_transformer_start = transformer_start;
 
   return true;
 }
 
 static void init_weights(const void* evalData) {
-  const char* d = (const char*)evalData + TransformerStart + 4;
+  const char* d = (const char*)evalData + g_transformer_start + 4;
 
   // Read transformer
   for (unsigned i = 0; i < kHalfDimensions; i++, d += 2)

@@ -278,8 +278,13 @@ def _extra_args(
     threads: Optional[int] = None,
 ) -> Optional[list[str]]:
     argv: list[str] = []
-    if eval_mode:
-        argv.extend(["--eval", eval_mode])
+
+    resolved_eval = eval_mode
+    if resolved_eval is None and nnue_path and Path(nnue_path).suffix == ".nnue":
+        resolved_eval = "stockfish"
+
+    if resolved_eval:
+        argv.extend(["--eval", resolved_eval])
     if params_path:
         argv.extend(["--params", params_path])
     if nnue_path:

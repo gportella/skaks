@@ -470,21 +470,43 @@ bool load_sf_nnue(const std::string& path, std::string& error) {
   }
 
   // Basic header sanity check to fail fast on git-lfs pointers or wrong files.
-  // Accept either Stockfish-style magic "NNUE" or the sunfishNNUE variant
-  // that starts with NnueVersion (0x7AF32F16 little-endian).
+  // Accept the ASCII "NNUE" marker or Stockfish's version-coded headers
+  // (0x7AF32Fxx little-endian, including the sunfishNNUE variant).
   std::ifstream fin(path, std::ios::binary);
-  char magic[4] = {0, 0, 0, 0};
-  fin.read(magic, 4);
-  const uint32_t hdr_u32 =
-      static_cast<uint32_t>(static_cast<unsigned char>(magic[0])) |
-      (static_cast<uint32_t>(static_cast<unsigned char>(magic[1])) << 8) |
-      (static_cast<uint32_t>(static_cast<unsigned char>(magic[2])) << 16) |
-      (static_cast<uint32_t>(static_cast<unsigned char>(magic[3])) << 24);
-  const bool sf_magic = std::string_view(magic, 4) == "NNUE";
-  const bool sunfish_magic =
-      hdr_u32 == 0x7AF32F16u; // matches sunfishNNUE NnueVersion
-  if (!sf_magic && !sunfish_magic) {
-    error = "NNUE file header invalid (expected 'NNUE' or 0x7AF32F16)";
+  if (!fin) {
+    error = "NNUE file could not be opened";
+    return false;
+  }
+
+  std::array<char, 16> prefix{};
+  fin.read(prefix.data(), prefix.size());
+  const std::streamsize read_count = fin.gcount();
+  if (read_count < 4) {
+    error = "NNUE file header is truncated";
+    return false;
+  }
+
+  const std::string_view prefix_view(prefix.data(),
+                                     static_cast<std::size_t>(read_count));
+  const bool looks_like_lfs = prefix_view.starts_with("version ");
+  if (looks_like_lfs) {
+    error = "NNUE file appears to be a git-lfs pointer";
+    return false;
+  }
+
+  const auto hdr_u32 = static_cast<uint32_t>(static_cast<unsigned char>(prefix[0])) |
+                       (static_cast<uint32_t>(static_cast<unsigned char>(prefix[1])) << 8) |
+                       (static_cast<uint32_t>(static_cast<unsigned char>(prefix[2])) << 16) |
+                       (static_cast<uint32_t>(static_cast<unsigned char>(prefix[3])) << 24);
+  const bool sf_magic = std::string_view(prefix.data(), 4) == "NNUE";
+  const bool stockfish_magic = (hdr_u32 >> 8) == 0x007AF32Fu;
+  const bool sunfish_magic = hdr_u32 == 0x7AF32F16u;
+
+  if (!sf_magic && !stockfish_magic && !sunfish_magic) {
+    std::ostringstream oss;
+    oss << "NNUE file header 0x" << std::uppercase << std::hex << hdr_u32
+        << " is not recognized";
+    error = oss.str();
     return false;
   }
   try {
