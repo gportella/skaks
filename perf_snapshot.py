@@ -64,14 +64,23 @@ def run_command(args):
 def main():
     parser = argparse.ArgumentParser(description="Capture skaks perf snapshots")
     parser.add_argument("--nnue", help="Path to NNUE file to use")
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=0,
+        help="Search threads to use for perf runs (0 = engine default)",
+    )
     args = parser.parse_args()
 
     binary = locate_skaks()
     timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+    if args.threads < 0:
+        raise SystemExit("--threads must be non-negative")
 
     lines = []
     lines.append(f"=== perf snapshot {timestamp} ===")
     lines.append(f"binary: {binary}")
+    lines.append(f"threads: {args.threads}")
 
     version_output = run_command([binary, "-vv"]).stdout.strip()
     if args.nnue:
@@ -91,6 +100,8 @@ def main():
                 str(depth),
                 "--fen",
                 fen,
+                "--threads",
+                str(args.threads),
             ]
             if args.nnue:
                 cmd.extend(["--nnue", args.nnue])

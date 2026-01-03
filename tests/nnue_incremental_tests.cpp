@@ -1,7 +1,7 @@
 #include "chess/board.hpp"
 #include "chess/moves.hpp"
-#include "chess/nnue_incremental.hpp"
 #include "chess/nnue.hpp"
+#include "chess/nnue_incremental.hpp"
 #include "chess/types_io.hpp"
 
 #include <gtest/gtest.h>
@@ -65,8 +65,8 @@ TEST(NnueIncremental, CaptureDirtyPiece) {
 }
 
 TEST(NnueIncremental, PromotionCaptureDirtyPiece) {
-  Board board = initial_board(
-      "rnbq1rk1/4Pppp/8/8/8/8/PPPP1PPP/RNBQKBNR w KQ - 0 1");
+  Board board =
+      initial_board("rnbq1rk1/4Pppp/8/8/8/8/PPPP1PPP/RNBQKBNR w KQ - 0 1");
   SfNnueStack stack;
   stack.reset();
 
@@ -98,7 +98,8 @@ TEST(NnueIncremental, PromotionCaptureDirtyPiece) {
 }
 
 TEST(NnueIncremental, CastlingDirtyPieceOrdering) {
-  Board board = initial_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1");
+  Board board =
+      initial_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK2R w KQkq - 0 1");
   SfNnueStack stack;
   stack.reset();
 

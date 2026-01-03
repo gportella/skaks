@@ -129,8 +129,8 @@ void SfNnueStack::push_move(const Board& board, const Move& move,
         kingside ? cfg.rook_kingside_target : cfg.rook_queenside_target;
     const int rook_from_idx = static_cast<int>(to_index(rook_from));
     const int rook_to_idx = static_cast<int>(to_index(rook_to));
-    push_entry(make_piece_entry(rook_for_side(mover), rook_from_idx,
-                  rook_to_idx));
+    push_entry(
+        make_piece_entry(rook_for_side(mover), rook_from_idx, rook_to_idx));
   }
 
   dirty.dirtyNum = static_cast<int>(count);

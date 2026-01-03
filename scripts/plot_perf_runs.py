@@ -16,9 +16,11 @@ import matplotlib.pyplot as plt
 SNAPSHOT_RE = re.compile(r"=== perf snapshot (.+) ===")
 VERSION_RE = re.compile(r"skaks version\s+(.+)")
 CASE_RE = re.compile(r"\[case\]\s+(.+)")
-DEPTH_RE = re.compile(r"\[perf\]\s+depth=(\d+)\s+iterations=(\d+)")
-TOTAL_RE = re.compile(
-    r"\[perf\]\s+total_nodes=(\d+)\s+total_ms=(\d+)\s+total_nps=(\d+)\s+avg_nodes=(\d+)\s+avg_ms=(\d+)"
+THREAD_HEADER_RE = re.compile(r"threads:\s+(\d+)")
+THREAD_VALUE_RE = re.compile(r"threads=(\d+)")
+DEPTH_VALUE_RE = re.compile(r"depth=(\d+)")
+TOTAL_VALUES_RE = re.compile(
+    r"total_nodes=(\d+)\s+total_ms=(\d+)\s+total_nps=(\d+)\s+avg_nodes=(\d+)\s+avg_ms=(\d+)"
 )
 
 
@@ -28,6 +30,7 @@ class PerfRow:
     version: str
     case: str
     depth: int
+    threads: int
     total_nodes: int
     total_ms: int
     avg_nodes: int
@@ -40,6 +43,7 @@ def parse_log(path: Path) -> list[PerfRow]:
     version: str | None = None
     current_case: str | None = None
     current_depth: int | None = None
+    current_threads: int | None = None
     with path.open(encoding="utf-8") as handle:
         for raw in handle:
             line = raw.strip()
@@ -49,6 +53,11 @@ def parse_log(path: Path) -> list[PerfRow]:
             if snap:
                 snapshot_time = datetime.fromisoformat(snap.group(1))
                 version = None
+                current_threads = None
+                continue
+            thread_header = THREAD_HEADER_RE.match(line)
+            if thread_header:
+                current_threads = int(thread_header.group(1))
                 continue
             version_match = VERSION_RE.match(line)
             if version_match:
@@ -59,23 +68,29 @@ def parse_log(path: Path) -> list[PerfRow]:
                 current_case = case_match.group(1).strip()
                 current_depth = None
                 continue
-            depth_match = DEPTH_RE.match(line)
-            if depth_match:
-                current_depth = int(depth_match.group(1))
-                continue
-            total_match = TOTAL_RE.match(line)
+            if line.startswith("[perf]"):
+                depth_match = DEPTH_VALUE_RE.search(line)
+                if depth_match:
+                    current_depth = int(depth_match.group(1))
+                thread_value = THREAD_VALUE_RE.search(line)
+                if thread_value:
+                    current_threads = int(thread_value.group(1))
+            total_match = TOTAL_VALUES_RE.search(line)
             if (
                 total_match
                 and snapshot_time
                 and current_case
                 and current_depth is not None
             ):
+                if "suite=" in line and "case=" not in line:
+                    continue
                 rows.append(
                     PerfRow(
                         timestamp=snapshot_time,
                         version=version or "unknown",
                         case=current_case,
                         depth=current_depth,
+                        threads=current_threads if current_threads is not None else 0,
                         total_nodes=int(total_match.group(1)),
                         total_ms=int(total_match.group(2)),
                         avg_nodes=int(total_match.group(4)),
@@ -138,7 +153,15 @@ def plot_metric(
             xs = [snapshot_index[(r.version, r.timestamp)] for r in items]
             ys_raw = [getattr(r, metric) for r in items]
             ys = [max(value, 1) for value in ys_raw]
-            ax.plot(xs, ys, marker="o", label=f"depth={depth}")
+            label = f"depth={depth}"
+            thread_counter = Counter(r.threads for r in items)
+            if thread_counter:
+                representative, _ = max(
+                    thread_counter.items(), key=lambda kv: (kv[1], kv[0])
+                )
+                if representative:
+                    label += f" (T{representative})"
+            ax.plot(xs, ys, marker="o", label=label)
             for x, y, r in zip(xs, ys, items):
                 ax.annotate(
                     f"v{r.version}",

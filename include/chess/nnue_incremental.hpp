@@ -1,7 +1,6 @@
 #pragma once
 
 #include "chess/defaults.hpp"
-
 #include "nnue.h"
 
 #include <array>
