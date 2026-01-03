@@ -1,5 +1,6 @@
 #include "chess/attack_masks.hpp"
 #include "chess/board.hpp"
+#include "chess/build_config.hpp"
 #include "chess/cli.hpp"
 #include "chess/defaults.hpp"
 #include "chess/demo_debug.hpp"
@@ -203,24 +204,72 @@ int main(int argc, char** argv) {
 
   chess::set_engine_params(candidate_params);
 
-  if (cli.options.nnue_override) {
+  std::optional<std::filesystem::path> perf_auto_nnue;
+  if (!cli.options.nnue_override && cli.options.perf_mode) {
+    const std::vector<std::filesystem::path> candidates = {
+      std::filesystem::path("nn-c0ae49f08b40.nnue"),
+      std::filesystem::path(std::string(chess::config::kSourceRoot))
+        / "nn-c0ae49f08b40.nnue"
+    };
+    for (const auto& candidate : candidates) {
+      if (candidate.empty()) {
+        continue;
+      }
+      std::error_code exists_ec;
+      if (std::filesystem::exists(candidate, exists_ec) && !exists_ec) {
+        std::error_code abs_ec;
+        auto resolved = std::filesystem::absolute(candidate, abs_ec);
+        perf_auto_nnue = abs_ec ? candidate : resolved;
+        break;
+      }
+    }
+    if (!perf_auto_nnue) {
+      std::cerr << "[perf] No bundled NNUE weights found; using native evaluation" << "\n";
+    }
+  }
+
+  bool auto_loaded_perf_nnue = false;
+
+  if (cli.options.nnue_override || perf_auto_nnue) {
     std::string error;
-    const std::filesystem::path nnue_path{cli.options.nnue_path};
+    const std::string nnue_path_string =
+      cli.options.nnue_override ? cli.options.nnue_path : perf_auto_nnue->string();
+    const std::filesystem::path nnue_path{nnue_path_string};
     if (nnue_path.extension() == ".nnue") {
-      if (!chess::load_sf_nnue(cli.options.nnue_path, error)) {
+      if (!chess::load_sf_nnue(nnue_path_string, error)) {
         std::cerr << "Failed to load SF NNUE weights: " << error << "\n";
-        return EXIT_FAILURE;
+        if (cli.options.nnue_override) {
+          return EXIT_FAILURE;
+        }
+        chess::set_active_nnue(nullptr);
+      } else {
+        if (!cli.options.nnue_override) {
+          auto_loaded_perf_nnue = true;
+          std::cout << "[perf] Using Stockfish NNUE weights from "
+                    << nnue_path_string << "\n";
+        }
       }
     } else {
-      auto net = std::make_shared<chess::NnueNetwork>();
-      if (!chess::load_nnue_from_file(cli.options.nnue_path, *net, error)) {
-        std::cerr << "Failed to load NNUE weights: " << error << "\n";
-        return EXIT_FAILURE;
+      if (cli.options.nnue_override) {
+        auto net = std::make_shared<chess::NnueNetwork>();
+        if (!chess::load_nnue_from_file(nnue_path_string, *net, error)) {
+          std::cerr << "Failed to load NNUE weights: " << error << "\n";
+          return EXIT_FAILURE;
+        }
+        chess::set_active_nnue(std::move(net));
+      } else {
+        std::cerr << "[perf] Ignoring non-binary NNUE path suggestion: "
+                  << nnue_path_string << "\n";
+        chess::set_active_nnue(nullptr);
       }
-      chess::set_active_nnue(std::move(net));
     }
   } else {
     chess::set_active_nnue(nullptr);
+  }
+
+  chess::EvaluationMode effective_eval_mode = cli.options.eval_mode;
+  if (auto_loaded_perf_nnue && effective_eval_mode == chess::EvaluationMode::Native) {
+    effective_eval_mode = chess::EvaluationMode::Stockfish;
   }
 
   const auto resolve_thread_count = [](int requested) -> int {
@@ -238,7 +287,7 @@ int main(int argc, char** argv) {
 
   chess::Engine engine;
   engine.set_thread_count(thread_count);
-  engine.set_evaluation_mode(cli.options.eval_mode);
+  engine.set_evaluation_mode(effective_eval_mode);
 
   if (cli.options.arena_mode) {
     try {

@@ -29,6 +29,7 @@
 #else
 #define SKAKS_HAVE_NEON 0
 #endif
+#include <cmath>
 
 namespace {
 constexpr std::size_t kTermCount =
