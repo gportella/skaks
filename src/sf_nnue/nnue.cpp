@@ -1153,7 +1153,7 @@ static void read_output_weights(weight_t* w, const char* d) {
     b = (b << 1) | (b >> 1);
     c = (c & ~0x18) | (b & 0x18);
 #endif
-    w[c] = *d++;
+    w[c] = static_cast<weight_t>(*d++);
   }
 }
 
@@ -1193,7 +1193,7 @@ static const char* read_hidden_weights(weight_t* w, unsigned dims,
                                        const char* d) {
   for (unsigned r = 0; r < 32; r++)
     for (unsigned c = 0; c < dims; c++)
-      w[wt_idx(r, c, dims)] = *d++;
+      w[wt_idx(r, c, dims)] = static_cast<weight_t>(*d++);
 
   return d;
 }
