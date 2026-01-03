@@ -223,28 +223,6 @@ int eval_sf_backend(const Board& board, SfNnueStack* stack) {
   }
   int player = (board.side_to_move == SideToMove::White) ? 0 : 1;
 
-  // sunfish/SF NNUE expect the piece list from the POV of the player argument
-  // ("friend" pieces first). If Black to move, swap colors and mirror the
-  // board so the net sees its own pieces as White on the near ranks.
-  if (player == 1) {
-    auto swap_code = [](int code) {
-      if (code >= 1 && code <= 6)
-        return code + 6; // white piece -> black code
-      if (code >= 7 && code <= 12)
-        return code - 6; // black piece -> white code
-      return code;
-    };
-    for (std::size_t i = 0; i < pieces.size() && pieces[i] != 0; ++i) {
-      pieces[i] = swap_code(pieces[i]);
-      const int sq = squares[i];
-      const int file = sq & 7;
-      const int rank = sq >> 3;
-      const int mirrored_rank = 7 - rank;
-      squares[i] = mirrored_rank * 8 + file; // flip ranks only
-    }
-    player = 0; // after transform, present as "white to move"
-  }
-
   if (stack) {
     auto ptrs = stack->pointer_triplet();
     NNUEdata* nnue_ptrs[3] = {ptrs[0], ptrs[1], ptrs[2]};
@@ -494,10 +472,11 @@ bool load_sf_nnue(const std::string& path, std::string& error) {
     return false;
   }
 
-  const auto hdr_u32 = static_cast<uint32_t>(static_cast<unsigned char>(prefix[0])) |
-                       (static_cast<uint32_t>(static_cast<unsigned char>(prefix[1])) << 8) |
-                       (static_cast<uint32_t>(static_cast<unsigned char>(prefix[2])) << 16) |
-                       (static_cast<uint32_t>(static_cast<unsigned char>(prefix[3])) << 24);
+  const auto hdr_u32 =
+      static_cast<uint32_t>(static_cast<unsigned char>(prefix[0])) |
+      (static_cast<uint32_t>(static_cast<unsigned char>(prefix[1])) << 8) |
+      (static_cast<uint32_t>(static_cast<unsigned char>(prefix[2])) << 16) |
+      (static_cast<uint32_t>(static_cast<unsigned char>(prefix[3])) << 24);
   const bool sf_magic = std::string_view(prefix.data(), 4) == "NNUE";
   const bool stockfish_magic = (hdr_u32 >> 8) == 0x007AF32Fu;
   const bool sunfish_magic = hdr_u32 == 0x7AF32F16u;

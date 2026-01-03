@@ -207,10 +207,9 @@ int main(int argc, char** argv) {
   std::optional<std::filesystem::path> perf_auto_nnue;
   if (!cli.options.nnue_override && cli.options.perf_mode) {
     const std::vector<std::filesystem::path> candidates = {
-      std::filesystem::path("nn-c0ae49f08b40.nnue"),
-      std::filesystem::path(std::string(chess::config::kSourceRoot))
-        / "nn-c0ae49f08b40.nnue"
-    };
+        std::filesystem::path("nn-c0ae49f08b40.nnue"),
+        std::filesystem::path(std::string(chess::config::kSourceRoot)) /
+            "nn-c0ae49f08b40.nnue"};
     for (const auto& candidate : candidates) {
       if (candidate.empty()) {
         continue;
@@ -224,7 +223,9 @@ int main(int argc, char** argv) {
       }
     }
     if (!perf_auto_nnue) {
-      std::cerr << "[perf] No bundled NNUE weights found; using native evaluation" << "\n";
+      std::cerr
+          << "[perf] No bundled NNUE weights found; using native evaluation"
+          << "\n";
     }
   }
 
@@ -232,8 +233,9 @@ int main(int argc, char** argv) {
 
   if (cli.options.nnue_override || perf_auto_nnue) {
     std::string error;
-    const std::string nnue_path_string =
-      cli.options.nnue_override ? cli.options.nnue_path : perf_auto_nnue->string();
+    const std::string nnue_path_string = cli.options.nnue_override
+                                             ? cli.options.nnue_path
+                                             : perf_auto_nnue->string();
     const std::filesystem::path nnue_path{nnue_path_string};
     if (nnue_path.extension() == ".nnue") {
       if (!chess::load_sf_nnue(nnue_path_string, error)) {
@@ -268,7 +270,8 @@ int main(int argc, char** argv) {
   }
 
   chess::EvaluationMode effective_eval_mode = cli.options.eval_mode;
-  if (auto_loaded_perf_nnue && effective_eval_mode == chess::EvaluationMode::Native) {
+  if (auto_loaded_perf_nnue &&
+      effective_eval_mode == chess::EvaluationMode::Native) {
     effective_eval_mode = chess::EvaluationMode::Stockfish;
   }
 

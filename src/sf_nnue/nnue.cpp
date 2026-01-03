@@ -1265,9 +1265,8 @@ static bool verify_net(const void* evalData, size_t size) {
       transformer_hash != kTransformerHashStockfish)
     return false;
 
-  const size_t network_start =
-      transformer_start + kTransformerHeaderSize + kTransformerBiasBytes +
-      kTransformerWeightBytes;
+  const size_t network_start = transformer_start + kTransformerHeaderSize +
+                               kTransformerBiasBytes + kTransformerWeightBytes;
 
   const size_t minimum_required =
       network_start + 4u + 32u * 4u + 32u * 512u + 32u * 4u + 32u * 32u + 32u;

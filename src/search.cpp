@@ -15,6 +15,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
 #include <deque>
 #include <iostream>
@@ -23,7 +24,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-#include <condition_variable>
 
 #if defined(__APPLE__) || defined(__linux__)
 #define CHESS_USE_POSIX_THREADS 1
