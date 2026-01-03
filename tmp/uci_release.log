@@ -1,0 +1,159 @@
+in: uci
+out: id name Skaks
+out: id author G Portella
+out: option name Ponder type check default true
+out: option name Threads type spin default 4 min 1 max 14
+out: uciok
+in: isready
+out: readyok
+in: ucinewgame
+in: position startpos
+in: go depth 4
+out: info depth 0 seldepth 0 score cp 0 time 0 nodes 0 nps 0 pv c2c4 (book)
+out: bestmove c2c4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5
+in: go depth 4
+out: info depth 0 seldepth 0 score cp 0 time 0 nodes 0 nps 0 pv d2d4 (book)
+out: bestmove d2d4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 95 time 7 nodes 1640 nps 234285 pv b1a3
+out: bestmove b1a3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 86 time 19 nodes 7957 nps 418789 pv a3c2
+out: bestmove a3c2
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 192 time 7 nodes 2292 nps 327428 pv g1f3
+out: bestmove g1f3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 242 time 6 nodes 1564 nps 260666 pv c1g5
+out: bestmove c1g5
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 426 time 11 nodes 5336 nps 485090 pv g5f6
+out: bestmove g5f6
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6
+in: go depth 4
+out: info depth 3 seldepth 3 score cp 104 time 12 nodes 5722 nps 476833 pv c2d4 c6d4 d1d4
+out: bestmove c2d4 ponder c6d4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 104 time 4 nodes 1156 nps 289000 pv d1d4
+out: bestmove d1d4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 31 time 2 nodes 610 nps 305000 pv f3d4
+out: bestmove f3d4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 93 time 3 nodes 1111 nps 370333 pv e1c1
+out: bestmove e1c1
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -58 time 3 nodes 1167 nps 389000 pv d4f3
+out: bestmove d4f3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -88 time 1 nodes 531 nps 531000 pv c1d1
+out: bestmove c1d1
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3
+in: go depth 4
+out: info depth 3 seldepth 3 score cp -112 time 1 nodes 669 nps 669000 pv e2f3 f8c5 f1c4
+out: bestmove e2f3 ponder f8c5
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8
+in: go depth 4
+out: info depth 3 seldepth 3 score cp 211 time 1 nodes 605 nps 605000 pv f1c4 f8c5 c4f7
+out: bestmove f1c4 ponder f8c5
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 211 time 3 nodes 828 nps 276000 pv c4f7
+out: bestmove c4f7
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 135 time 3 nodes 1068 nps 356000 pv d1e2
+out: bestmove d1e2
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 213 time 2 nodes 749 nps 374500 pv e2f2
+out: bestmove e2f2
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7
+in: go depth 4
+out: info depth 3 seldepth 3 score cp 8 time 2 nodes 1018 nps 509000 pv h1c1 b8c8 c1d1
+out: bestmove h1c1 ponder b8c8
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 261 time 3 nodes 1339 nps 446333 pv f2g3
+out: bestmove f2g3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4
+in: go depth 4
+out: info depth 1 seldepth 1 score cp 88 time 5 nodes 3600 nps 720000 pv c1d1
+out: bestmove c1d1
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -590 time 1 nodes 658 nps 658000 pv g3g4
+out: bestmove g3g4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -519 time 1 nodes 718 nps 718000 pv g4g3
+out: bestmove g4g3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1 g4g3 b1b2
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -1031 time 1 nodes 657 nps 657000 pv g3g4
+out: bestmove g3g4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1 g4g3 b1b2 g3g4 b2g2
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -1220 time 1 nodes 973 nps 973000 pv g4h3
+out: bestmove g4h3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1 g4g3 b1b2 g3g4 b2g2 g4h3 g2a2
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -1739 time 1 nodes 781 nps 781000 pv h3g4
+out: bestmove h3g4
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1 g4g3 b1b2 g3g4 b2g2 g4h3 g2a2 h3g4 a2h2
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -1756 time 1 nodes 1039 nps 1039000 pv g4g3
+out: bestmove g4g3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1 g4g3 b1b2 g3g4 b2g2 g4h3 g2a2 h3g4 a2h2 g4g3 c7c5
+in: go depth 4
+out: info depth 3 seldepth 3 score cp -1376 time 1 nodes 214 nps 214000 pv g3h2 b8c7 h2g3
+out: bestmove g3h2 ponder b8c7
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1 g4g3 b1b2 g3g4 b2g2 g4h3 g2a2 h3g4 a2h2 g4g3 c7c5 g3h2 a7a6
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -1120 time 1 nodes 252 nps 252000 pv h2g3
+out: bestmove h2g3
+in: ucinewgame
+in: position startpos moves c2c4 d7d5 d2d4 d5c4 b1a3 e7e5 a3c2 e5d4 g1f3 b8c6 c1g5 g8f6 g5f6 d8f6 c2d4 c6d4 d1d4 f6d4 f3d4 c8g4 e1c1 e8c8 d4f3 d8d1 c1d1 g4f3 e2f3 c8b8 f1c4 f8c5 c4f7 c5f2 d1e2 h8f8 e2f2 f8f7 h1c1 f7f4 f2g3 f4d4 c1d1 d4d1 g3g4 d1b1 g4g3 b1b2 g3g4 b2g2 g4h3 g2a2 h3g4 a2h2 g4g3 c7c5 g3h2 a7a6 h2g3 h7h6
+in: go depth 4
+out: info depth 1 seldepth 1 score cp -1048 time 1 nodes 248 nps 248000 pv g3f2
+out: bestmove g3f2
+in: quit

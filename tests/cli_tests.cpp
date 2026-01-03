@@ -64,4 +64,18 @@ TEST(CliParseTests, RejectsZeroClockConfiguration) {
   EXPECT_FALSE(result.options.time_control.enabled);
 }
 
+TEST(CliParseTests, AcceptsStockfishEvalMode) {
+  std::vector<std::string> args = {"skaks", "--eval", "stockfish"};
+  const auto result = parse(std::move(args));
+  ASSERT_FALSE(result.parse_error) << result.message;
+  EXPECT_EQ(result.options.eval_mode, chess::EvaluationMode::Stockfish);
+}
+
+TEST(CliParseTests, SunfishAliasMapsToStockfish) {
+  std::vector<std::string> args = {"skaks", "--eval", "sunfish"};
+  const auto result = parse(std::move(args));
+  ASSERT_FALSE(result.parse_error) << result.message;
+  EXPECT_EQ(result.options.eval_mode, chess::EvaluationMode::Stockfish);
+}
+
 } // namespace

@@ -68,6 +68,13 @@ search_position(Board& board, SideToMove stm, const SearchParameters& params,
                 const EvaluatorFn& evaluator, MoveHistory* history = nullptr,
                 TranspositionTable* tt = nullptr, int repetition_start = 0);
 
+SearchResult search_position_parallel(Board& board, SideToMove stm,
+                                      const SearchParameters& params,
+                                      const EvaluatorFn& evaluator,
+                                      MoveHistory* history,
+                                      TranspositionTable* tt,
+                                      int repetition_start, int helper_threads);
+
 SearchResult search_position(Board& board, SideToMove stm,
                              const SearchParameters& params);
 

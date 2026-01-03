@@ -4,7 +4,7 @@ namespace chess {
 
 enum class EvaluationMode {
   Native,
-  Sunfish,
+  Stockfish,
 };
 
 } // namespace chess

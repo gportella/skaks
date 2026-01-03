@@ -1,5 +1,5 @@
 source,game_index,ply,fen,side_to_move,stockfish_cp,result,outcome,winner,weight
-lichess_elite_2014-03.pgn,1,76,6k1/6p1/p7/1p6/1q1P1P2/7P/5KP1/6N1 w - - 0 39,w,-621.0,0-1,0.0,b,1.0
-lichess_elite_2014-03.pgn,1,80,6k1/6p1/8/1p6/pq1P1P2/5N1P/6P1/5K2 w - - 0 41,w,-650.0,0-1,0.0,b,1.0
-lichess_elite_2014-03.pgn,4,44,r3k3/1p3prp/2b1p3/p7/8/P4P2/1P2B1PP/R4RK1 w q - 0 23,w,1.0,1-0,1.0,w,1.0
-lichess_elite_2014-03.pgn,4,60,8/1p2kp2/2b1p2p/p7/8/P2B1P2/1P1R1KPP/7r w - - 5 31,w,0.0,1-0,1.0,w,1.0
+lichess_elite_2014-03.pgn,1,76,6k1/6p1/p7/1p6/1q1P1P2/7P/5KP1/6N1 w - - 0 39,w,-618.0,0-1,0.0,b,1.0
+lichess_elite_2014-03.pgn,1,80,6k1/6p1/8/1p6/pq1P1P2/5N1P/6P1/5K2 w - - 0 41,w,-653.0,0-1,0.0,b,1.0
+lichess_elite_2014-03.pgn,4,44,r3k3/1p3prp/2b1p3/p7/8/P4P2/1P2B1PP/R4RK1 w q - 0 23,w,-5.0,1-0,1.0,w,1.0
+lichess_elite_2014-03.pgn,4,60,8/1p2kp2/2b1p2p/p7/8/P2B1P2/1P1R1KPP/7r w - - 5 31,w,-2.0,1-0,1.0,w,1.0

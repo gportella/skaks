@@ -3,6 +3,7 @@
 #include "chess/evaluation_params.hpp"
 #include "chess/search_params.hpp"
 
+#include <cstddef>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -66,6 +67,46 @@ bool parse_int_array(const YAML::Node& node, const char* key, ArrayT& target,
     error = oss.str();
     return false;
   }
+  if (child.size() > target.size()) {
+    std::ostringstream oss;
+    oss << "Expected at most " << target.size() << " entries for '" << key
+        << "'";
+    error = oss.str();
+    return false;
+  }
+  for (std::size_t i = 0; i < child.size(); ++i) {
+    if (!child[i].IsScalar()) {
+      std::ostringstream oss;
+      oss << "Non-scalar entry at index " << i << " for '" << key << "'";
+      error = oss.str();
+      return false;
+    }
+    try {
+      target[i] = child[i].as<int>();
+    } catch (const YAML::BadConversion& ex) {
+      std::ostringstream oss;
+      oss << "Invalid integer at index " << i << " for '" << key
+          << "': " << ex.what();
+      error = oss.str();
+      return false;
+    }
+  }
+  return true;
+}
+
+template <typename ArrayT>
+bool parse_float_array(const YAML::Node& node, const char* key, ArrayT& target,
+                       std::string& error) {
+  const auto child = node[key];
+  if (!child) {
+    return true;
+  }
+  if (!child.IsSequence()) {
+    std::ostringstream oss;
+    oss << "Expected sequence for '" << key << "'";
+    error = oss.str();
+    return false;
+  }
   if (child.size() != target.size()) {
     std::ostringstream oss;
     oss << "Expected " << target.size() << " entries for '" << key << "'";
@@ -80,10 +121,11 @@ bool parse_int_array(const YAML::Node& node, const char* key, ArrayT& target,
       return false;
     }
     try {
-      target[i] = child[i].as<int>();
+      target[i] =
+          static_cast<typename ArrayT::value_type>(child[i].as<double>());
     } catch (const YAML::BadConversion& ex) {
       std::ostringstream oss;
-      oss << "Invalid integer at index " << i << " for '" << key
+      oss << "Invalid float at index " << i << " for '" << key
           << "': " << ex.what();
       error = oss.str();
       return false;
@@ -151,8 +193,6 @@ bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval
     return false;
   if (!parse_field("flank_pawn_penalty", eval.flank_pawn_penalty))
     return false;
-<<<<<<< HEAD
-=======
   if (!parse_field("knight_mobility_scale", eval.knight_mobility_scale))
     return false;
   if (!parse_field("bishop_mobility_scale", eval.bishop_mobility_scale))
@@ -167,12 +207,18 @@ bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval
     return false;
   if (!parse_field("backward_pawn_penalty", eval.backward_pawn_penalty))
     return false;
->>>>>>> nnue_version
 
   if (!parse_int_array(eval_node, "king_attack_weights",
                        eval.king_attack_weights, error))
     return false;
   if (!parse_int_array(eval_node, "threat_base", eval.threat_base, error))
+    return false;
+
+  if (!parse_float_array(eval_node, "phase_weights_mg", eval.phase_weights_mg,
+                         error))
+    return false;
+  if (!parse_float_array(eval_node, "phase_weights_eg", eval.phase_weights_eg,
+                         error))
     return false;
 
   if (!parse_pin_penalty(eval_node, "bishop_pin_penalty",
@@ -280,6 +326,11 @@ bool load_engine_params_from_file(const std::string& path, EngineParams& params,
     if (!parse_search(search_node, working.search, error)) {
       return false;
     }
+  }
+
+  for (std::size_t i = 0; i < working.phase_weights.mg.size(); ++i) {
+    working.phase_weights.mg[i] = working.evaluation.phase_weights_mg[i];
+    working.phase_weights.eg[i] = working.evaluation.phase_weights_eg[i];
   }
 
   params = working;

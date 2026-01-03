@@ -1,5 +1,6 @@
 #include "chess/nnue.hpp"
 
+#include "chess/nnue_incremental.hpp"
 #include "chess/types_io.hpp"
 #include "sf_nnue/nnue.h"
 
@@ -16,6 +17,37 @@
 #include <yaml-cpp/yaml.h>
 
 namespace chess {
+int sf_nnue_piece_code(OccupancyType occ) {
+  switch (occ) {
+  case OccupancyType::wK:
+    return 1;
+  case OccupancyType::wQ:
+    return 2;
+  case OccupancyType::wR:
+    return 3;
+  case OccupancyType::wB:
+    return 4;
+  case OccupancyType::wN:
+    return 5;
+  case OccupancyType::wP:
+    return 6;
+  case OccupancyType::bK:
+    return 7;
+  case OccupancyType::bQ:
+    return 8;
+  case OccupancyType::bR:
+    return 9;
+  case OccupancyType::bB:
+    return 10;
+  case OccupancyType::bN:
+    return 11;
+  case OccupancyType::bP:
+    return 12;
+  default:
+    return 0;
+  }
+}
+
 namespace {
 constexpr std::size_t kPiecesPerKing = kNnuePieceKinds * kNnueSquares;
 std::shared_ptr<NnueNetwork> g_active_nnue;
@@ -132,37 +164,6 @@ int32_t quantize_int32(float v) {
   return static_cast<int32_t>(clamped);
 }
 
-int sf_piece_code(OccupancyType occ) {
-  switch (occ) {
-  case OccupancyType::wK:
-    return 1;
-  case OccupancyType::wQ:
-    return 2;
-  case OccupancyType::wR:
-    return 3;
-  case OccupancyType::wB:
-    return 4;
-  case OccupancyType::wN:
-    return 5;
-  case OccupancyType::wP:
-    return 6;
-  case OccupancyType::bK:
-    return 7;
-  case OccupancyType::bQ:
-    return 8;
-  case OccupancyType::bR:
-    return 9;
-  case OccupancyType::bB:
-    return 10;
-  case OccupancyType::bN:
-    return 11;
-  case OccupancyType::bP:
-    return 12;
-  default:
-    return 0;
-  }
-}
-
 bool build_sf_arrays(const Board& board, std::array<int, 33>& pieces,
                      std::array<int, 33>& squares, std::string& error) {
   pieces.fill(0);
@@ -176,10 +177,10 @@ bool build_sf_arrays(const Board& board, std::array<int, 33>& pieces,
     error = "Missing king when building NNUE features";
     return false;
   }
-  pieces[idx] = sf_piece_code(OccupancyType::wK);
+  pieces[idx] = sf_nnue_piece_code(OccupancyType::wK);
   squares[idx] = wking_sq;
   ++idx;
-  pieces[idx] = sf_piece_code(OccupancyType::bK);
+  pieces[idx] = sf_nnue_piece_code(OccupancyType::bK);
   squares[idx] = bking_sq;
   ++idx;
 
@@ -192,7 +193,7 @@ bool build_sf_arrays(const Board& board, std::array<int, 33>& pieces,
     if (occ == OccupancyType::empty) {
       continue;
     }
-    const int code = sf_piece_code(occ);
+    const int code = sf_nnue_piece_code(occ);
     if (code == 0) {
       std::ostringstream oss;
       oss << "Unsupported occupancy for SF NNUE mapping at sq " << sq;
@@ -213,7 +214,7 @@ bool build_sf_arrays(const Board& board, std::array<int, 33>& pieces,
   return true;
 }
 
-int eval_sf_backend(const Board& board) {
+int eval_sf_backend(const Board& board, SfNnueStack* stack) {
   std::array<int, 33> pieces{};
   std::array<int, 33> squares{};
   std::string error;
@@ -242,6 +243,13 @@ int eval_sf_backend(const Board& board) {
       squares[i] = mirrored_rank * 8 + file; // flip ranks only
     }
     player = 0; // after transform, present as "white to move"
+  }
+
+  if (stack) {
+    auto ptrs = stack->pointer_triplet();
+    NNUEdata* nnue_ptrs[3] = {ptrs[0], ptrs[1], ptrs[2]};
+    return nnue_evaluate_incremental(player, pieces.data(), squares.data(),
+                                     nnue_ptrs);
   }
 
   return nnue_evaluate(player, pieces.data(), squares.data());
@@ -497,7 +505,9 @@ int evaluate_sf_nnue(const Board& board) {
   if (!g_sf_nnue_loaded) {
     throw std::runtime_error("SF NNUE backend not loaded");
   }
-  const int stm_cp = eval_sf_backend(board); // centipawns from side-to-move POV
+  SfNnueStack* stack = current_thread_nnue_stack();
+  const int stm_cp =
+      eval_sf_backend(board, stack); // centipawns from side-to-move POV
   return (board.side_to_move == SideToMove::White) ? stm_cp : -stm_cp;
 }
 

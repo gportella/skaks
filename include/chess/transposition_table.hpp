@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 namespace chess {
@@ -27,6 +28,7 @@ public:
   }
 
   void resize(std::size_t entry_count) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (entry_count == 0) {
       entry_count = 1;
     }
@@ -39,12 +41,14 @@ public:
   }
 
   void clear() {
+    std::lock_guard<std::mutex> lock(mutex_);
     for (auto& entry : entries_) {
       entry = {};
     }
   }
 
   bool probe(std::uint64_t key, TranspositionEntry& out) const {
+    std::lock_guard<std::mutex> lock(mutex_);
     const auto& slot = entries_[index(key)];
     if (slot.depth >= 0 && slot.key == key) {
       out = slot;
@@ -53,8 +57,9 @@ public:
     return false;
   }
 
-  void store(std::uint64_t key, int depth, int score, TranspositionFlag flag, const Move& move,
-             int ply) {
+  void store(std::uint64_t key, int depth, int score, TranspositionFlag flag,
+             const Move& move, int ply) {
+    std::lock_guard<std::mutex> lock(mutex_);
     TranspositionEntry& slot = entries_[index(key)];
     if (slot.depth > depth && slot.key == key) {
       return;
@@ -82,6 +87,7 @@ private:
 
   std::vector<TranspositionEntry> entries_;
   std::size_t mask_ = 0;
+  mutable std::mutex mutex_;
 };
 
 } // namespace chess

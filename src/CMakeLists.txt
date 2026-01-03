@@ -18,9 +18,11 @@ add_library(chess_engine_core STATIC
   time_manager.cpp
   zobrist.cpp
   nnue.cpp
+  nnue_incremental.cpp
   sf_nnue/misc.cpp
   sf_nnue/nnue.cpp
   sf_eval.cpp
+  uci.cpp
 )
 
 set_source_files_properties(sf_nnue/nnue.cpp PROPERTIES
@@ -61,7 +63,6 @@ target_link_directories(chess_engine_core PRIVATE
 
 add_executable(skaks
   main.cpp
-  uci.cpp
 )
 
 target_include_directories(skaks

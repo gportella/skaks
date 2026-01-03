@@ -21,11 +21,7 @@ DEFAULT_MATCH_LIMIT = 500
 DEFAULT_DEPTH = 8
 RECOMMENDED_DB_NAME = "validation_matches.sqlite3"
 PGN_HEADER = "PGN:"
-<<<<<<< HEAD
-SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
-=======
 DEFAULT_SUMMARY_LABELS = ("skaks", "stockfish", "draw", "unknown")
->>>>>>> nnue_version
 DEFAULT_ELO_START = 1500.0
 DEFAULT_ELO_OPPONENT = 2600.0
 DEFAULT_ELO_K_FACTOR = 20.0
@@ -175,8 +171,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Path to params file for the reference engine (passed as --engine-params)",
     )
     parser.add_argument(
-<<<<<<< HEAD
-=======
         "--engine-nnue",
         type=str,
         help="Path to NNUE weights for the reference engine (passed as --engine-nnue)",
@@ -187,14 +181,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Display label for the reference engine in summary/Elo (default: engine basename)",
     )
     parser.add_argument(
->>>>>>> nnue_version
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --opponent-params)",
     )
     parser.add_argument(
-<<<<<<< HEAD
-=======
         "--opponent-nnue",
         type=str,
         help="Path to NNUE weights for the opponent engine (passed as --opponent-nnue)",
@@ -210,7 +201,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Display label for the opponent engine in summary/Elo (default: opponent basename)",
     )
     parser.add_argument(
->>>>>>> nnue_version
         "--stockfish",
         action="store_true",
         help="Shortcut for --opponent stockfish",
@@ -335,14 +325,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Skip loading/saving Elo state; compute only for this batch",
     )
-<<<<<<< HEAD
-=======
     parser.add_argument(
         "--summary-json",
         type=str,
         help="Optional path to write a JSON summary (counts, Elo, timings)",
     )
->>>>>>> nnue_version
 
     args = parser.parse_args(argv)
 
@@ -415,20 +402,14 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         base_args.extend(["--engine", args.engine])
     if args.engine_params:
         base_args.extend(["--engine-params", args.engine_params])
-<<<<<<< HEAD
-=======
     if args.engine_nnue:
         base_args.extend(["--engine-nnue", args.engine_nnue])
->>>>>>> nnue_version
     if args.opponent:
         base_args.extend(["--opponent", args.opponent])
     if args.opponent_params:
         base_args.extend(["--opponent-params", args.opponent_params])
-<<<<<<< HEAD
-=======
     if args.opponent_nnue:
         base_args.extend(["--opponent-nnue", args.opponent_nnue])
->>>>>>> nnue_version
     if args.no_handicap:
         base_args.append("--no-handicap")
     if args.handicap_factor is not None:
@@ -695,15 +676,6 @@ def run_batch(args: argparse.Namespace) -> int:
             else load_rating(rating_path, fallback=args.elo_start)
         )
 
-        rating_path = Path(args.elo_store)
-        if not rating_path.is_absolute():
-            rating_path = Path(__file__).resolve().parent / rating_path
-        rating_before = (
-            args.elo_start
-            if args.no_elo_store
-            else load_rating(rating_path, fallback=args.elo_start)
-        )
-
         base_args = build_fight_arguments(args)
         parameters_snapshot = {
             "limit": args.limit,
@@ -717,16 +689,11 @@ def run_batch(args: argparse.Namespace) -> int:
             "moves_to_go": args.moves_to_go,
             "engine": args.engine,
             "engine_params": args.engine_params,
-<<<<<<< HEAD
-            "opponent": args.opponent,
-            "opponent_params": args.opponent_params,
-=======
             "engine_nnue": args.engine_nnue,
             "opponent": args.opponent,
             "opponent_params": args.opponent_params,
             "opponent_nnue": args.opponent_nnue,
             "opponent_depth_factor": args.opponent_depth_factor,
->>>>>>> nnue_version
             "handicap_factor": args.handicap_factor,
             "handicap_depth": args.handicap_depth,
             "handicap_enabled": args.handicap_enabled,
@@ -881,13 +848,8 @@ def run_batch(args: argparse.Namespace) -> int:
         print(f"Summary: {summarize_counts(summary, summary_labels)}")
         print(f"Failures: {failures} / {len(indices)}")
 
-<<<<<<< HEAD
-        wins = summary.get("skaks", 0)
-        losses = summary.get("stockfish", 0)
-=======
         wins = summary.get(white_label, 0)
         losses = summary.get(black_label, 0)
->>>>>>> nnue_version
         draws = summary.get("draw", 0)
         elo = compute_elo(
             rating=rating_before,
@@ -913,8 +875,6 @@ def run_batch(args: argparse.Namespace) -> int:
         else:
             print("Elo: no completed games to rate")
 
-<<<<<<< HEAD
-=======
         if args.summary_json:
             summary_payload = {
                 "games": len(indices),
@@ -948,8 +908,6 @@ def run_batch(args: argparse.Namespace) -> int:
                 print(f"Wrote summary JSON to {args.summary_json}")
             except OSError as exc:
                 print(f"Failed to write summary JSON: {exc}", file=sys.stderr)
-
->>>>>>> nnue_version
         return 0 if failures == 0 else 1
     finally:
         if connection is not None:

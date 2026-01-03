@@ -6,10 +6,7 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/moves.hpp"
-<<<<<<< HEAD
-=======
 #include "chess/nnue.hpp"
->>>>>>> nnue_version
 #include "chess/params_loader.hpp"
 #include "chess/perf.hpp"
 #include "chess/polyglot.hpp"
@@ -24,8 +21,10 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -57,8 +56,9 @@ struct ArenaSummary {
 ArenaSummary run_internal_arena(const chess::CliOptions& opts,
                                 const chess::EngineParams& base_params,
                                 const chess::EngineParams& cand_params,
-                                bool show_progress) {
+                                bool show_progress, int thread_count) {
   chess::Engine engine;
+  engine.set_thread_count(std::max(thread_count, 1));
   engine.set_evaluation_mode(opts.eval_mode);
   ArenaSummary summary{};
 
@@ -189,17 +189,7 @@ int main(int argc, char** argv) {
   }
 
   chess::reset_engine_params();
-<<<<<<< HEAD
-  if (cli.options.params_override) {
-    auto params = chess::default_engine_params();
-    std::string error;
-    if (!chess::load_engine_params_from_file(cli.options.params_path, params,
-                                             error)) {
-      std::cerr << "Failed to load params: " << error << "\n";
-      return EXIT_FAILURE;
-    }
-    chess::set_engine_params(params);
-=======
+
   chess::EngineParams baseline_params = chess::default_engine_params();
   chess::EngineParams candidate_params = baseline_params;
   if (cli.options.params_override) {
@@ -210,9 +200,8 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
     }
   }
-  // Default global params: baseline for arena, candidate otherwise.
-  chess::set_engine_params(cli.options.arena_mode ? baseline_params
-                                                  : candidate_params);
+
+  chess::set_engine_params(candidate_params);
 
   if (cli.options.nnue_override) {
     std::string error;
@@ -232,16 +221,29 @@ int main(int argc, char** argv) {
     }
   } else {
     chess::set_active_nnue(nullptr);
->>>>>>> nnue_version
   }
 
+  const auto resolve_thread_count = [](int requested) -> int {
+    if (requested <= 0) {
+      const unsigned hw = std::thread::hardware_concurrency();
+      if (hw == 0) {
+        return 1;
+      }
+      return static_cast<int>(hw);
+    }
+    return std::max(requested, 1);
+  };
+
+  const int thread_count = resolve_thread_count(cli.options.thread_count);
+
   chess::Engine engine;
+  engine.set_thread_count(thread_count);
   engine.set_evaluation_mode(cli.options.eval_mode);
 
   if (cli.options.arena_mode) {
     try {
-      const auto summary = run_internal_arena(cli.options, baseline_params,
-                                              candidate_params, true);
+      const auto summary = run_internal_arena(
+          cli.options, baseline_params, candidate_params, true, thread_count);
       std::cout << "{\"score\":" << summary.score << ","
                 << "\"wins\":" << summary.wins << ","
                 << "\"losses\":" << summary.losses << ","
@@ -252,27 +254,6 @@ int main(int argc, char** argv) {
       std::cerr << "Arena failed: " << ex.what() << "\n";
       return EXIT_FAILURE;
     }
-  }
-
-  if (cli.options.static_eval) {
-    chess::Board board{};
-    try {
-      board = chess::initial_board(cli.options.fen);
-    } catch (const std::exception& ex) {
-      std::cerr << "Failed to load FEN: " << ex.what() << "\n";
-      return EXIT_FAILURE;
-    }
-
-    engine.reset_history(board);
-
-    const int white_eval = engine.evaluate(board);
-    const int stm_eval = (board.side_to_move == chess::SideToMove::White)
-                             ? white_eval
-                             : -white_eval;
-
-    std::cout << "static_eval_white " << white_eval << "\n";
-    std::cout << "static_eval_stm " << stm_eval << "\n";
-    return EXIT_SUCCESS;
   }
 
   if (cli.options.static_eval) {

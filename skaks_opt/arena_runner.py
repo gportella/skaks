@@ -200,6 +200,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Display label for the reference engine in summary/Elo (default: engine basename)",
     )
     parser.add_argument(
+        "--threads",
+        type=non_negative_int,
+        default=4,
+        help="Search threads for the reference engine (0 = auto)",
+    )
+    parser.add_argument(
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --opponent-params)",
@@ -223,6 +229,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--opponent-label",
         type=str,
         help="Display label for the opponent engine in summary/Elo (default: opponent basename)",
+    )
+    parser.add_argument(
+        "--opponent-threads",
+        type=non_negative_int,
+        default=None,
+        help="Search threads for the opponent engine (0 = auto)",
     )
     parser.add_argument(
         "--stockfish",
@@ -428,6 +440,8 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         base_args.extend(["--engine-nnue", args.engine_nnue])
     if args.engine_eval:
         base_args.extend(["--engine-eval", args.engine_eval])
+    if getattr(args, "threads", None) is not None:
+        base_args.extend(["--threads", str(args.threads)])
     if args.opponent:
         base_args.extend(["--opponent", args.opponent])
     if args.opponent_params:
@@ -436,6 +450,8 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         base_args.extend(["--opponent-nnue", args.opponent_nnue])
     if args.opponent_eval:
         base_args.extend(["--opponent-eval", args.opponent_eval])
+    if getattr(args, "opponent_threads", None) is not None:
+        base_args.extend(["--opponent-threads", str(args.opponent_threads)])
     if args.no_handicap:
         base_args.append("--no-handicap")
     if args.handicap_factor is not None:
@@ -546,6 +562,7 @@ def extract_metadata(
             break
 
     combined = (stdout + "\n" + stderr).lower()
+    forfeit_detected = "forfeit" in combined or "forfeits" in combined
     failure_tokens = (
         "illegal",
         "engine terminated unexpectedly",
@@ -553,6 +570,10 @@ def extract_metadata(
         "terminated unexpectedly",
     )
     illegal_flag = any(token in combined for token in failure_tokens)
+    if forfeit_detected:
+        illegal_flag = False
+    if result_value == "*":
+        result_value = None
     return result_value, winner_value, pgn_value, illegal_flag
 
 
@@ -594,6 +615,8 @@ def determine_winner_label(
             return "draw"
         if normalized_result.startswith("draw"):
             return "draw"
+        if normalized_result == "*":
+            return "unknown"
     return "unknown"
 
 
@@ -710,11 +733,13 @@ def run_batch(args: argparse.Namespace) -> int:
             "engine": args.engine,
             "engine_params": args.engine_params,
             "engine_nnue": args.engine_nnue,
+            "engine_threads": args.threads,
             "opponent": args.opponent,
             "opponent_params": args.opponent_params,
             "opponent_nnue": args.opponent_nnue,
             "engine_eval": args.engine_eval,
             "opponent_eval": args.opponent_eval,
+            "opponent_threads": args.opponent_threads,
             "opponent_depth_factor": args.opponent_depth_factor,
             "handicap_factor": args.handicap_factor,
             "handicap_depth": args.handicap_depth,

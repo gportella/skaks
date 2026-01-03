@@ -275,6 +275,7 @@ def _extra_args(
     params_path: Optional[str],
     nnue_path: Optional[str],
     eval_mode: Optional[str],
+    threads: Optional[int] = None,
 ) -> Optional[list[str]]:
     argv: list[str] = []
     if eval_mode:
@@ -283,6 +284,8 @@ def _extra_args(
         argv.extend(["--params", params_path])
     if nnue_path:
         argv.extend(["--nnue", nnue_path])
+    if threads is not None:
+        argv.extend(["--threads", str(threads)])
     return argv or None
 
 
@@ -309,7 +312,9 @@ def run_game(
     reference_nnue: Optional[str],
     opponent_nnue: Optional[str],
     reference_eval: Optional[str],
+    reference_threads: Optional[int],
     opponent_eval: Optional[str],
+    opponent_threads: Optional[int],
     handicap_factor: float,
     handicap_depth: int,
     opponent_depth_factor: Optional[float],
@@ -329,6 +334,20 @@ def run_game(
     white_name = Path(reference_path).name
     black_name = Path(opponent_path).name
 
+    reference_needs_uci = _needs_uci_arg(reference_path)
+    opponent_needs_uci = _needs_uci_arg(opponent_path)
+
+    reference_threads_arg = (
+        reference_threads
+        if reference_threads is not None and reference_needs_uci
+        else None
+    )
+    opponent_threads_arg = (
+        opponent_threads
+        if opponent_threads is not None and opponent_needs_uci
+        else None
+    )
+
     board = chess.Board(chess.STARTING_FEN)
     root_fen = board.fen()
     game = chess.pgn.Game()
@@ -344,6 +363,9 @@ def run_game(
     moves: List[str] = []
     final_fen_printed = False
     result_code = 0
+    forced_result: Optional[str] = None
+    forced_winner: Optional[str] = None
+    forced_reason: Optional[str] = None
 
     move_limit_hit = False
     try:
@@ -351,15 +373,23 @@ def run_game(
             UciEngine(
                 opponent_path,
                 timeout=240.0,
-                add_uci_arg=_needs_uci_arg(opponent_path),
-                extra_args=_extra_args(opponent_params, opponent_nnue, opponent_eval),
+                add_uci_arg=opponent_needs_uci,
+                extra_args=_extra_args(
+                    opponent_params,
+                    opponent_nnue,
+                    opponent_eval,
+                    opponent_threads_arg,
+                ),
             ) as opponent,
             UciEngine(
                 reference_path,
                 timeout=240.0,
-                add_uci_arg=_needs_uci_arg(reference_path),
+                add_uci_arg=reference_needs_uci,
                 extra_args=_extra_args(
-                    reference_params, reference_nnue, reference_eval
+                    reference_params,
+                    reference_nnue,
+                    reference_eval,
+                    reference_threads_arg,
                 ),
             ) as reference,
         ):
@@ -457,17 +487,43 @@ def run_game(
                             root_fen, moves=moves, depth=chosen_depth
                         )
                 except Exception as exc:
-                    print(f"Engine error for {engine_name}: {exc}", file=sys.stderr)
+                    message = f"{engine_name} forfeits due to exception: {exc}"
+                    print(message, file=sys.stderr)
+                    forfeit_winner = (
+                        white_name if mover_color == chess.BLACK else black_name
+                    )
+                    forced_winner = forfeit_winner
+                    forced_result = "1-0" if forfeit_winner == white_name else "0-1"
+                    forced_reason = message
+                    final_fen_printed = True
                     print("Final position FEN:", board.fen())
-                    _print_game_pgn(game)
-                    return 3
+                    break
                 if best_move == "0000":
+                    reason = None
                     if board.is_checkmate():
                         print(f"Turn {turn + 1}: {engine_name} reports checkmate.")
+                        if mover_color == chess.WHITE:
+                            forced_result = "0-1"
+                            forced_winner = black_name
+                        else:
+                            forced_result = "1-0"
+                            forced_winner = white_name
+                        reason = "checkmate"
                     elif board.is_stalemate():
                         print(f"Turn {turn + 1}: {engine_name} reports stalemate.")
+                        forced_result = "1/2-1/2"
+                        forced_winner = "draw"
+                        reason = "stalemate"
                     else:
                         print(f"Turn {turn + 1}: {engine_name} reports no legal moves.")
+                        forfeiting_side = engine_name
+                        winner_name = (
+                            black_name if mover_color == chess.WHITE else white_name
+                        )
+                        forced_result = "1-0" if winner_name == white_name else "0-1"
+                        forced_winner = winner_name
+                        reason = f"{forfeiting_side} reported no legal moves"
+                    forced_reason = reason
                     print("Final position FEN:", board.fen())
                     final_fen_printed = True
                     break
@@ -497,7 +553,7 @@ def run_game(
                     f"Warning: reached move limit ({limit}); terminating early.",
                     file=sys.stderr,
                 )
-            move_limit_hit = True
+                move_limit_hit = True
     except FileNotFoundError as exc:
         print(f"Engine binary not found: {exc}", file=sys.stderr)
         print("Final position FEN:", board.fen())
@@ -517,23 +573,36 @@ def run_game(
     if not final_fen_printed:
         print("Final position FEN:", board.fen())
 
-    result_str = board.result(claim_draw=True)
-    if not result_str:
-        result_str = "*"
-    if move_limit_hit and result_str == "*":
-        result_str = "1/2-1/2"
-    game.headers["Result"] = result_str
+    if forced_result is not None:
+        result_str = forced_result
+        winner = forced_winner if forced_winner else "unknown"
+        game.headers["Result"] = result_str
+        if forced_reason:
+            game.headers["Termination"] = forced_reason
+        if forced_reason:
+            print(f"Result: {result_str} ({forced_reason})")
+            print(f"Winner: {winner} ({forced_reason})")
+        else:
+            print(f"Result: {result_str}")
+            print(f"Winner: {winner}")
+    else:
+        result_str = board.result(claim_draw=True)
+        if not result_str:
+            result_str = "*"
+        if move_limit_hit and result_str == "*":
+            result_str = "1/2-1/2"
+        game.headers["Result"] = result_str
 
-    winner = "unknown"
-    if result_str == "1-0":
-        winner = white_name
-    elif result_str == "0-1":
-        winner = black_name
-    elif result_str == "1/2-1/2":
-        winner = "draw"
+        winner = "unknown"
+        if result_str == "1-0":
+            winner = white_name
+        elif result_str == "0-1":
+            winner = black_name
+        elif result_str == "1/2-1/2":
+            winner = "draw"
 
-    print(f"Result: {result_str}")
-    print(f"Winner: {winner}")
+        print(f"Result: {result_str}")
+        print(f"Winner: {winner}")
 
     _print_game_pgn(game)
     return result_code
@@ -574,6 +643,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Evaluation mode override for the reference engine (forwarded as --eval)",
     )
     parser.add_argument(
+        "--threads",
+        type=_non_negative_int,
+        default=4,
+        help="Search threads for the reference engine (0 = auto, default: 4)",
+    )
+    parser.add_argument(
         "--eval",
         dest="engine_eval",
         type=str,
@@ -593,6 +668,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         "--opponent-eval",
         type=str,
         help="Evaluation mode override for the opponent engine (forwarded as --eval)",
+    )
+    parser.add_argument(
+        "--opponent-threads",
+        type=_non_negative_int,
+        default=None,
+        help="Search threads for the opponent engine (0 = auto)",
     )
     parser.add_argument(
         "--stockfish",
@@ -737,7 +818,9 @@ def main(argv: List[str]) -> int:
         reference_nnue=args.engine_nnue,
         opponent_nnue=args.opponent_nnue,
         reference_eval=args.engine_eval,
+        reference_threads=args.threads,
         opponent_eval=args.opponent_eval,
+        opponent_threads=args.opponent_threads,
         handicap_factor=args.handicap_factor,
         handicap_depth=args.handicap_depth,
         opponent_depth_factor=args.opponent_depth_factor,

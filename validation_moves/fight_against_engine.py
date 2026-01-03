@@ -261,12 +261,6 @@ def _non_negative_int(value: str) -> int:
     return parsed
 
 
-<<<<<<< HEAD
-def _params_argv(path: Optional[str]) -> Optional[list[str]]:
-    if path is None:
-        return None
-    return ["--params", path]
-=======
 def _extra_args(
     params_path: Optional[str], nnue_path: Optional[str]
 ) -> Optional[list[str]]:
@@ -276,7 +270,6 @@ def _extra_args(
     if nnue_path:
         argv.extend(["--nnue", nnue_path])
     return argv or None
->>>>>>> nnue_version
 
 
 def _needs_uci_arg(binary: str) -> bool:
@@ -299,11 +292,8 @@ def run_game(
     opponent_engine: str,
     reference_params: Optional[str],
     opponent_params: Optional[str],
-<<<<<<< HEAD
-=======
     reference_nnue: Optional[str],
     opponent_nnue: Optional[str],
->>>>>>> nnue_version
     handicap_factor: float,
     handicap_depth: int,
     opponent_depth_factor: Optional[float],
@@ -338,21 +328,13 @@ def run_game(
                 opponent_path,
                 timeout=240.0,
                 add_uci_arg=_needs_uci_arg(opponent_path),
-<<<<<<< HEAD
-                extra_args=_params_argv(opponent_params),
-=======
                 extra_args=_extra_args(opponent_params, opponent_nnue),
->>>>>>> nnue_version
             ) as opponent,
             UciEngine(
                 reference_path,
                 timeout=240.0,
                 add_uci_arg=_needs_uci_arg(reference_path),
-<<<<<<< HEAD
-                extra_args=_params_argv(reference_params),
-=======
                 extra_args=_extra_args(reference_params, reference_nnue),
->>>>>>> nnue_version
             ) as reference,
         ):
             clock: Optional[MatchClock] = None
@@ -556,30 +538,24 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Path to YAML/JSON params for the reference engine (passed as --params)",
     )
     parser.add_argument(
-<<<<<<< HEAD
-=======
         "--engine-nnue",
         type=str,
         help="Path to NNUE weights for the reference engine (passed as --nnue)",
     )
     parser.add_argument(
->>>>>>> nnue_version
+        "--stockfish",
+        action="store_true",
+        help="Shortcut to set the opponent to Stockfish",
+    )
+    parser.add_argument(
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --params)",
     )
     parser.add_argument(
-<<<<<<< HEAD
-=======
         "--opponent-nnue",
         type=str,
         help="Path to NNUE weights for the opponent engine (passed as --nnue)",
-    )
-    parser.add_argument(
->>>>>>> nnue_version
-        "--stockfish",
-        action="store_true",
-        help="Shortcut to set the opponent to Stockfish",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -718,11 +694,8 @@ def main(argv: List[str]) -> int:
         opponent_engine=args.opponent,
         reference_params=args.engine_params,
         opponent_params=args.opponent_params,
-<<<<<<< HEAD
-=======
         reference_nnue=args.engine_nnue,
         opponent_nnue=args.opponent_nnue,
->>>>>>> nnue_version
         handicap_factor=args.handicap_factor,
         handicap_depth=args.handicap_depth,
         opponent_depth_factor=args.opponent_depth_factor,

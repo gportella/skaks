@@ -31,6 +31,11 @@ public:
     return eval_mode_;
   }
 
+  void set_thread_count(int count);
+  [[nodiscard]] int thread_count() const {
+    return thread_count_;
+  }
+
   [[nodiscard]] SearchSession create_session(Board& board);
 
   void reset_history(const Board& board);
@@ -47,6 +52,7 @@ private:
   EvaluationMode eval_mode_ = EvaluationMode::Native;
   MoveHistory history_;
   TranspositionTable tt_;
+  int thread_count_ = 1;
 };
 
 class Engine::SearchSession {

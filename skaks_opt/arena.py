@@ -73,6 +73,12 @@ def _configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
         help="Display label for the reference engine in summary/Elo (default: engine basename)",
     )
     parser.add_argument(
+        "--threads",
+        type=non_negative_int,
+        default=4,
+        help="Search threads for the reference engine (0 = auto)",
+    )
+    parser.add_argument(
         "--opponent-params",
         type=str,
         help="Path to params file for the opponent engine (passed as --opponent-params)",
@@ -96,6 +102,12 @@ def _configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
         "--opponent-label",
         type=str,
         help="Display label for the opponent engine in summary/Elo (default: opponent basename)",
+    )
+    parser.add_argument(
+        "--opponent-threads",
+        type=non_negative_int,
+        default=None,
+        help="Search threads for the opponent engine (0 = auto)",
     )
     parser.add_argument(
         "--stockfish",

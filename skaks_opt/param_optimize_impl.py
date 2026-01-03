@@ -1135,9 +1135,7 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         action="store_true",
         help="Opponent is external engine, not self-play",
     )
-    parser.add_argument(
-        "--baseline-params", help="YAML params for baseline (opponent)"
-    )
+    parser.add_argument("--baseline-params", help="YAML params for baseline (opponent)")
     parser.add_argument(
         "--start-params",
         help="Initial YAML params for candidate (defaults to baseline)",
@@ -1287,7 +1285,9 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = configure_parser(
-        argparse.ArgumentParser(description="Self-play parameter optimizer (beam + repeats)")
+        argparse.ArgumentParser(
+            description="Self-play parameter optimizer (beam + repeats)"
+        )
     )
     return parser.parse_args(argv)
 

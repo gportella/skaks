@@ -13,6 +13,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -524,6 +525,12 @@ void run_uci_loop(Engine& engine, int default_depth,
 
   auto search_state = std::make_shared<AsyncSearchState>();
   bool ponder_enabled = true;
+  constexpr int kMinThreads = 1;
+  const unsigned detected_threads = std::thread::hardware_concurrency();
+  const int max_threads =
+      static_cast<int>(std::clamp(detected_threads, 1u, 256u));
+  int thread_count = std::clamp(engine.thread_count(), kMinThreads, max_threads);
+  engine.set_thread_count(thread_count);
 
   auto join_worker = [&]() {
     if (search_state->worker.joinable()) {
@@ -637,6 +644,14 @@ void run_uci_loop(Engine& engine, int default_depth,
       std::cout << "id author G Portella" << '\n';
       log_uci("out", "option name Ponder type check default true");
       std::cout << "option name Ponder type check default true" << '\n';
+      {
+        std::ostringstream threads_line;
+        threads_line << "option name Threads type spin default " << thread_count
+                     << " min " << kMinThreads << " max " << max_threads;
+        const std::string line_out = threads_line.str();
+        log_uci("out", line_out);
+        std::cout << line_out << '\n';
+      }
       log_uci("out", "uciok");
       std::cout << "uciok" << '\n';
       std::cout.flush();
@@ -705,16 +720,71 @@ void run_uci_loop(Engine& engine, int default_depth,
     } else if (keyword == "setoption") {
       std::string remainder;
       std::getline(cmd, remainder);
-      std::string lowered = remainder;
+      std::istringstream option_stream(remainder);
+      std::string token;
+      std::string name;
+      std::string value;
+      bool reading_name = false;
+      bool reading_value = false;
+      while (option_stream >> token) {
+        if (token == "name") {
+          reading_name = true;
+          reading_value = false;
+          name.clear();
+          continue;
+        }
+        if (token == "value") {
+          reading_value = true;
+          reading_name = false;
+          value.clear();
+          continue;
+        }
+        if (reading_name) {
+          if (!name.empty()) {
+            name.push_back(' ');
+          }
+          name += token;
+        } else if (reading_value) {
+          if (!value.empty()) {
+            value.push_back(' ');
+          }
+          value += token;
+        }
+      }
+      std::string lowered_name = name;
       std::transform(
-          lowered.begin(), lowered.end(), lowered.begin(),
+          lowered_name.begin(), lowered_name.end(), lowered_name.begin(),
           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-      if (lowered.find("name ponder") != std::string::npos) {
-        if (lowered.find("value false") != std::string::npos ||
-            lowered.find("value 0") != std::string::npos) {
+
+      if (lowered_name == "ponder") {
+        std::string lowered_value = value;
+        std::transform(
+            lowered_value.begin(), lowered_value.end(), lowered_value.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (lowered_value == "false" || lowered_value == "0" ||
+            lowered_value == "off") {
           ponder_enabled = false;
         } else {
           ponder_enabled = true;
+        }
+      } else if (lowered_name == "threads") {
+        int requested = thread_count;
+        if (!value.empty()) {
+          try {
+            requested = std::stoi(value);
+          } catch (const std::exception&) {
+            requested = thread_count;
+          }
+        }
+        const int clamped = std::clamp(requested, kMinThreads, max_threads);
+        thread_count = clamped;
+        engine.set_thread_count(thread_count);
+        if (clamped != requested) {
+          const std::string info = "info string Threads option is limited to " +
+                                   std::to_string(max_threads);
+          log_uci("out", info);
+          std::cout << info << '\n';
+          std::cout.flush();
         }
       }
     } else if (keyword == "staticeval") {

@@ -1,14 +1,35 @@
 #include "chess/engine.hpp"
 
+#include "chess/moves.hpp"
+#include "chess/nnue.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/time_manager.hpp"
-#include "sf_eval.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
 
 namespace chess {
+
+namespace {
+
+std::atomic<std::uint64_t> g_smp_fallback_count{0};
+
+void log_smp_fallback() {
+  const auto count =
+      g_smp_fallback_count.fetch_add(1, std::memory_order_relaxed) + 1;
+  std::cerr << "[skaks] SMP fallback activated; count=" << count << '\n';
+#ifndef NDEBUG
+  std::abort();
+#endif
+}
+
+} // namespace
 
 Engine::Engine() : eval_config_{}, history_{} {
   clear_history();
@@ -22,19 +43,22 @@ SearchResult Engine::search(Board& board, const SearchParameters& params) {
 int Engine::evaluate(const Board& board) const {
   // Placeholder: future versions will blend features based on eval_config_
   (void)eval_config_;
-  if (eval_mode_ == EvaluationMode::Sunfish) {
-    sf_eval::Board simple{};
-    simple.fill(0);
-    for (std::size_t sq = 0; sq < 64; ++sq) {
-      simple[sq] = sf_eval::encode_piece(board.pieces[sq]);
+  if (eval_mode_ == EvaluationMode::Stockfish) {
+    if (!sf_nnue_active()) {
+      throw std::runtime_error(
+          "Stockfish NNUE evaluation requested but no weights are loaded");
     }
-    return sf_eval::evaluate(simple).score;
+    return evaluate_sf_nnue(board);
   }
   return evaluate_board(board);
 }
 
 void Engine::set_evaluation_mode(EvaluationMode mode) {
   eval_mode_ = mode;
+}
+
+void Engine::set_thread_count(int count) {
+  thread_count_ = std::max(count, 1);
 }
 
 Engine::SearchSession Engine::create_session(Board& board) {
@@ -75,13 +99,43 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
   }
 
   const auto start = std::chrono::steady_clock::now();
-  auto result = search_position(board, board.side_to_move, work_params,
-                                evaluator, &history, &tt, repetition_start);
+  SearchResult result{};
+  const int worker_count = std::max(engine.thread_count(), 1);
+
+  if (worker_count <= 1) {
+    result = search_position(board, board.side_to_move, work_params, evaluator,
+                             &history, &tt, repetition_start);
+  } else {
+    std::shared_ptr<std::atomic<bool>> shared_abort_owner;
+    if (!work_params.abort_flag) {
+      shared_abort_owner = std::make_shared<std::atomic<bool>>(false);
+      work_params.abort_flag = shared_abort_owner.get();
+    }
+
+    const int helper_threads = worker_count - 1;
+    result = search_position_parallel(board, board.side_to_move, work_params,
+                                      evaluator, &history, &tt, repetition_start,
+                                      helper_threads);
+
+    const bool needs_fallback =
+        result.best_move.moving_pc == OccupancyType::empty || result.aborted;
+    if (needs_fallback) {
+      log_smp_fallback();
+      SearchResult fallback =
+          search_position(board, board.side_to_move, work_params, evaluator,
+                          &history, &tt, repetition_start);
+      fallback.nodes += result.nodes;
+      result = std::move(fallback);
+      result.aborted = false;
+    }
+  }
+
   const auto end = std::chrono::steady_clock::now();
   const auto elapsed =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   result.elapsed_ms = static_cast<std::uint64_t>(elapsed);
   history.ply_count = base_ply;
+  history.repetition_start = repetition_start;
   return result;
 }
 

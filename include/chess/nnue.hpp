@@ -42,6 +42,9 @@ std::size_t nnue_piece_index(OccupancyType occ);
 // Extract NNUE input features from a Board.
 NnueFeatures make_nnue_features(const Board& board);
 
+// Map engine occupancy to Stockfish NNUE piece codes.
+int sf_nnue_piece_code(OccupancyType occ);
+
 // Load NNUE weights from a YAML file. Expected schema (root or under 'nnue'):
 // hidden: <int> (optional, inferred from b1 if absent)
 // w1: [hidden * 1537 floats]

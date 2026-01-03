@@ -16,6 +16,7 @@ CliParseResult parse_cli(int argc, char** argv) {
   if (argc > 0 && argv != nullptr && argv[0] != nullptr) {
     result.options.executable_path = argv[0];
   }
+
   cxxopts::Options options("skaks", "Skaks chess engine options");
 
   // clang-format off
@@ -32,41 +33,42 @@ CliParseResult parse_cli(int argc, char** argv) {
       ("polyglot-book", "Path to Polyglot opening book",
        cxxopts::value<std::string>())
       ("params", "Path to YAML engine parameter file",
-<<<<<<< HEAD
+       cxxopts::value<std::string>())
+      ("nnue", "Path to NNUE weights YAML file",
        cxxopts::value<std::string>())
       ("static-eval", "Print static evaluation for provided FEN",
        cxxopts::value<bool>()->default_value("false"))
-=======
-        cxxopts::value<std::string>())
-            ("nnue", "Path to NNUE weights YAML file",
-        cxxopts::value<std::string>())
-      ("static-eval", "Print static evaluation for provided FEN",
-       cxxopts::value<bool>()->default_value("false"))
-      ("eval", "Evaluation mode: native|sunfish",
+      ("eval", "Evaluation mode: native|stockfish",
        cxxopts::value<std::string>()->default_value("native"))
->>>>>>> nnue_version
       ("o,onlyfen", "Print FEN only in self-play mode")
       ("s,self", "Run self-play CLI loop")
       ("arena", "Run built-in baseline-vs-params arena (no UCI)")
       ("arena-games", "Number of games for arena mode",
        cxxopts::value<int>()->default_value("20"))
+      ("threads", "Search threads to use (0 = auto)",
+       cxxopts::value<int>()->default_value("0"))
       ("bm,bestmove", "Print best move for the given FEN and exit")
       ("v,version", "Show version information (repeat for extended details)")
       ("p,perf", "Run built-in performance benchmark")
       ("perf-iters", "Number of benchmark iterations",
-         cxxopts::value<int>()->default_value("3"))
-        ("move-time", "Time allowed per move in milliseconds",
-         cxxopts::value<std::uint64_t>())
-        ("wtime", "White remaining time in milliseconds",
-         cxxopts::value<std::uint64_t>())
-        ("btime", "Black remaining time in milliseconds",
-         cxxopts::value<std::uint64_t>())
-        ("winc", "White increment in milliseconds",
-         cxxopts::value<std::uint64_t>())
-        ("binc", "Black increment in milliseconds",
-         cxxopts::value<std::uint64_t>())
-        ("movestogo", "Estimated moves to the next time control",
-         cxxopts::value<std::uint32_t>())
+       cxxopts::value<int>()->default_value("3"))
+      ("perf-suite",
+       "Perf benchmark suite (startpos|bench|file)",
+       cxxopts::value<std::string>()->default_value("startpos"))
+      ("perf-suite-file", "Path to newline-delimited FEN list",
+       cxxopts::value<std::string>())
+      ("move-time", "Time allowed per move in milliseconds",
+       cxxopts::value<std::uint64_t>())
+      ("wtime", "White remaining time in milliseconds",
+       cxxopts::value<std::uint64_t>())
+      ("btime", "Black remaining time in milliseconds",
+       cxxopts::value<std::uint64_t>())
+      ("winc", "White increment in milliseconds",
+       cxxopts::value<std::uint64_t>())
+      ("binc", "Black increment in milliseconds",
+       cxxopts::value<std::uint64_t>())
+      ("movestogo", "Estimated moves to the next time control",
+       cxxopts::value<std::uint32_t>())
       ("h,help", "Show this help message");
   // clang-format on
 
@@ -86,6 +88,7 @@ CliParseResult parse_cli(int argc, char** argv) {
     if (adjusted_args.empty()) {
       adjusted_args.emplace_back("skaks");
     }
+
     std::vector<char*> arg_ptrs;
     arg_ptrs.reserve(adjusted_args.size());
     for (auto& arg : adjusted_args) {
@@ -113,8 +116,13 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.best_move = parsed.count("bestmove") > 0;
     result.options.static_eval = parsed.count("static-eval") > 0;
-<<<<<<< HEAD
-=======
+
+    result.options.thread_count = parsed["threads"].as<int>();
+    if (result.options.thread_count < 0) {
+      result.parse_error = true;
+      result.message = "--threads must be non-negative";
+      return result;
+    }
 
     const auto eval_option = parsed["eval"].as<std::string>();
     std::string eval_lower;
@@ -125,14 +133,15 @@ CliParseResult parse_cli(int argc, char** argv) {
     }
     if (eval_lower == "native" || eval_lower == "default") {
       result.options.eval_mode = EvaluationMode::Native;
+    } else if (eval_lower == "stockfish") {
+      result.options.eval_mode = EvaluationMode::Stockfish;
     } else if (eval_lower == "sunfish") {
-      result.options.eval_mode = EvaluationMode::Sunfish;
+      result.options.eval_mode = EvaluationMode::Stockfish;
     } else {
       result.parse_error = true;
       result.message = "Unknown --eval mode: " + eval_option;
       return result;
     }
->>>>>>> nnue_version
 
     const bool request_polyglot = parsed.count("polyglot") > 0;
     const bool request_no_polyglot = parsed.count("no-polyglot") > 0;
@@ -166,15 +175,73 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.params_path = parsed["params"].as<std::string>();
       result.options.params_override = true;
     }
-<<<<<<< HEAD
-=======
     if (parsed.count("nnue") > 0) {
       result.options.nnue_path = parsed["nnue"].as<std::string>();
       result.options.nnue_override = true;
     }
->>>>>>> nnue_version
+
     result.options.perf_mode = parsed.count("perf") > 0;
     result.options.perf_iterations = parsed["perf-iters"].as<int>();
+
+    if (result.options.perf_iterations <= 0) {
+      result.parse_error = true;
+      result.message = "--perf-iters must be positive";
+      return result;
+    }
+
+    const auto raw_perf_suite = parsed["perf-suite"].as<std::string>();
+    std::string perf_suite_lower;
+    perf_suite_lower.reserve(raw_perf_suite.size());
+    for (char ch : raw_perf_suite) {
+      perf_suite_lower.push_back(
+          static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    if (perf_suite_lower.empty()) {
+      perf_suite_lower = "startpos";
+    }
+    result.options.perf_suite = perf_suite_lower;
+
+    if (parsed.count("perf-suite-file") > 0) {
+      if (!result.options.perf_suite.empty() &&
+          result.options.perf_suite != "startpos" &&
+          result.options.perf_suite != "file") {
+        result.parse_error = true;
+        result.message =
+            "--perf-suite-file cannot be combined with --perf-suite=" +
+            raw_perf_suite;
+        return result;
+      }
+      result.options.perf_suite_file =
+          parsed["perf-suite-file"].as<std::string>();
+      result.options.perf_suite = "file";
+    }
+
+    const bool perf_suite_known = result.options.perf_suite == "startpos" ||
+                                  result.options.perf_suite == "bench" ||
+                                  result.options.perf_suite == "search" ||
+                                  result.options.perf_suite == "file";
+    if (!perf_suite_known) {
+      result.parse_error = true;
+      result.message = "Unknown --perf-suite value: " + raw_perf_suite;
+      return result;
+    }
+
+    if (result.options.perf_suite == "file" &&
+        result.options.perf_suite_file.empty()) {
+      result.parse_error = true;
+      result.message =
+          "--perf-suite-file must be provided when using perf suite 'file'";
+      return result;
+    }
+
+    if (result.options.use_custom_fen &&
+        result.options.perf_suite != "startpos" &&
+        result.options.perf_suite != "file") {
+      result.parse_error = true;
+      result.message = "--fen cannot be combined with the selected perf suite";
+      return result;
+    }
+
     const auto version_requests = parsed.count("version");
     result.options.version_requests = static_cast<int>(version_requests);
     result.options.show_version = version_requests > 0;
@@ -214,6 +281,7 @@ CliParseResult parse_cli(int argc, char** argv) {
             "--depth cannot be combined with explicit clock options";
         return result;
       }
+
       const auto wtime =
           parsed.count("wtime") ? parsed["wtime"].as<std::uint64_t>() : 0;
       const auto btime =
@@ -245,38 +313,34 @@ CliParseResult parse_cli(int argc, char** argv) {
     const bool want_uci = parsed.count("uci") > 0;
     const bool want_self = parsed.count("self") > 0;
     const bool want_arena = parsed.count("arena") > 0;
+
     if (result.options.best_move && (want_uci || want_self || want_arena)) {
       result.parse_error = true;
       result.message =
           "--bestmove cannot be combined with --uci, --self, or --arena";
       return result;
     }
-<<<<<<< HEAD
-    if (result.options.static_eval && (want_uci || want_self)) {
-      result.parse_error = true;
-      result.message = "--static-eval cannot be combined with --uci or --self";
-      return result;
-    }
-    if (want_uci && want_self) {
-=======
+
     if (result.options.static_eval && (want_uci || want_self || want_arena)) {
->>>>>>> nnue_version
       result.parse_error = true;
       result.message =
           "--static-eval cannot be combined with --uci, --self, or --arena";
       return result;
     }
+
     if ((want_uci && want_self) || (want_uci && want_arena) ||
         (want_self && want_arena)) {
       result.parse_error = true;
       result.message = "--uci, --self, and --arena are mutually exclusive";
       return result;
     }
+
     if (want_uci && parsed.count("perf") > 0) {
       result.parse_error = true;
       result.message = "--uci and --perf cannot be used together";
       return result;
     }
+
     result.options.self_play = want_self;
     result.options.arena_mode = want_arena;
     result.options.use_uci = want_uci || (!want_self && !want_arena);
@@ -292,14 +356,11 @@ CliParseResult parse_cli(int argc, char** argv) {
         result.message = "--static-eval cannot be combined with --perf";
         return result;
       }
-<<<<<<< HEAD
-=======
       if (result.options.arena_mode) {
         result.parse_error = true;
         result.message = "--arena cannot be combined with --perf";
         return result;
       }
->>>>>>> nnue_version
       result.options.self_play = false;
       result.options.use_uci = false;
     }
@@ -315,20 +376,12 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.self_play = false;
       result.options.use_uci = false;
       result.options.perf_mode = false;
-<<<<<<< HEAD
-    }
-
-    if (!want_uci && !want_self && !result.options.show_version &&
-=======
       result.options.arena_mode = false;
     }
 
     if (!want_uci && !want_self && !want_arena && !result.options.show_version &&
->>>>>>> nnue_version
         !result.options.perf_mode && !result.options.best_move &&
         !result.options.static_eval) {
-      // No explicit mode requested: default to UCI when no extra args were
-      // provided.
       const bool user_supplied_args = adj_argc > 1;
       if (user_supplied_args) {
         result.options.self_play = true;
@@ -353,7 +406,6 @@ CliParseResult parse_cli(int argc, char** argv) {
         result.message = "--arena-games must be positive";
         return result;
       }
-      // Force Polyglot off for deterministic arena runs.
       result.options.polyglot = false;
     }
 

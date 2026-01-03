@@ -25,7 +25,9 @@ def run_param_optimize(args: argparse.Namespace) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = _configure_parser(
-        argparse.ArgumentParser(description="Self-play parameter optimizer (beam + repeats)")
+        argparse.ArgumentParser(
+            description="Self-play parameter optimizer (beam + repeats)"
+        )
     )
     parsed = parser.parse_args(argv)
     run_param_optimize(parsed)

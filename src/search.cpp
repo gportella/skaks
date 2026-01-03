@@ -1,25 +1,45 @@
 #include "chess/search.hpp"
 
 #include "chess/complexity.hpp"
+#include "chess/move_ordering.hpp"
 #include "chess/moves.hpp"
+#include "chess/nnue.hpp"
+#include "chess/nnue_incremental.hpp"
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/search_params.hpp"
 #include "chess/time_manager.hpp"
-#include "chess/move_ordering.hpp"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
+#include <memory>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#if defined(__APPLE__) || defined(__linux__)
+#define CHESS_USE_POSIX_THREADS 1
+#include <pthread.h>
+#else
+#define CHESS_USE_POSIX_THREADS 0
+#endif
 
 namespace chess {
 namespace {
 
 constexpr int kMaxAspirationAttempts = 24;
+
+struct LazySmpThread;
+
+#if CHESS_USE_POSIX_THREADS
+constexpr std::size_t kLazyWorkerStackSize = 16 * 1024 * 1024;
+#endif
 
 struct SearchScratch {
   MoveHistory* history = nullptr;
@@ -28,7 +48,8 @@ struct SearchScratch {
   MoveOrderingTables ordering;
   TimeManager* time_manager = nullptr;
   std::atomic<bool>* abort_requested = nullptr;
-  std::vector<Move> pv_table;
+  std::atomic<bool>* local_abort = nullptr;
+  LazySmpThread* thread = nullptr;
 };
 
 constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
@@ -37,6 +58,10 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
                                      std::uint64_t nodes) {
   if (scratch.abort_requested &&
       scratch.abort_requested->load(std::memory_order_relaxed)) {
+    return true;
+  }
+  if (scratch.local_abort &&
+      scratch.local_abort->load(std::memory_order_relaxed)) {
     return true;
   }
   if (!scratch.time_manager || !scratch.time_manager->enabled()) {
@@ -61,6 +86,412 @@ inline SearchResult make_aborted_result() {
   return aborted;
 }
 
+struct MoveEvaluationContext {
+  int depth = 0;
+  int alpha = -INF;
+  int beta = INF;
+  bool is_pv = false;
+  bool parent_in_check = false;
+  int move_number = 1;
+  SideToMove stm = SideToMove::White;
+  int ply = 0;
+  int ply_from_root = 0;
+  int repetition_start = 0;
+  bool allow_pvs = true;
+  const Move* parent_move = nullptr;
+};
+
+struct MoveEvaluationResult {
+  SearchResult child;
+  int score = 0;
+  bool aborted = false;
+};
+
+SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
+                               SideToMove stm, const EvaluatorFn& evaluator,
+                               SearchScratch& scratch, int ply,
+                               int repetition_start, int ply_from_root,
+                               bool is_pv, std::uint64_t& nodes,
+                               const Move* parent_move,
+                               const uint32_t* excluded_root_moves,
+                               std::size_t excluded_root_count);
+
+MoveEvaluationResult evaluate_move(Board& board, const Move& move,
+                                   const MoveEvaluationContext& ctx,
+                                   SearchScratch& scratch, std::uint64_t& nodes,
+                                   const EvaluatorFn& evaluator) {
+  MoveEvaluationResult output{};
+
+  const bool is_capture = move.captured_pc != OccupancyType::empty;
+  const bool is_promo = move.promo_pc != OccupancyType::empty;
+  const bool quiet_like = !is_capture && !is_promo;
+
+  int child_depth = ctx.depth - 1;
+  const int move_number = ctx.move_number;
+
+  Undo undo = make_move(board, move);
+
+  SfNnueStack* nnue_stack = current_thread_nnue_stack();
+  if (nnue_stack) {
+    nnue_stack->push_move(board, move, undo);
+  }
+
+  const bool irreversible = move_is_irreversible(move);
+  const int next_repetition_start =
+      irreversible ? (ctx.ply + 1) : ctx.repetition_start;
+
+  const bool in_check_after_move = is_check(board, flip_side(ctx.stm));
+  if (child_depth == 0 && in_check_after_move &&
+      ctx.ply < static_cast<int>(MAX_PLY) - 1) {
+    child_depth = 1;
+  }
+
+  const int history_score = scratch.ordering.history_score(move);
+
+  int reduction = 0;
+  if (quiet_like && !in_check_after_move && child_depth >= 2 &&
+      move_number > 1) {
+    const int capped_depth = std::min(child_depth, 63);
+    const int capped_order = std::min(move_number, 63);
+    const double depth_factor = std::log1p(static_cast<double>(capped_depth));
+    const double order_factor = std::log1p(static_cast<double>(capped_order));
+    const double scaled = depth_factor * order_factor * 0.85;
+    const int tentative = static_cast<int>(std::round(scaled));
+    const int max_reduction = std::max(0, child_depth - 1);
+    reduction = std::clamp(tentative, 0, max_reduction);
+    if (ctx.is_pv) {
+      reduction = std::max(0, reduction - 1);
+    }
+    if (history_score < 2000) {
+      reduction = std::min(max_reduction, reduction + 1);
+    }
+    if (history_score < 0) {
+      reduction = std::min(max_reduction, reduction + 1);
+    }
+    if (history_score > 12000) {
+      reduction = std::max(0, reduction - 1);
+    }
+    if (history_score > 20000) {
+      reduction = std::max(0, reduction - 1);
+    }
+  }
+
+  int search_depth = std::max(0, child_depth);
+
+  auto run_search = [&](int depth_to_use, int a_val, int b_val,
+                        bool pv_flag) -> SearchResult {
+    SearchResult res = alphabeta_minimax(
+        board, depth_to_use, a_val, b_val, flip_side(ctx.stm), evaluator,
+        scratch, ctx.ply + 1, next_repetition_start, ctx.ply_from_root + 1,
+        pv_flag, nodes, &move, nullptr, 0);
+    res.score = normalize_mate_score(res.score, ctx.ply);
+    return res;
+  };
+
+  bool need_full_search = true;
+  SearchResult child = {};
+  if (reduction > 0) {
+    const int reduced_depth = std::max(0, search_depth - reduction);
+    child = run_search(reduced_depth, ctx.alpha, ctx.beta, false);
+    if (child.aborted) {
+      undo_move(board, undo);
+      if (nnue_stack) {
+        nnue_stack->pop();
+      }
+      if (ctx.ply + 1 < MAX_PLY && scratch.history) {
+        scratch.history
+            ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
+      }
+      output.child = child;
+      output.score = child.score;
+      output.aborted = true;
+      return output;
+    }
+    if (ctx.stm == SideToMove::White) {
+      need_full_search = child.score > ctx.alpha;
+    } else {
+      need_full_search = child.score < ctx.beta;
+    }
+  }
+
+  bool use_pvs = false;
+  int narrow_alpha = ctx.alpha;
+  int narrow_beta = ctx.beta;
+
+  if (need_full_search) {
+    const bool is_first_move = (move_number == 1);
+    use_pvs = ctx.allow_pvs && ctx.is_pv && !is_first_move &&
+              (search_depth >= 0) && (ctx.alpha > -MATE_BOUND) &&
+              ctx.beta < MATE_BOUND && (ctx.beta - ctx.alpha) > 1;
+    if (ctx.stm == SideToMove::White) {
+      narrow_beta = std::min(ctx.beta, ctx.alpha + 1);
+      use_pvs = use_pvs && narrow_alpha <= narrow_beta;
+    } else {
+      narrow_alpha = std::max(ctx.alpha, ctx.beta - 1);
+      use_pvs = use_pvs && narrow_beta >= narrow_alpha;
+    }
+
+    if (use_pvs) {
+      child = run_search(search_depth, narrow_alpha, narrow_beta, true);
+      if (child.aborted) {
+        undo_move(board, undo);
+        if (nnue_stack) {
+          nnue_stack->pop();
+        }
+        if (ctx.ply + 1 < MAX_PLY && scratch.history) {
+          scratch.history
+              ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
+        }
+        output.child = child;
+        output.score = child.score;
+        output.aborted = true;
+        return output;
+      }
+      if (child.score >= narrow_beta) {
+        child = run_search(search_depth, ctx.alpha, ctx.beta, ctx.is_pv);
+        if (child.aborted) {
+          undo_move(board, undo);
+          if (nnue_stack) {
+            nnue_stack->pop();
+          }
+          if (ctx.ply + 1 < MAX_PLY && scratch.history) {
+            scratch.history
+                ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
+          }
+          output.child = child;
+          output.score = child.score;
+          output.aborted = true;
+          return output;
+        }
+      }
+    } else {
+      child = run_search(search_depth, ctx.alpha, ctx.beta,
+                         ctx.is_pv && is_first_move);
+      if (child.aborted) {
+        undo_move(board, undo);
+        if (nnue_stack) {
+          nnue_stack->pop();
+        }
+        if (ctx.ply + 1 < MAX_PLY && scratch.history) {
+          scratch.history
+              ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
+        }
+        output.child = child;
+        output.score = child.score;
+        output.aborted = true;
+        return output;
+      }
+    }
+  }
+
+  const int score = child.score;
+
+  undo_move(board, undo);
+  if (nnue_stack) {
+    nnue_stack->pop();
+  }
+
+  if (ctx.ply + 1 < MAX_PLY && scratch.history) {
+    scratch.history->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] =
+        0;
+  }
+
+  output.child = child;
+  output.score = score;
+  output.aborted = child.aborted;
+  return output;
+}
+
+struct LazySmpResult {
+  Move move;
+  int move_number = 0;
+  SearchResult child;
+  int score = 0;
+  std::uint64_t nodes = 0;
+  bool aborted = false;
+};
+
+struct LazySmpSplitPoint {
+  void add_task() {
+    pending.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  void submit(LazySmpResult&& result) {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      ready.emplace_back(std::move(result));
+    }
+    pending.fetch_sub(1, std::memory_order_relaxed);
+    cv.notify_one();
+  }
+
+  bool try_pop(LazySmpResult& out) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (ready.empty()) {
+      return false;
+    }
+    out = std::move(ready.back());
+    ready.pop_back();
+    return true;
+  }
+
+  bool wait_pop(LazySmpResult& out) {
+    std::unique_lock<std::mutex> lock(mutex);
+    cv.wait(lock, [&]() {
+      return !ready.empty() || pending.load(std::memory_order_relaxed) == 0;
+    });
+    if (ready.empty()) {
+      return false;
+    }
+    out = std::move(ready.back());
+    ready.pop_back();
+    return true;
+  }
+
+  bool has_pending() const {
+    return pending.load(std::memory_order_relaxed) > 0;
+  }
+
+  std::mutex mutex;
+  std::condition_variable cv;
+  std::vector<LazySmpResult> ready;
+  std::atomic<bool> cancel_flag{false};
+  std::atomic<int> pending{0};
+};
+
+struct LazySmpTask {
+  std::shared_ptr<LazySmpSplitPoint> split_point;
+  Board board;
+  MoveHistory history;
+  KillerTable killers;
+  MoveOrderingTables ordering;
+  SfNnueStack nnue_stack;
+  bool has_history = false;
+  bool has_killers = false;
+  bool has_nnue = false;
+  Move move{};
+  int move_number = 0;
+  MoveEvaluationContext eval_ctx;
+  bool has_parent_move = false;
+  Move parent_move_storage{};
+  std::atomic<bool>* abort_flag = nullptr;
+};
+
+struct LazySmpContext {
+  std::mutex queue_mutex;
+  std::condition_variable queue_cv;
+  std::deque<std::unique_ptr<LazySmpTask>> queue;
+  bool shutting_down = false;
+
+  const EvaluatorFn* evaluator = nullptr;
+  TranspositionTable* tt = nullptr;
+  std::atomic<bool> internal_abort{false};
+  std::atomic<bool>* abort_flag = nullptr;
+  int helper_count = 0;
+  int min_split_depth = 3;
+
+  void enqueue(std::unique_ptr<LazySmpTask> task) {
+    {
+      std::lock_guard<std::mutex> lock(queue_mutex);
+      queue.emplace_back(std::move(task));
+    }
+    queue_cv.notify_one();
+  }
+
+  bool pop(std::unique_ptr<LazySmpTask>& out) {
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    queue_cv.wait(lock, [&]() { return shutting_down || !queue.empty(); });
+    if (shutting_down && queue.empty()) {
+      return false;
+    }
+    out = std::move(queue.front());
+    queue.pop_front();
+    return true;
+  }
+
+  void stop() {
+    {
+      std::lock_guard<std::mutex> lock(queue_mutex);
+      shutting_down = true;
+    }
+    queue_cv.notify_all();
+  }
+};
+
+struct LazySmpThread {
+  LazySmpContext* context = nullptr;
+  int id = 0;
+};
+
+thread_local LazySmpThread* tls_lazy_thread = nullptr;
+
+void execute_lazy_task(LazySmpTask& task, LazySmpThread& thread) {
+  LazySmpContext* ctx = thread.context;
+  if (!ctx) {
+    return;
+  }
+
+  SfNnueStack* nnue_stack = task.has_nnue ? &task.nnue_stack : nullptr;
+  ScopedNnueThreadContext nnue_guard(nnue_stack);
+
+  SearchScratch scratch{};
+  scratch.history = task.has_history ? &task.history : nullptr;
+  scratch.killers = task.has_killers ? &task.killers : nullptr;
+  scratch.tt = ctx->tt;
+  scratch.ordering = task.ordering;
+  scratch.time_manager = nullptr;
+  scratch.abort_requested = task.abort_flag ? task.abort_flag : ctx->abort_flag;
+  scratch.local_abort = &task.split_point->cancel_flag;
+  scratch.thread = &thread;
+
+  std::uint64_t nodes = 0;
+  MoveEvaluationContext eval_ctx = task.eval_ctx;
+  if (task.has_parent_move) {
+    eval_ctx.parent_move = &task.parent_move_storage;
+  } else {
+    eval_ctx.parent_move = nullptr;
+  }
+
+  MoveEvaluationResult eval = evaluate_move(task.board, task.move, eval_ctx,
+                                            scratch, nodes, *ctx->evaluator);
+
+  LazySmpResult result{};
+  result.move = task.move;
+  result.move_number = task.move_number;
+  result.child = std::move(eval.child);
+  result.score = eval.score;
+  result.nodes = nodes;
+  result.aborted = eval.aborted;
+
+  task.split_point->submit(std::move(result));
+}
+
+void lazy_worker_loop(LazySmpThread& thread) {
+  tls_lazy_thread = &thread;
+  std::unique_ptr<LazySmpTask> task;
+  while (thread.context && thread.context->pop(task)) {
+    execute_lazy_task(*task, thread);
+    task.reset();
+  }
+  tls_lazy_thread = nullptr;
+}
+
+#if CHESS_USE_POSIX_THREADS
+struct LazyWorkerPayload {
+  LazySmpThread* thread = nullptr;
+};
+
+void* lazy_worker_entry(void* payload_ptr) {
+  std::unique_ptr<LazyWorkerPayload> payload(
+      static_cast<LazyWorkerPayload*>(payload_ptr));
+  if (!payload || !payload->thread) {
+    return nullptr;
+  }
+  lazy_worker_loop(*payload->thread);
+  return nullptr;
+}
+#endif
+
 inline void update_history(SearchScratch& scratch, const Move& move, int depth,
                            bool success) {
   scratch.ordering.record_history(move, depth, success);
@@ -75,12 +506,12 @@ inline void record_counter(SearchScratch& scratch, const Move* parent,
   scratch.ordering.record_counter(*parent, reply);
 }
 
-inline void store_killer_move(SearchScratch& scratch, int ply, const Move& move,
-                              const Undo& undo) {
+inline void store_killer_move(SearchScratch& scratch, int ply,
+                              const Move& move) {
   if (scratch.killers == nullptr || ply < 0 || ply >= MAX_PLY) {
     return;
   }
-  const bool quiet = (undo.captured_pc == OccupancyType::empty) &&
+  const bool quiet = (move.captured_pc == OccupancyType::empty) &&
                      (move.promo_pc == OccupancyType::empty);
   if (!quiet) {
     return;
@@ -191,13 +622,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
           tt_result.best_move = cached_entry.best_move;
           tt_result.outcome = SearchResult::Outcome::InProgress;
           if (tt_result.best_move.moving_pc != OccupancyType::empty) {
-            if (ply < MAX_PLY) {
-              const std::size_t pv_offset =
-                  static_cast<std::size_t>(ply) * MAX_PLY;
-              if (pv_offset < scratch.pv_table.size()) {
-                scratch.pv_table[pv_offset] = tt_result.best_move;
-              }
-            }
+            tt_result.principal_variation.clear();
+            tt_result.principal_variation.push_back(tt_result.best_move);
             tt_result.pv_length = 1;
           }
           return tt_result;
@@ -217,13 +643,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
           tt_cutoff.best_move = cached_entry.best_move;
           tt_cutoff.outcome = SearchResult::Outcome::InProgress;
           if (tt_cutoff.best_move.moving_pc != OccupancyType::empty) {
-            if (ply < MAX_PLY) {
-              const std::size_t pv_offset =
-                  static_cast<std::size_t>(ply) * MAX_PLY;
-              if (pv_offset < scratch.pv_table.size()) {
-                scratch.pv_table[pv_offset] = tt_cutoff.best_move;
-              }
-            }
+            tt_cutoff.principal_variation.clear();
+            tt_cutoff.principal_variation.push_back(tt_cutoff.best_move);
             tt_cutoff.pv_length = 1;
           }
           return tt_cutoff;
@@ -238,17 +659,27 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
   if (allow_null_move(board, depth)) {
     UndoNull undo_null = make_null_move(board);
+    SfNnueStack* nnue_stack = current_thread_nnue_stack();
+    if (nnue_stack) {
+      nnue_stack->push_null();
+    }
     const int null_move_reduction = search_params().null_move_reduction;
     SearchResult null_result = alphabeta_minimax(
-      board, depth - 1 - null_move_reduction, beta - 1, beta, flip_side(stm),
-      evaluator, scratch, ply + 1, repetition_start, ply_from_root + 1, false,
-      nodes, nullptr, nullptr, 0);
+        board, depth - 1 - null_move_reduction, beta - 1, beta, flip_side(stm),
+        evaluator, scratch, ply + 1, repetition_start, ply_from_root + 1, false,
+        nodes, nullptr, nullptr, 0);
     if (null_result.aborted) {
       undo_null_move(board, undo_null);
+      if (nnue_stack) {
+        nnue_stack->pop();
+      }
       return null_result;
     }
     const int score_after_null = normalize_mate_score(null_result.score, ply);
     undo_null_move(board, undo_null);
+    if (nnue_stack) {
+      nnue_stack->pop();
+    }
     if (score_after_null >= beta) {
       SearchResult cutoff{};
       cutoff.score = score_after_null;
@@ -343,8 +774,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   const auto* history_matrix = scratch.ordering.history_matrix();
   const uint32_t counter_code =
       parent_move ? scratch.ordering.counter_move(*parent_move) : 0;
-  sort_moves(board, moves, move_count, tt_code, scratch.killers,
-             history_matrix, ply, counter_code);
+  sort_moves(board, moves, move_count, tt_code, scratch.killers, history_matrix,
+             ply, counter_code);
 
   SearchResult best{};
   best.score = (stm == SideToMove::White) ? -INF : INF;
@@ -354,198 +785,203 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   const bool parent_in_check = is_check(board, stm);
   int moves_tried = 0;
 
-  for (uint16_t i = 0; i < move_count; ++i) {
-    int child_depth = depth - 1;
+  MoveEvaluationContext move_ctx{};
+  move_ctx.depth = depth;
+  move_ctx.is_pv = is_pv;
+  move_ctx.stm = stm;
+  move_ctx.ply = ply;
+  move_ctx.ply_from_root = ply_from_root;
+  move_ctx.repetition_start = repetition_start;
+  move_ctx.parent_in_check = parent_in_check;
+  move_ctx.parent_move = parent_move;
+  move_ctx.allow_pvs = true;
 
+  LazySmpThread* smp_thread = scratch.thread ? scratch.thread : tls_lazy_thread;
+  LazySmpContext* smp_ctx = smp_thread ? smp_thread->context : nullptr;
+  const bool smp_supported =
+      smp_ctx && smp_ctx->helper_count > 0 && smp_thread && smp_thread->id == 0;
+  std::shared_ptr<LazySmpSplitPoint> split_point;
+  LazySmpSplitPoint* split_raw = nullptr;
+  bool cutoff_triggered = false;
+
+  auto apply_result = [&](const Move& current_move,
+                          const SearchResult& child_result,
+                          int score_value) -> bool {
+    if (cutoff_triggered) {
+      return true;
+    }
+
+    const bool quiet_like = (current_move.captured_pc == OccupancyType::empty) &&
+                            (current_move.promo_pc == OccupancyType::empty);
+
+    const bool is_better =
+        (best.best_move.moving_pc == OccupancyType::empty) ? true
+        : (stm == SideToMove::White) ? (score_value > best.score)
+                                     : (score_value < best.score);
+    if (is_better) {
+      best.score = score_value;
+      best.best_move = current_move;
+      best.outcome = child_result.outcome;
+
+      best.principal_variation.clear();
+      best.principal_variation.reserve(child_result.principal_variation.size() +
+                                       1);
+      best.principal_variation.push_back(current_move);
+      best.principal_variation.insert(best.principal_variation.end(),
+                                      child_result.principal_variation.begin(),
+                                      child_result.principal_variation.end());
+      best.pv_length = static_cast<int>(best.principal_variation.size());
+      update_history(scratch, current_move, depth, true);
+      record_counter(scratch, parent_move, current_move);
+    } else {
+      const bool fail_low = (stm == SideToMove::White)
+                                ? (score_value <= alpha_base)
+                                : (score_value >= beta_base);
+      if (fail_low) {
+        update_history(scratch, current_move, depth, false);
+      }
+    }
+
+    bool cutoff_now = false;
+    if (stm == SideToMove::White) {
+      if (score_value > alpha) {
+        alpha = score_value;
+      }
+      cutoff_now = alpha >= beta;
+    } else {
+      if (score_value < beta) {
+        beta = score_value;
+      }
+      cutoff_now = beta <= alpha;
+    }
+
+    if (cutoff_now) {
+      cutoff_triggered = true;
+      if (quiet_like) {
+        store_killer_move(scratch, ply, current_move);
+      }
+      update_history(scratch, current_move, depth, true);
+      record_counter(scratch, parent_move, current_move);
+      if (split_raw) {
+        split_raw->cancel_flag.store(true, std::memory_order_relaxed);
+      }
+    }
+
+    return cutoff_now;
+  };
+
+  for (uint16_t i = 0; i < move_count; ++i) {
     Move move = decode_move(moves[i]);
     const bool is_capture = move.captured_pc != OccupancyType::empty;
     const bool is_promo = move.promo_pc != OccupancyType::empty;
     const bool quiet_like = !is_capture && !is_promo;
-    const int move_number = moves_tried + 1;
 
-    if (!is_pv && !parent_in_check && quiet_like && child_depth > 0 &&
-        child_depth <= 3) {
-      static constexpr int lmp_limits[4] = {0, 4, 8, 12};
-      if (move_number > lmp_limits[child_depth]) {
+    const int move_number = moves_tried + 1;
+    int child_depth_lmp = depth - 1;
+    if (!is_pv && !parent_in_check && quiet_like && child_depth_lmp > 0 &&
+        child_depth_lmp <= 3) {
+      static constexpr int lmp_limits[4] = {0, 3, 6, 10};
+      if (move_number > lmp_limits[child_depth_lmp]) {
         continue;
       }
     }
 
     moves_tried = move_number;
-    const bool is_first_move = (move_number == 1);
 
-    Undo undo = make_move(board, move);
+    const bool can_split =
+        smp_supported && depth >= smp_ctx->min_split_depth && move_number > 1;
 
-    const bool irreversible = move_is_irreversible(move);
-    const int next_repetition_start =
-        irreversible ? (ply + 1) : repetition_start;
-
-    const bool in_check_after_move = is_check(board, flip_side(stm));
-    if (child_depth == 0 && in_check_after_move &&
-        ply < static_cast<int>(MAX_PLY) - 1) {
-      child_depth = 1;
-    }
-
-    const int history_score = scratch.ordering.history_score(move);
-
-    int reduction = 0;
-    if (quiet_like && !in_check_after_move && child_depth >= 2 &&
-        move_number > 1) {
-      const int capped_depth = std::min(child_depth, 63);
-      const int capped_order = std::min(move_number, 63);
-      const double depth_factor = std::log1p(static_cast<double>(capped_depth));
-      const double order_factor = std::log1p(static_cast<double>(capped_order));
-      const int tentative =
-          static_cast<int>((depth_factor * order_factor) * 0.75);
-      const int max_reduction = std::max(0, child_depth - 1);
-      reduction = std::min(tentative, max_reduction);
-      if (is_pv) {
-        reduction = std::max(0, reduction - 1);
+    if (can_split) {
+      if (!split_point) {
+        split_point = std::make_shared<LazySmpSplitPoint>();
+        split_raw = split_point.get();
       }
-      if (history_score > 8000) {
-        reduction = std::max(0, reduction - 1);
-      }
-      if (history_score > 16000) {
-        reduction = std::max(0, reduction - 1);
-      }
-    }
 
-    int search_depth = std::max(0, child_depth);
-
-    auto run_search = [&](int depth_to_use, int a_val, int b_val,
-                          bool pv_flag) -> SearchResult {
-      SearchResult res =
-          alphabeta_minimax(board, depth_to_use, a_val, b_val, flip_side(stm),
-                            evaluator, scratch, ply + 1, next_repetition_start,
-                            ply_from_root + 1, pv_flag, nodes, &move, nullptr,
-                            0);
-      res.score = normalize_mate_score(res.score, ply);
-      return res;
-    };
-
-    bool need_full_search = true;
-    SearchResult child = {};
-    if (reduction > 0) {
-      const int reduced_depth = std::max(0, search_depth - reduction);
-      child = run_search(reduced_depth, alpha, beta, false);
-      if (child.aborted) {
-        undo_move(board, undo);
-        return child;
+      auto task = std::make_unique<LazySmpTask>();
+      task->split_point = split_point;
+      task->board = board;
+      task->move = move;
+      task->move_number = move_number;
+      task->eval_ctx = move_ctx;
+      task->eval_ctx.move_number = move_number;
+      task->eval_ctx.alpha = alpha;
+      task->eval_ctx.beta = beta;
+      task->eval_ctx.allow_pvs = false;
+      task->eval_ctx.parent_move = nullptr;
+      task->eval_ctx.parent_in_check = parent_in_check;
+      task->has_history = scratch.history != nullptr;
+      if (task->has_history) {
+        task->history = *scratch.history;
       }
-      if (stm == SideToMove::White) {
-        need_full_search = child.score > alpha;
+      task->has_killers = scratch.killers != nullptr;
+      if (task->has_killers) {
+        task->killers = *scratch.killers;
+      }
+      task->ordering = scratch.ordering;
+      task->has_parent_move = parent_move != nullptr;
+      if (task->has_parent_move) {
+        task->parent_move_storage = *parent_move;
+      }
+      task->abort_flag = smp_ctx->abort_flag;
+      if (SfNnueStack* nnue_stack = current_thread_nnue_stack()) {
+        task->nnue_stack = *nnue_stack;
+        task->has_nnue = true;
       } else {
-        need_full_search = child.score < beta;
+        task->has_nnue = false;
       }
+      split_point->add_task();
+      smp_ctx->enqueue(std::move(task));
+      continue;
     }
 
-    bool use_pvs = false;
-    int narrow_alpha = alpha;
-    int narrow_beta = beta;
+    move_ctx.move_number = move_number;
+    move_ctx.alpha = alpha;
+    move_ctx.beta = beta;
+    move_ctx.allow_pvs = true;
 
-    if (need_full_search) {
-      use_pvs = is_pv && !is_first_move && (search_depth >= 0) &&
-                (alpha > -MATE_BOUND) && beta < MATE_BOUND && (beta - alpha) > 1;
-      if (stm == SideToMove::White) {
-        narrow_beta = std::min(beta, alpha + 1);
-        use_pvs = use_pvs && narrow_alpha <= narrow_beta;
-      } else {
-        narrow_alpha = std::max(alpha, beta - 1);
-        use_pvs = use_pvs && narrow_beta >= narrow_alpha;
+    MoveEvaluationResult eval =
+        evaluate_move(board, move, move_ctx, scratch, nodes, evaluator);
+    if (eval.aborted) {
+      if (split_raw) {
+        split_raw->cancel_flag.store(true, std::memory_order_relaxed);
       }
-      if (use_pvs) {
-        child = run_search(search_depth, narrow_alpha, narrow_beta, true);
-        if (child.aborted) {
-          undo_move(board, undo);
-          return child;
-        }
-        if (child.score >= narrow_beta) {
-          child = run_search(search_depth, alpha, beta, is_pv);
-          if (child.aborted) {
-            undo_move(board, undo);
-            return child;
+      return eval.child;
+    }
+
+    const bool cutoff_now = apply_result(move, eval.child, eval.score);
+
+    if (split_point) {
+      LazySmpResult ready{};
+      while (split_point->try_pop(ready)) {
+        nodes += ready.nodes;
+        if (ready.aborted) {
+          if (!split_raw ||
+              !split_raw->cancel_flag.load(std::memory_order_relaxed)) {
+            return ready.child;
           }
+          continue;
         }
-      } else {
-        child = run_search(search_depth, alpha, beta, is_pv && is_first_move);
-        if (child.aborted) {
-          undo_move(board, undo);
-          return child;
-        }
+        apply_result(ready.move, ready.child, ready.score);
       }
     }
 
-    const int score = child.score;
-
-    undo_move(board, undo);
-
-    if (ply + 1 < MAX_PLY && history) {
-      history->repetition_counts[static_cast<std::size_t>(ply + 1)] = 0;
+    if (cutoff_now) {
+      break;
     }
+  }
 
-    const bool is_better = (best.best_move.moving_pc == OccupancyType::empty)
-                               ? true
-                           : (stm == SideToMove::White) ? (score > best.score)
-                                                        : (score < best.score);
-    if (is_better) {
-      best.score = score;
-      best.best_move = move;
-      best.outcome = child.outcome;
-
-      if (ply < MAX_PLY) {
-        const std::size_t pv_offset = static_cast<std::size_t>(ply) * MAX_PLY;
-        if (pv_offset < scratch.pv_table.size()) {
-          scratch.pv_table[pv_offset] = move;
-          if (child.pv_length > 0) {
-            const std::size_t child_offset =
-                static_cast<std::size_t>(ply + 1) * MAX_PLY;
-            if (child_offset < scratch.pv_table.size()) {
-              const int copy_len =
-                  std::min(child.pv_length, static_cast<int>(MAX_PLY) - 1);
-              for (std::size_t pv_idx = 0;
-                   pv_idx < static_cast<std::size_t>(copy_len); ++pv_idx) {
-                scratch.pv_table[pv_offset + 1 + pv_idx] =
-                    scratch.pv_table[child_offset + pv_idx];
-              }
-              best.pv_length = copy_len + 1;
-            } else {
-              best.pv_length = 1;
-            }
-          } else {
-            best.pv_length = 1;
-          }
+  if (split_point) {
+    LazySmpResult ready{};
+    while (split_point->wait_pop(ready)) {
+      nodes += ready.nodes;
+      if (ready.aborted) {
+        if (!split_raw ||
+            !split_raw->cancel_flag.load(std::memory_order_relaxed)) {
+          return ready.child;
         }
+        continue;
       }
-      update_history(scratch, move, depth, true);
-      record_counter(scratch, parent_move, move);
-    } else {
-      const bool fail_low = (stm == SideToMove::White) ? (score <= alpha_base)
-                                                       : (score >= beta_base);
-      if (fail_low) {
-        update_history(scratch, move, depth, false);
-      }
-    }
-
-    if (stm == SideToMove::White) {
-      if (score > alpha) {
-        alpha = score;
-      }
-      if (alpha >= beta) {
-        store_killer_move(scratch, ply, move, undo);
-        update_history(scratch, move, depth, true);
-        record_counter(scratch, parent_move, move);
-        break;
-      }
-    } else {
-      if (score < beta) {
-        beta = score;
-      }
-      if (beta <= alpha) {
-        store_killer_move(scratch, ply, move, undo);
-        update_history(scratch, move, depth, true);
-        record_counter(scratch, parent_move, move);
-        break;
-      }
+      apply_result(ready.move, ready.child, ready.score);
     }
   }
 
@@ -607,7 +1043,14 @@ SearchResult search_position(Board& board, SideToMove stm,
   } else {
     scratch.abort_requested = &abort_requested;
   }
-  scratch.pv_table.resize(MAX_PLY * MAX_PLY);
+  scratch.local_abort = nullptr;
+  scratch.thread = tls_lazy_thread;
+
+  SfNnueStack nnue_stack;
+  ScopedNnueThreadContext nnue_guard(sf_nnue_active() ? &nnue_stack : nullptr);
+  if (sf_nnue_active()) {
+    nnue_stack.reset();
+  }
 
   double root_complexity_hint = 0.0;
   if (params.time_manager) {
@@ -717,9 +1160,9 @@ SearchResult search_position(Board& board, SideToMove stm,
         ++attempts;
         const bool is_pv = true;
         result = alphabeta_minimax(
-          board, current_depth, alpha, beta, stm, evaluator, scratch,
-          start_ply, repetition_start, 0, is_pv, nodes, nullptr,
-          excluded_count ? excluded_moves.data() : nullptr, excluded_count);
+            board, current_depth, alpha, beta, stm, evaluator, scratch,
+            start_ply, repetition_start, 0, is_pv, nodes, nullptr,
+            excluded_count ? excluded_moves.data() : nullptr, excluded_count);
         result.searched_depth = current_depth;
         result.selective_depth = current_depth;
         if (result.aborted) {
@@ -869,26 +1312,117 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
   final_result.score = normalize_mate_score(final_result.score, start_ply);
   final_result.nodes = nodes;
-  final_result.aborted = abort_requested.load(std::memory_order_relaxed);
+  const bool abort_flagged = abort_requested.load(std::memory_order_relaxed);
+  const bool has_move = final_result.best_move.moving_pc != OccupancyType::empty;
+  final_result.aborted = abort_flagged && !has_move;
 
-  if (final_result.pv_length > 0 && final_result.principal_variation.empty()) {
-    if (!scratch.pv_table.empty()) {
-      const std::size_t pv_offset =
-          static_cast<std::size_t>(start_ply) * MAX_PLY;
-      if (pv_offset < scratch.pv_table.size()) {
-        final_result.principal_variation.resize(
-            static_cast<std::size_t>(final_result.pv_length));
-        for (std::size_t pv_idx = 0;
-             pv_idx < static_cast<std::size_t>(final_result.pv_length);
-             ++pv_idx) {
-          final_result.principal_variation[pv_idx] =
-              scratch.pv_table[pv_offset + pv_idx];
-        }
-      }
-    }
-  }
   return final_result;
 }
+
+SearchResult search_position_parallel(Board& board, SideToMove stm,
+                                      const SearchParameters& params,
+                                      const EvaluatorFn& evaluator,
+                                      MoveHistory* history,
+                                      TranspositionTable* tt,
+                                      int repetition_start, int helper_threads) {
+  if (helper_threads <= 0) {
+    return search_position(board, stm, params, evaluator, history, tt,
+                           repetition_start);
+  }
+
+  LazySmpContext context;
+  context.helper_count = 0;
+  context.tt = tt;
+  context.evaluator = &evaluator;
+  context.abort_flag =
+      params.abort_flag ? params.abort_flag : &context.internal_abort;
+
+  std::vector<LazySmpThread> threads(static_cast<std::size_t>(helper_threads) +
+                                     1);
+
+#if CHESS_USE_POSIX_THREADS
+  std::vector<pthread_t> worker_handles;
+  worker_handles.reserve(static_cast<std::size_t>(helper_threads));
+#else
+  std::vector<std::thread> workers;
+  workers.reserve(static_cast<std::size_t>(helper_threads));
+#endif
+
+  int launched_helpers = 0;
+  for (int idx = 1; idx <= helper_threads; ++idx) {
+    threads[static_cast<std::size_t>(idx)].context = &context;
+    threads[static_cast<std::size_t>(idx)].id = idx;
+#if CHESS_USE_POSIX_THREADS
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+#ifdef PTHREAD_STACK_MIN
+    const std::size_t min_stack = static_cast<std::size_t>(PTHREAD_STACK_MIN);
+#else
+    const std::size_t min_stack = 0;
+#endif
+    const std::size_t stack_size =
+        std::max<std::size_t>(kLazyWorkerStackSize, min_stack);
+    pthread_attr_setstacksize(&attr, stack_size);
+
+    auto payload = std::make_unique<LazyWorkerPayload>();
+    payload->thread = &threads[static_cast<std::size_t>(idx)];
+
+    pthread_t handle{};
+    const int err = pthread_create(&handle, &attr, &lazy_worker_entry,
+                                   static_cast<void*>(payload.get()));
+    pthread_attr_destroy(&attr);
+
+    if (err != 0) {
+      std::cerr << "[skaks] warning: failed to spawn helper thread " << idx
+                << " (errno=" << err << ")\n";
+      continue;
+    }
+
+    payload.release();
+    worker_handles.push_back(handle);
+    ++launched_helpers;
+#else
+    workers.emplace_back([&, idx]() {
+      lazy_worker_loop(threads[static_cast<std::size_t>(idx)]);
+    });
+    ++launched_helpers;
+#endif
+  }
+
+  context.helper_count = launched_helpers;
+
+  SearchParameters parallel_params = params;
+  parallel_params.abort_flag = context.abort_flag;
+
+  LazySmpThread* previous_thread = tls_lazy_thread;
+  threads[0].context = &context;
+  threads[0].id = 0;
+  tls_lazy_thread = &threads[0];
+
+  SearchResult result = search_position(board, stm, parallel_params, evaluator,
+                                        history, tt, repetition_start);
+
+  tls_lazy_thread = previous_thread;
+
+  context.stop();
+
+#if CHESS_USE_POSIX_THREADS
+  for (pthread_t handle : worker_handles) {
+    if (handle) {
+      pthread_join(handle, nullptr);
+    }
+  }
+#else
+  for (auto& worker : workers) {
+    if (worker.joinable()) {
+      worker.join();
+    }
+  }
+#endif
+
+  return result;
+}
+
 namespace {
 int default_evaluator(const Board& board) {
   return evaluate_board(board);

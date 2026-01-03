@@ -5,6 +5,7 @@
 Simple toy chess engine, for learning and fun. 
 
 When executed, it does `UCI` by default (just run `skaks`, or `skaks --uci`). It can self-play `skaks -s` from canonical start or from `--fen` position. 
+Use `--eval stockfish` together with `--nnue /path/to/net.nnue` to run the bundled Stockfish NNUE evaluator (the legacy `sunfish` spelling remains as an alias).
 Default depth I think it's 4 right now, as I improve it we can allow ourselves better depth. No time limits yet. 
 
 There's a `--perf` option, useful for regressions. I leave here a couple of scripts to track the performance, both in therms of nodes/ms and 
