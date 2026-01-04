@@ -1,25 +1,25 @@
 evaluation:
-  backward_pawn_penalty: 10.41947222231596
-  bishop_dev_bonus: 25.315117564306767
-  bishop_mobility_scale: 15.355530959072814
-  bishop_pair_bonus: 78.88126170598862
+  backward_pawn_penalty: 28.60377855448944
+  bishop_dev_bonus: 27.943769812510503
+  bishop_mobility_scale: 11.543873556844437
+  bishop_pair_bonus: 79.46944438546126
   bishop_pin_penalty:
-    base: 15.698275085558777
-    mobility: 2.4732112923360026
-  castle_urgency: 49.832438253911945
-  castling_bonus: 49.09062289173203
-  central_pawn_bonus: 9.955085363088989
-  check_penalty: 23.816423192682542
-  connect_rooks_bonus: 32.995572326767444
-  doubled_pawn_penalty: 7.589733723181621
-  early_queen_penalty: 12.440221217894264
+    base: 19.68437571188481
+    mobility: 2.7299171246211906
+  castle_urgency: 51.914644459194946
+  castling_bonus: 54.243057552999375
+  central_pawn_bonus: 24.13723120369005
+  check_penalty: 18.091474626437908
+  connect_rooks_bonus: 30.966006200485623
+  doubled_pawn_penalty: 18.076014532311035
+  early_queen_penalty: 8.301129089811305
   eval_bias: 22.274469
   eval_quiet_cap: 1200.0
   eval_slope: 1.001879
-  flank_pawn_penalty: 22.68084916359268
-  hanging_divisor: 4.422974719582669
-  hanging_min_penalty: 30.027541773237914
-  isolated_pawn_penalty: 19.062555446339697
+  flank_pawn_penalty: 17.269808139833344
+  hanging_divisor: 3.644538966733216
+  hanging_min_penalty: 22.884149525387123
+  isolated_pawn_penalty: 38.095477310668784
   king_attack_weights:
   - 14
   - 32
@@ -33,25 +33,25 @@ evaluation:
   - 44
   - 74
   - 20
-  king_ring_base: 3.380380002766979
-  king_ring_defended_scale: 5.700795343882577
-  king_ring_enemy_occupier: 16.146843748203736
-  king_ring_enemy_piece_material_scale: 31.6953741061739
-  knight_dev_bonus: 36.39697767854486
-  knight_mobility_scale: 8.517623377602924
+  king_ring_base: 4.682799947167253
+  king_ring_defended_scale: 5.18767005398113
+  king_ring_enemy_occupier: 11.646134560786027
+  king_ring_enemy_piece_material_scale: 26.4207178949103
+  knight_dev_bonus: 41.03564715101437
+  knight_mobility_scale: 3.28057600264766
   knight_pin_penalty:
-    base: 15.802709730144644
-    mobility: 3.606467162569662
-  mobility_scaling: 19.783756266770883
-  passed_pawn_advance: 23.273862172464526
-  passed_pawn_base: 6.942455302655246
+    base: 19.973857807051296
+    mobility: 5.397157747486418
+  mobility_scaling: 28.336217757672266
+  passed_pawn_advance: 16.905938673031912
+  passed_pawn_base: 2.997351657156808
   pawn_pin_diagonal_penalty:
-    base: 21.05814397104796
-    mobility: 6.924817682260322
+    base: 17.41434398994678
+    mobility: 7.997830090848769
   pawn_pin_straight_penalty:
-    base: 12.442001487751952
-    mobility: 6.1399399374120165
-  pawn_shield_bonus: 15.385423533979342
+    base: 21.365702161762012
+    mobility: 7.980708035459926
+  pawn_shield_bonus: 14.529097856143313
   phase_weights_eg:
   - 16.794204
   - -35.152418
@@ -88,14 +88,14 @@ evaluation:
   - 9.888676
   - 11.175994
   - 17.12727
-  queen_mobility_scale: 8.6524701720404
-  rook_mobility_scale: 7.159321620511719
-  rook_open_file_bonus: 68.86209659007297
+  queen_mobility_scale: 8.078101028946232
+  rook_mobility_scale: 2.6311040282510865
+  rook_open_file_bonus: 68.88888950243367
   rook_pin_penalty:
-    base: 17.544626806612108
-    mobility: 2.886260349719075
-  rook_semi_open_file_bonus: 51.38825608502101
-  tempo_bonus: 17.58087074103785
+    base: 25.58866602798189
+    mobility: 3.402097992538608
+  rook_semi_open_file_bonus: 35.7678353075737
+  tempo_bonus: 15.263202284114975
   threat_base:
   - 0
   - 12
@@ -110,14 +110,14 @@ evaluation:
   - 45
   - 180
   - 540
-  threat_weight: 6.148175109822718
+  threat_weight: 6.001666601129184
 search:
-  aspiration_window_initial: 2039.564341019397
-  aspiration_window_max: 4585.661873301179
-  null_move_min_depth: 7.141189754958711
-  null_move_reduction: 3.138921701864948
-  quiescence_delta_margin: 360.1183309862651
-  quiescence_max_noisy_moves: 24.724258272241297
-  quiescence_max_ply: 10.669238282583157
-  quiescence_zero_gain_skip_index: 3.7766262674469573
-texel_scale: 1185.524637197465
+  aspiration_window_initial: 2028.1115365190371
+  aspiration_window_max: 6845.466086998154
+  null_move_min_depth: 7.550340800784067
+  null_move_reduction: 4.014361272384381
+  quiescence_delta_margin: 303.2095032953857
+  quiescence_max_noisy_moves: 28.563478800157153
+  quiescence_max_ply: 11.825834316965725
+  quiescence_zero_gain_skip_index: 2.6872486716522825
+texel_scale: 1193.621198323452

@@ -19,7 +19,9 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+
+from skaks_opt.params import DEFAULT_PARAMS
 
 try:
     import skaks_eval
@@ -245,19 +247,32 @@ def perturb_params(
 
 def _coerce_numeric_types(template: Any, payload: Any) -> Any:
     """Best-effort type alignment so ints in the template stay ints."""
-    if template is None:
-        return payload
-    if isinstance(template, dict) and isinstance(payload, dict):
+    # When no template is available we still want to recurse into the payload so
+    # we can round near-integer floats to plain ints before handing them to the
+    # native arena binding.
+    if isinstance(payload, dict):
+        template_dict = template if isinstance(template, dict) else {}
         return {
-            key: _coerce_numeric_types(template.get(key), value)
+            key: _coerce_numeric_types(
+                template_dict.get(key), value
+            )
             for key, value in payload.items()
         }
-    if isinstance(template, list) and isinstance(payload, list):
+
+    if isinstance(payload, list):
+        template_list = template if isinstance(template, list) else []
         coerced: List[Any] = []
         for idx, value in enumerate(payload):
-            tmpl = template[idx] if idx < len(template) else None
+            tmpl = template_list[idx] if idx < len(template_list) else None
             coerced.append(_coerce_numeric_types(tmpl, value))
         return coerced
+
+    if template is None:
+        if isinstance(payload, float) and math.isfinite(payload):
+            rounded = float(round(payload))
+            if abs(payload - rounded) < 1e-9:
+                return int(rounded)
+        return payload
     if isinstance(template, bool):
         return bool(payload)
     if isinstance(template, int):
@@ -271,6 +286,33 @@ def _coerce_numeric_types(template: Any, payload: Any) -> Any:
             return float(payload)
         return payload
     return payload
+
+
+def _coerce_params_for_arena(
+    payload: Optional[Dict[str, Any]],
+    *templates: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if payload is None:
+        return None
+    result: Any = json.loads(json.dumps(payload))
+    for tmpl in templates:
+        if isinstance(tmpl, dict) and tmpl:
+            result = _coerce_numeric_types(tmpl, result)
+    return result
+
+
+def _prepare_arena_params(
+    base_params: Optional[Dict[str, Any]],
+    cand_params: Dict[str, Any],
+    coerce_template: Optional[Dict[str, Any]] = None,
+) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    templates = (coerce_template, base_params, DEFAULT_PARAMS)
+    coerced_base = _coerce_params_for_arena(base_params, *templates)
+    coerced_cand = cast(
+        Dict[str, Any],
+        _coerce_params_for_arena(cand_params, *templates),
+    )
+    return coerced_base, coerced_cand
 
 
 def _flatten_params(
@@ -436,11 +478,12 @@ def _run_arena_shard(
         import skaks_eval as _skaks_eval  # local import for multiprocessing
     except Exception as exc:  # pragma: no cover - surfaced in parent process
         raise RuntimeError(f"skaks_eval not available in worker: {exc}")
-    template = coerce_template if coerce_template is not None else base_params
-    coerced_cand = _coerce_numeric_types(template, cand_params)
+    coerced_base, coerced_cand = _prepare_arena_params(
+        base_params, cand_params, coerce_template
+    )
     res = _skaks_eval.arena(
         start_fens=start_fens,
-        base_params=base_params,
+        base_params=coerced_base,
         cand_params=coerced_cand,
         games=len(start_fens),
         depth=depth,
@@ -501,11 +544,12 @@ def evaluate_candidate(
             fen_pool = fen_pool[:games]
 
         if arena_workers <= 1:
-            template = coerce_template if coerce_template is not None else baseline_data
-            coerced_cand = _coerce_numeric_types(template, candidate_data)
+            coerced_base, coerced_cand = _prepare_arena_params(
+                baseline_data, candidate_data, coerce_template
+            )
             res = skaks_eval.arena(
                 start_fens=fen_pool,
-                base_params=baseline_data,
+                base_params=coerced_base,
                 cand_params=coerced_cand,
                 games=games,
                 depth=depth or 0,

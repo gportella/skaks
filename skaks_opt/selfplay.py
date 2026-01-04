@@ -608,6 +608,17 @@ def score_to_elo(score: float) -> float:
     return 400.0 * math.log10(score / (1.0 - score))
 
 
+def _normalize_scheduler_address(raw: Optional[str]) -> Optional[str]:
+    if raw is None:
+        return None
+    value = raw.strip()
+    if not value:
+        return None
+    if "://" not in value:
+        return f"tcp://{value}"
+    return value
+
+
 @contextmanager
 def _dask_client(config: "SelfPlayConfig"):
     host_env = os.environ.get("DASK_SCHEDULER_SERVICE_HOST")
@@ -615,10 +626,10 @@ def _dask_client(config: "SelfPlayConfig"):
 
     scheduler_addr: Optional[str]
     if config.dask_scheduler:
-        scheduler_addr = config.dask_scheduler
+        scheduler_addr = _normalize_scheduler_address(config.dask_scheduler)
     elif host_env and port_env:
         endpoint = f"{host_env}:{port_env}".strip()
-        scheduler_addr = endpoint if "//" in endpoint else f"tcp://{endpoint}"
+        scheduler_addr = _normalize_scheduler_address(endpoint)
     else:
         scheduler_addr = None
 
