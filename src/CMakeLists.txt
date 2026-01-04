@@ -20,6 +20,10 @@ add_library(chess_engine_core STATIC
   uci.cpp
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set_target_properties(chess_engine_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
 target_include_directories(chess_engine_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../include

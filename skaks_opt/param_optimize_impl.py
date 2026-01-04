@@ -253,9 +253,7 @@ def _coerce_numeric_types(template: Any, payload: Any) -> Any:
     if isinstance(payload, dict):
         template_dict = template if isinstance(template, dict) else {}
         return {
-            key: _coerce_numeric_types(
-                template_dict.get(key), value
-            )
+            key: _coerce_numeric_types(template_dict.get(key), value)
             for key, value in payload.items()
         }
 
