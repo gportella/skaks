@@ -9,6 +9,7 @@ skaks-opt texel \
   --threads 8 \
   --limit 1000000 \
   --quiet \
+  --best-out tuning/texel_fit_quiet.yaml \
   --metrics-out tuning/texel_metrics.csv \
   --plot-out tuning/texel_loss.png
 
