@@ -10,7 +10,7 @@
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 
-#if defined(__x86_64__) && defined(__AVX__)
+#if defined(__x86_64__) && defined(__AVX__) && __AVX__
 #include <immintrin.h>
 #endif
 // Conditionally include ARM NEON only when available and safe to include.
@@ -785,7 +785,7 @@ int eval_linear(const EvalVector& v, const PhaseWeights& W) {
     wbuf[i] = W.mg[i] * mgw + W.eg[i] * egw;
   }
 
-#if defined(__x86_64__) && defined(__AVX__)
+#if defined(__x86_64__) && defined(__AVX__) && __AVX__
   // AVX path — only enabled when the compiler targets AVX-capable CPUs
   __m256 sum_vec = _mm256_setzero_ps();
   std::size_t i = 0;
