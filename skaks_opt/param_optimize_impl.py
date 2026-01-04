@@ -417,17 +417,27 @@ def _run_arena_shard(
         List[str],
         Optional[Dict[str, Any]],
         Dict[str, Any],
+        Optional[Dict[str, Any]],
         int,
         int,
         int,
     ],
 ) -> Dict[str, int]:
-    start_fens, base_params, cand_params, depth, movetime_ms, max_plies = payload
+    (
+        start_fens,
+        base_params,
+        cand_params,
+        coerce_template,
+        depth,
+        movetime_ms,
+        max_plies,
+    ) = payload
     try:
         import skaks_eval as _skaks_eval  # local import for multiprocessing
     except Exception as exc:  # pragma: no cover - surfaced in parent process
         raise RuntimeError(f"skaks_eval not available in worker: {exc}")
-    coerced_cand = _coerce_numeric_types(base_params, cand_params)
+    template = coerce_template if coerce_template is not None else base_params
+    coerced_cand = _coerce_numeric_types(template, cand_params)
     res = _skaks_eval.arena(
         start_fens=start_fens,
         base_params=base_params,
@@ -451,6 +461,7 @@ def evaluate_candidate(
     candidate_params: Path,
     baseline_data: Optional[Dict[str, Any]],
     candidate_data: Dict[str, Any],
+    coerce_template: Optional[Dict[str, Any]] = None,
     games: int,
     depth: Optional[int],
     time_per_move: Optional[float],
@@ -490,7 +501,8 @@ def evaluate_candidate(
             fen_pool = fen_pool[:games]
 
         if arena_workers <= 1:
-            coerced_cand = _coerce_numeric_types(baseline_data, candidate_data)
+            template = coerce_template if coerce_template is not None else baseline_data
+            coerced_cand = _coerce_numeric_types(template, candidate_data)
             res = skaks_eval.arena(
                 start_fens=fen_pool,
                 base_params=baseline_data,
@@ -512,6 +524,7 @@ def evaluate_candidate(
                         fen_pool[i : i + chunk],
                         baseline_data,
                         candidate_data,
+                        coerce_template,
                         depth or 0,
                         movetime_ms,
                         160,
@@ -613,6 +626,7 @@ def evaluate_candidate_repeats(
     quiet: bool = True,
     use_arena: bool,
     start_fens: Optional[List[str]],
+    coerce_template: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> Tuple[float, Tuple[int, int, int], float]:
     total_score = 0.0
@@ -631,7 +645,11 @@ def evaluate_candidate_repeats(
         if progress_cb:
             progress_cb(rep_idx, repeats, time.monotonic() - start)
         score, (w, losses, d), wall = evaluate_candidate(
-            quiet=quiet, use_arena=use_arena, start_fens=rep_fens, **kwargs
+            quiet=quiet,
+            use_arena=use_arena,
+            start_fens=rep_fens,
+            coerce_template=coerce_template,
+            **kwargs,
         )
         total_score += score
         total_wins += w
@@ -710,6 +728,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 candidate_params=baseline_path,
                 baseline_data=None,
                 candidate_data=baseline_data,
+                coerce_template=baseline_data,
                 games=args.games,
                 depth=args.depth,
                 time_per_move=args.time_per_move,
@@ -896,6 +915,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         quiet=quiet_child,
                         use_arena=args.use_arena_binding,
                         start_fens=start_fens,
+                        coerce_template=baseline_data
+                        if baseline_data is not None
+                        else parent,
                         engine=engine,
                         baseline_params=baseline_params,
                         candidate_params=cand_path,
@@ -990,6 +1012,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         quiet=quiet_child,
                         use_arena=args.use_arena_binding,
                         start_fens=start_fens,
+                        coerce_template=baseline_data
+                        if baseline_data is not None
+                        else base_data,
                         engine=engine,
                         baseline_params=baseline_params,
                         candidate_params=cand_path,
