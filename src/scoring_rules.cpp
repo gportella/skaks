@@ -10,8 +10,13 @@
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 
-// Only enable AVX code when the translation unit is built with -mavx (or higher).
-#if defined(__AVX__)
+// AVX is opt-in so generic builds remain portable. Define SKAKS_FORCE_ENABLE_AVX
+// when compiling with -mavx (or higher) to restore the vector path.
+#if defined(SKAKS_FORCE_DISABLE_AVX)
+#define SKAKS_HAVE_AVX_INTRINSICS 0
+#elif defined(SKAKS_FORCE_ENABLE_AVX)
+#define SKAKS_HAVE_AVX_INTRINSICS 1
+#elif defined(__AVX__)
 #define SKAKS_HAVE_AVX_INTRINSICS 1
 #else
 #define SKAKS_HAVE_AVX_INTRINSICS 0
