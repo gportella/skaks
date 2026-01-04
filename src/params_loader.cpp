@@ -33,6 +33,28 @@ bool parse_int(const YAML::Node& node, const char* key, int& out,
   }
 }
 
+bool parse_double(const YAML::Node& node, const char* key, double& out,
+                  std::string& error) {
+  if (!node[key]) {
+    return true; // optional
+  }
+  if (!node[key].IsScalar()) {
+    std::ostringstream oss;
+    oss << "Expected scalar for '" << key << "'";
+    error = oss.str();
+    return false;
+  }
+  try {
+    out = node[key].as<double>();
+    return true;
+  } catch (const YAML::BadConversion& ex) {
+    std::ostringstream oss;
+    oss << "Invalid float for '" << key << "': " << ex.what();
+    error = oss.str();
+    return false;
+  }
+}
+
 bool parse_pin_penalty(const YAML::Node& node, const char* key,
                        chess::PinPenalty& out, std::string& error) {
   const auto child = node[key];
@@ -206,6 +228,13 @@ bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval
   if (!parse_field("isolated_pawn_penalty", eval.isolated_pawn_penalty))
     return false;
   if (!parse_field("backward_pawn_penalty", eval.backward_pawn_penalty))
+    return false;
+
+  if (!parse_double(eval_node, "eval_bias", eval.eval_bias, error))
+    return false;
+  if (!parse_double(eval_node, "eval_slope", eval.eval_slope, error))
+    return false;
+  if (!parse_double(eval_node, "eval_quiet_cap", eval.eval_quiet_cap, error))
     return false;
 
   if (!parse_int_array(eval_node, "king_attack_weights",

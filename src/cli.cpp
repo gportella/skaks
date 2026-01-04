@@ -34,12 +34,9 @@ CliParseResult parse_cli(int argc, char** argv) {
        cxxopts::value<std::string>())
       ("params", "Path to YAML engine parameter file",
        cxxopts::value<std::string>())
-      ("nnue", "Path to NNUE weights YAML file",
-       cxxopts::value<std::string>())
       ("static-eval", "Print static evaluation for provided FEN",
        cxxopts::value<bool>()->default_value("false"))
-      ("eval", "Evaluation mode: native|stockfish",
-       cxxopts::value<std::string>()->default_value("native"))
+      ("eval-breakdown", "Print JSON evaluation term breakdown for provided FEN")
       ("o,onlyfen", "Print FEN only in self-play mode")
       ("s,self", "Run self-play CLI loop")
       ("arena", "Run built-in baseline-vs-params arena (no UCI)")
@@ -116,30 +113,12 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.best_move = parsed.count("bestmove") > 0;
     result.options.static_eval = parsed.count("static-eval") > 0;
+    result.options.eval_breakdown = parsed.count("eval-breakdown") > 0;
 
     result.options.thread_count = parsed["threads"].as<int>();
     if (result.options.thread_count < 0) {
       result.parse_error = true;
       result.message = "--threads must be non-negative";
-      return result;
-    }
-
-    const auto eval_option = parsed["eval"].as<std::string>();
-    std::string eval_lower;
-    eval_lower.reserve(eval_option.size());
-    for (char ch : eval_option) {
-      eval_lower.push_back(
-          static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    }
-    if (eval_lower == "native" || eval_lower == "default") {
-      result.options.eval_mode = EvaluationMode::Native;
-    } else if (eval_lower == "stockfish") {
-      result.options.eval_mode = EvaluationMode::Stockfish;
-    } else if (eval_lower == "sunfish") {
-      result.options.eval_mode = EvaluationMode::Stockfish;
-    } else {
-      result.parse_error = true;
-      result.message = "Unknown --eval mode: " + eval_option;
       return result;
     }
 
@@ -175,11 +154,6 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.params_path = parsed["params"].as<std::string>();
       result.options.params_override = true;
     }
-    if (parsed.count("nnue") > 0) {
-      result.options.nnue_path = parsed["nnue"].as<std::string>();
-      result.options.nnue_override = true;
-    }
-
     result.options.perf_mode = parsed.count("perf") > 0;
     result.options.perf_iterations = parsed["perf-iters"].as<int>();
 
@@ -313,6 +287,14 @@ CliParseResult parse_cli(int argc, char** argv) {
     const bool want_uci = parsed.count("uci") > 0;
     const bool want_self = parsed.count("self") > 0;
     const bool want_arena = parsed.count("arena") > 0;
+    const bool wants_eval_dump =
+        result.options.static_eval || result.options.eval_breakdown;
+
+    if (result.options.best_move && result.options.eval_breakdown) {
+      result.parse_error = true;
+      result.message = "--eval-breakdown cannot be combined with --bestmove";
+      return result;
+    }
 
     if (result.options.best_move && (want_uci || want_self || want_arena)) {
       result.parse_error = true;
@@ -321,10 +303,10 @@ CliParseResult parse_cli(int argc, char** argv) {
       return result;
     }
 
-    if (result.options.static_eval && (want_uci || want_self || want_arena)) {
+    if (wants_eval_dump && (want_uci || want_self || want_arena)) {
       result.parse_error = true;
-      result.message =
-          "--static-eval cannot be combined with --uci, --self, or --arena";
+      result.message = "Evaluation dump flags cannot be combined with --uci, "
+                       "--self, or --arena";
       return result;
     }
 
@@ -351,9 +333,9 @@ CliParseResult parse_cli(int argc, char** argv) {
         result.message = "--bestmove cannot be combined with --perf";
         return result;
       }
-      if (result.options.static_eval) {
+      if (wants_eval_dump) {
         result.parse_error = true;
-        result.message = "--static-eval cannot be combined with --perf";
+        result.message = "Evaluation dump flags cannot be combined with --perf";
         return result;
       }
       if (result.options.arena_mode) {
@@ -372,7 +354,7 @@ CliParseResult parse_cli(int argc, char** argv) {
       result.options.arena_mode = false;
     }
 
-    if (result.options.static_eval) {
+    if (wants_eval_dump) {
       result.options.self_play = false;
       result.options.use_uci = false;
       result.options.perf_mode = false;
@@ -381,7 +363,7 @@ CliParseResult parse_cli(int argc, char** argv) {
 
     if (!want_uci && !want_self && !want_arena && !result.options.show_version &&
         !result.options.perf_mode && !result.options.best_move &&
-        !result.options.static_eval) {
+        !wants_eval_dump) {
       const bool user_supplied_args = adj_argc > 1;
       if (user_supplied_args) {
         result.options.self_play = true;

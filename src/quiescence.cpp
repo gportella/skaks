@@ -1,7 +1,6 @@
 #include "chess/quiescence.hpp"
 
 #include "chess/moves.hpp"
-#include "chess/nnue_incremental.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
 #include "chess/search_params.hpp"
@@ -173,16 +172,9 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     }
 
     Undo undo = make_move(board, move);
-    SfNnueStack* nnue_stack = current_thread_nnue_stack();
-    if (nnue_stack) {
-      nnue_stack->push_move(board, move, undo);
-    }
     const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
                                  nodes, tt, ply + 1);
     undo_move(board, undo);
-    if (nnue_stack) {
-      nnue_stack->pop();
-    }
 
     if (maximizing) {
       if (score >= beta) {

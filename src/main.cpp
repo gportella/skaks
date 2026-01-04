@@ -7,16 +7,18 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/moves.hpp"
-#include "chess/nnue.hpp"
 #include "chess/params_loader.hpp"
 #include "chess/perf.hpp"
 #include "chess/polyglot.hpp"
+#include "chess/pst_tables.hpp"
+#include "chess/scoring_rules.hpp"
 #include "chess/search.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/uci.hpp"
 #include "chess/version.hpp"
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -29,6 +31,14 @@
 #include <vector>
 
 namespace {
+
+constexpr std::array<const char*, static_cast<std::size_t>(chess::TermId::Count)>
+    kTermNames = {"Material",      "PawnCenter",   "CenterControl",
+                  "Attacking",     "KingSafety",   "KingMobility",
+                  "Pins",          "PstMg",        "PstEg",
+                  "PassedPawns",   "Initiative",   "Hanging",
+                  "KingRing",      "BishopPair",   "RookFiles",
+                  "MinorMobility", "PawnStructure"};
 
 chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options);
 
@@ -60,7 +70,6 @@ ArenaSummary run_internal_arena(const chess::CliOptions& opts,
                                 bool show_progress, int thread_count) {
   chess::Engine engine;
   engine.set_thread_count(std::max(thread_count, 1));
-  engine.set_evaluation_mode(opts.eval_mode);
   ArenaSummary summary{};
 
   const bool use_time = opts.time_control.enabled;
@@ -204,77 +213,6 @@ int main(int argc, char** argv) {
 
   chess::set_engine_params(candidate_params);
 
-  std::optional<std::filesystem::path> perf_auto_nnue;
-  if (!cli.options.nnue_override && cli.options.perf_mode) {
-    const std::vector<std::filesystem::path> candidates = {
-        std::filesystem::path("nn-c0ae49f08b40.nnue"),
-        std::filesystem::path(std::string(chess::config::kSourceRoot)) /
-            "nn-c0ae49f08b40.nnue"};
-    for (const auto& candidate : candidates) {
-      if (candidate.empty()) {
-        continue;
-      }
-      std::error_code exists_ec;
-      if (std::filesystem::exists(candidate, exists_ec) && !exists_ec) {
-        std::error_code abs_ec;
-        auto resolved = std::filesystem::absolute(candidate, abs_ec);
-        perf_auto_nnue = abs_ec ? candidate : resolved;
-        break;
-      }
-    }
-    if (!perf_auto_nnue) {
-      std::cerr
-          << "[perf] No bundled NNUE weights found; using native evaluation"
-          << "\n";
-    }
-  }
-
-  bool auto_loaded_perf_nnue = false;
-
-  if (cli.options.nnue_override || perf_auto_nnue) {
-    std::string error;
-    const std::string nnue_path_string = cli.options.nnue_override
-                                             ? cli.options.nnue_path
-                                             : perf_auto_nnue->string();
-    const std::filesystem::path nnue_path{nnue_path_string};
-    if (nnue_path.extension() == ".nnue") {
-      if (!chess::load_sf_nnue(nnue_path_string, error)) {
-        std::cerr << "Failed to load SF NNUE weights: " << error << "\n";
-        if (cli.options.nnue_override) {
-          return EXIT_FAILURE;
-        }
-        chess::set_active_nnue(nullptr);
-      } else {
-        if (!cli.options.nnue_override) {
-          auto_loaded_perf_nnue = true;
-          std::cout << "[perf] Using Stockfish NNUE weights from "
-                    << nnue_path_string << "\n";
-        }
-      }
-    } else {
-      if (cli.options.nnue_override) {
-        auto net = std::make_shared<chess::NnueNetwork>();
-        if (!chess::load_nnue_from_file(nnue_path_string, *net, error)) {
-          std::cerr << "Failed to load NNUE weights: " << error << "\n";
-          return EXIT_FAILURE;
-        }
-        chess::set_active_nnue(std::move(net));
-      } else {
-        std::cerr << "[perf] Ignoring non-binary NNUE path suggestion: "
-                  << nnue_path_string << "\n";
-        chess::set_active_nnue(nullptr);
-      }
-    }
-  } else {
-    chess::set_active_nnue(nullptr);
-  }
-
-  chess::EvaluationMode effective_eval_mode = cli.options.eval_mode;
-  if (auto_loaded_perf_nnue &&
-      effective_eval_mode == chess::EvaluationMode::Native) {
-    effective_eval_mode = chess::EvaluationMode::Stockfish;
-  }
-
   const auto resolve_thread_count = [](int requested) -> int {
     if (requested <= 0) {
       const unsigned hw = std::thread::hardware_concurrency();
@@ -290,7 +228,6 @@ int main(int argc, char** argv) {
 
   chess::Engine engine;
   engine.set_thread_count(thread_count);
-  engine.set_evaluation_mode(effective_eval_mode);
 
   if (cli.options.arena_mode) {
     try {
@@ -308,7 +245,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (cli.options.static_eval) {
+  if (cli.options.static_eval || cli.options.eval_breakdown) {
     chess::Board board{};
     try {
       board = chess::initial_board(cli.options.fen);
@@ -319,13 +256,44 @@ int main(int argc, char** argv) {
 
     engine.reset_history(board);
 
+    const chess::EvalVector eval_vec = chess::compute_eval_vector(board);
+    const int raw_linear = chess::eval_linear(eval_vec, chess::phase_weights());
     const int white_eval = engine.evaluate(board);
     const int stm_eval = (board.side_to_move == chess::SideToMove::White)
                              ? white_eval
                              : -white_eval;
 
-    std::cout << "static_eval_white " << white_eval << "\n";
-    std::cout << "static_eval_stm " << stm_eval << "\n";
+    if (cli.options.eval_breakdown) {
+      const double mg_ratio = static_cast<double>(eval_vec.mg_phase) /
+                              static_cast<double>(chess::kPstPhaseMax);
+      const double eg_ratio = 1.0 - mg_ratio;
+      std::cout << "eval_terms {\"mg_phase\":" << eval_vec.mg_phase
+                << ",\"eg_phase\":" << eval_vec.eg_phase
+                << ",\"mg_ratio\":" << mg_ratio << ",\"eg_ratio\":" << eg_ratio
+                << ",\"raw_linear\":" << raw_linear
+                << ",\"static_eval_white\":" << white_eval
+                << ",\"static_eval_stm\":" << stm_eval << ",\"term_names\":[";
+      for (std::size_t i = 0; i < kTermNames.size(); ++i) {
+        if (i > 0) {
+          std::cout << ',';
+        }
+        std::cout << '\"' << kTermNames[i] << '\"';
+      }
+      std::cout << "],\"term_values\":[";
+      for (std::size_t i = 0; i < static_cast<std::size_t>(chess::TermId::Count);
+           ++i) {
+        if (i > 0) {
+          std::cout << ',';
+        }
+        std::cout << eval_vec.f[i];
+      }
+      std::cout << "]}" << "\n";
+    }
+
+    if (cli.options.static_eval) {
+      std::cout << "static_eval_white " << white_eval << "\n";
+      std::cout << "static_eval_stm " << stm_eval << "\n";
+    }
     return EXIT_SUCCESS;
   }
 

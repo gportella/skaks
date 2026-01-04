@@ -82,6 +82,110 @@
         "CMAKE_INSTALL_PREFIX": "$ENV{HOME}/.local",
         "CMAKE_INSTALL_RPATH": "$ORIGIN;$ORIGIN/../lib"
       }
+    },
+    {
+      "name": "linux-ninja-libcxx-release",
+      "displayName": "Linux Release (Ninja, Clang 17 + libc++)",
+      "description": "Native Linux release build using clang-17 with libc++.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-release-ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/bin/clang-17",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-17",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_REQUIRE_STANDARD": "ON",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        "CMAKE_C_COMPILER_TARGET": "x86_64-linux-gnu",
+        "CMAKE_CXX_COMPILER_TARGET": "x86_64-linux-gnu",
+        "CMAKE_TRY_COMPILE_TARGET_TYPE": "STATIC_LIBRARY",
+        "CMAKE_C_FLAGS": "-march=x86-64 -mtune=generic -D__ARM_NEON=0 -D__ARM_NEON__=0 -DNO_NEON=1 -DUSE_NEON=0 -DENABLE_NEON=0 -DSIMD_ARM_NEON=0",
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++ -march=x86-64 -mtune=generic -Wno-error=unused-variable -Wno-error=unused-command-line-argument -D__ARM_NEON=0 -D__ARM_NEON__=0 -DNO_NEON=1 -DUSE_NEON=0 -DENABLE_NEON=0 -DSIMD_ARM_NEON=0",
+        "CMAKE_SHARED_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -Wl,-rpath,/usr/lib/llvm-17/lib -L/usr/lib/llvm-17/lib",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -Wl,-rpath,/usr/lib/llvm-17/lib -L/usr/lib/llvm-17/lib",
+        "CMAKE_BUILD_WITH_INSTALL_RPATH": "ON",
+        "CMAKE_INSTALL_RPATH_USE_LINK_PATH": "ON",
+        "CMAKE_BUILD_RPATH": "$ORIGIN;$ORIGIN/../lib;/usr/lib/llvm-17/lib;$ENV{CONDA_PREFIX}/lib",
+        "CMAKE_INSTALL_RPATH": "$ORIGIN;$ORIGIN/../lib;/usr/lib/llvm-17/lib;$ENV{CONDA_PREFIX}/lib",
+        "CMAKE_AR": "/usr/bin/ar",
+        "CMAKE_RANLIB": "/usr/bin/ranlib",
+        "CHESS_ENABLE_IPO": "OFF",
+        "CHESS_ENABLE_SANITIZERS": "OFF",
+        "LIBCXX_HEADERS_PRESENT": "ON",
+        "CMAKE_POLICY_DEFAULT_CMP0148": "NEW",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_VERBOSE_MAKEFILE": "ON"
+      }
+    },
+    {
+      "name": "linux-make-libcxx-release",
+      "displayName": "Linux Release (Makefiles, Clang 17 + libc++)",
+      "description": "Native Linux release build using clang-17, libc++, and Unix Makefiles.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/linux-release",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/bin/clang-17",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-17",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_REQUIRE_STANDARD": "ON",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        "CMAKE_C_COMPILER_TARGET": "x86_64-linux-gnu",
+        "CMAKE_CXX_COMPILER_TARGET": "x86_64-linux-gnu",
+        "CMAKE_TRY_COMPILE_TARGET_TYPE": "STATIC_LIBRARY",
+        "CMAKE_C_FLAGS": "-march=x86-64 -mtune=generic -D__ARM_NEON=0 -D__ARM_NEON__=0 -DNO_NEON=1 -DUSE_NEON=0 -DENABLE_NEON=0 -DSIMD_ARM_NEON=0",
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++ -march=x86-64 -mtune=generic -Wno-error=unused-variable -Wno-error=unused-command-line-argument -D__ARM_NEON=0 -D__ARM_NEON__=0 -DNO_NEON=1 -DUSE_NEON=0 -DENABLE_NEON=0 -DSIMD_ARM_NEON=0",
+        "CMAKE_SHARED_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -Wl,-rpath,/usr/lib/llvm-17/lib -L/usr/lib/llvm-17/lib",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++ -lc++abi -Wl,-rpath,/usr/lib/llvm-17/lib -L/usr/lib/llvm-17/lib",
+        "CMAKE_BUILD_WITH_INSTALL_RPATH": "ON",
+        "CMAKE_INSTALL_RPATH_USE_LINK_PATH": "ON",
+        "CMAKE_BUILD_RPATH": "$ORIGIN;$ORIGIN/../lib;/usr/lib/llvm-17/lib;$ENV{CONDA_PREFIX}/lib",
+        "CMAKE_INSTALL_RPATH": "$ORIGIN;$ORIGIN/../lib;/usr/lib/llvm-17/lib;$ENV{CONDA_PREFIX}/lib",
+        "CMAKE_AR": "/usr/bin/ar",
+        "CMAKE_RANLIB": "/usr/bin/ranlib",
+        "CHESS_ENABLE_IPO": "OFF",
+        "CHESS_ENABLE_SANITIZERS": "OFF",
+        "LIBCXX_HEADERS_PRESENT": "ON",
+        "CMAKE_POLICY_DEFAULT_CMP0148": "NEW",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_VERBOSE_MAKEFILE": "ON"
+      }
+    },
+    {
+      "name": "linux-ninja-libstdcxx-release",
+      "displayName": "Linux Release (Ninja, Clang 17 + libstdc++)",
+      "description": "Native Linux release build using clang-17 with libstdc++.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-release-gnu",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/bin/clang-17",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-17",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_REQUIRE_STANDARD": "ON",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        "CMAKE_C_COMPILER_TARGET": "x86_64-linux-gnu",
+        "CMAKE_CXX_COMPILER_TARGET": "x86_64-linux-gnu",
+        "CMAKE_TRY_COMPILE_TARGET_TYPE": "STATIC_LIBRARY",
+        "CMAKE_C_FLAGS": "-march=x86-64 -mtune=generic -D__ARM_NEON=0 -D__ARM_NEON__=0 -DNO_NEON=1 -DUSE_NEON=0 -DENABLE_NEON=0 -DSIMD_ARM_NEON=0",
+        "CMAKE_CXX_FLAGS": "-march=x86-64 -mtune=generic -Wno-error=unused-variable -Wno-error=unused-command-line-argument -D__ARM_NEON=0 -D__ARM_NEON__=0 -DNO_NEON=1 -DUSE_NEON=0 -DENABLE_NEON=0 -DSIMD_ARM_NEON=0",
+        "CMAKE_SHARED_LINKER_FLAGS": "-stdlib=libstdc++",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libstdc++",
+        "CMAKE_BUILD_WITH_INSTALL_RPATH": "ON",
+        "CMAKE_INSTALL_RPATH_USE_LINK_PATH": "ON",
+        "CMAKE_BUILD_RPATH": "$ORIGIN;$ORIGIN/../lib;$ENV{CONDA_PREFIX}/lib",
+        "CMAKE_INSTALL_RPATH": "$ORIGIN;$ORIGIN/../lib;$ENV{CONDA_PREFIX}/lib",
+        "CMAKE_AR": "/usr/bin/ar",
+        "CMAKE_RANLIB": "/usr/bin/ranlib",
+        "CHESS_ENABLE_IPO": "OFF",
+        "CHESS_ENABLE_SANITIZERS": "OFF",
+        "CMAKE_POLICY_DEFAULT_CMP0148": "NEW",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_VERBOSE_MAKEFILE": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -108,6 +212,18 @@
     {
       "name": "dev-release-pi",
       "configurePreset": "dev-release-pi"
+    },
+    {
+      "name": "linux-ninja-libcxx-release",
+      "configurePreset": "linux-ninja-libcxx-release"
+    },
+    {
+      "name": "linux-make-libcxx-release",
+      "configurePreset": "linux-make-libcxx-release"
+    },
+    {
+      "name": "linux-ninja-libstdcxx-release",
+      "configurePreset": "linux-ninja-libstdcxx-release"
     }
   ],
   "testPresets": [
@@ -135,6 +251,13 @@
     {
       "name": "dev-release-pi",
       "configurePreset": "dev-release-pi",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-ninja-libcxx-release",
+      "configurePreset": "linux-ninja-libcxx-release",
       "output": {
         "outputOnFailure": true
       }

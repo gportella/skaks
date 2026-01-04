@@ -1,7 +1,6 @@
 #include "chess/engine.hpp"
 
 #include "chess/moves.hpp"
-#include "chess/nnue.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/time_manager.hpp"
 
@@ -43,18 +42,7 @@ SearchResult Engine::search(Board& board, const SearchParameters& params) {
 int Engine::evaluate(const Board& board) const {
   // Placeholder: future versions will blend features based on eval_config_
   (void)eval_config_;
-  if (eval_mode_ == EvaluationMode::Stockfish) {
-    if (!sf_nnue_active()) {
-      throw std::runtime_error(
-          "Stockfish NNUE evaluation requested but no weights are loaded");
-    }
-    return evaluate_sf_nnue(board);
-  }
   return evaluate_board(board);
-}
-
-void Engine::set_evaluation_mode(EvaluationMode mode) {
-  eval_mode_ = mode;
 }
 
 void Engine::set_thread_count(int count) {

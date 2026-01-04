@@ -1,20 +1,20 @@
 {
   "aggregate": {
-    "min_games": 10,
+    "min_games": 5,
     "runs": 1,
     "sources": [
-      "/var/folders/l_/dvmylqp960l9q88nd_pykjr80000gp/T/arena_sweep_d1gddq7y/arena_0007_run00.json"
+      "/var/folders/l_/dvmylqp960l9q88nd_pykjr80000gp/T/arena_sweep_71ura1l7/arena_0001_run00.json"
     ]
   },
-  "completed": 10,
+  "completed": 240,
   "elo": {
-    "actual_score": 4.0,
-    "games": 10,
+    "actual_score": 240.0,
+    "games": 240,
     "opponent": 2600.0,
-    "start": 2362.0709201840687
+    "start": 1106.5449234479474
   },
   "failures": 0,
-  "games": 10,
+  "games": 240,
   "labels": {
     "black": "sunfish",
     "white": "skaks"
@@ -25,7 +25,8 @@
     "engine": "skaks",
     "engine_eval": null,
     "engine_nnue": null,
-    "engine_params": "/Users/ktxc111/work/repos/skaks/tuning/best_params_phase_texel.yaml",
+    "engine_params": "/Users/ktxc111/work/repos/skaks/tuning/best_params_cma-es.yaml",
+    "engine_threads": 4,
     "handicap_depth": 3,
     "handicap_enabled": true,
     "handicap_factor": 0.65,
@@ -34,19 +35,20 @@
     "moves_to_go": null,
     "opponent": "sunfish",
     "opponent_clock": null,
-    "opponent_depth_factor": 0.4,
+    "opponent_depth_factor": 0.3,
     "opponent_eval": null,
     "opponent_increment": null,
     "opponent_nnue": null,
     "opponent_params": null,
+    "opponent_threads": null,
     "opponent_time_per_move": null,
     "time_per_move": null,
     "timeout": null
   },
   "summary": {
-    "draw": 8,
-    "skaks": 0,
-    "sunfish": 2,
+    "draw": 0,
+    "skaks": 240,
+    "sunfish": 0,
     "unknown": 0
   }
 }

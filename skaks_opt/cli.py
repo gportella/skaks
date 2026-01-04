@@ -23,6 +23,10 @@ from skaks_opt.param_optimize import (
     run_param_optimize,
 )
 from skaks_opt.texel import add_subparser as add_texel_subparser, run_texel
+from skaks_opt.eval_stats import (
+    add_subparser as add_eval_stats_subparser,
+    run_eval_stats,
+)
 
 
 def main():
@@ -85,6 +89,9 @@ def main():
 
     # Parameter fitting subcommand
     add_fit_subparser(subparsers)
+
+    # Eval stats subcommand
+    add_eval_stats_subparser(subparsers)
 
     # Self-play optimization subcommand
     selfplay_parser = subparsers.add_parser(
@@ -254,6 +261,8 @@ def main():
         run_dataset(args)
     elif args.command == "fit":
         run_fit(args)
+    elif args.command == "eval-stats":
+        run_eval_stats(args)
     elif args.command == "param-optimize":
         run_param_optimize(args)
     elif args.command == "selfplay":

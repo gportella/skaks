@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 import warnings
 from pathlib import Path
 from typing import List
@@ -99,7 +100,21 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: List[str] | None = None) -> None:
-    args = _build_parser().parse_args(argv)
+    if argv is None:
+        argv_list = sys.argv[1:]
+    else:
+        argv_list = list(argv)
+
+    if argv_list and argv_list[0] == "regress":
+        from . import regression
+
+        regression.main(argv_list[1:])
+        return
+
+    if argv_list and argv_list[0] == "optimize":
+        argv_list = argv_list[1:]
+
+    args = _build_parser().parse_args(argv_list)
 
     if args.quiet:
         optuna.logging.set_verbosity(optuna.logging.WARNING)

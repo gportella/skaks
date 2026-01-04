@@ -3,8 +3,6 @@
 #include "chess/complexity.hpp"
 #include "chess/move_ordering.hpp"
 #include "chess/moves.hpp"
-#include "chess/nnue.hpp"
-#include "chess/nnue_incremental.hpp"
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
@@ -133,11 +131,6 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
 
   Undo undo = make_move(board, move);
 
-  SfNnueStack* nnue_stack = current_thread_nnue_stack();
-  if (nnue_stack) {
-    nnue_stack->push_move(board, move, undo);
-  }
-
   const bool irreversible = move_is_irreversible(move);
   const int next_repetition_start =
       irreversible ? (ctx.ply + 1) : ctx.repetition_start;
@@ -197,9 +190,6 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
     child = run_search(reduced_depth, ctx.alpha, ctx.beta, false);
     if (child.aborted) {
       undo_move(board, undo);
-      if (nnue_stack) {
-        nnue_stack->pop();
-      }
       if (ctx.ply + 1 < MAX_PLY && scratch.history) {
         scratch.history
             ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -237,9 +227,6 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
       child = run_search(search_depth, narrow_alpha, narrow_beta, true);
       if (child.aborted) {
         undo_move(board, undo);
-        if (nnue_stack) {
-          nnue_stack->pop();
-        }
         if (ctx.ply + 1 < MAX_PLY && scratch.history) {
           scratch.history
               ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -253,9 +240,6 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
         child = run_search(search_depth, ctx.alpha, ctx.beta, ctx.is_pv);
         if (child.aborted) {
           undo_move(board, undo);
-          if (nnue_stack) {
-            nnue_stack->pop();
-          }
           if (ctx.ply + 1 < MAX_PLY && scratch.history) {
             scratch.history
                 ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -271,9 +255,6 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
                          ctx.is_pv && is_first_move);
       if (child.aborted) {
         undo_move(board, undo);
-        if (nnue_stack) {
-          nnue_stack->pop();
-        }
         if (ctx.ply + 1 < MAX_PLY && scratch.history) {
           scratch.history
               ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -289,9 +270,6 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
   const int score = child.score;
 
   undo_move(board, undo);
-  if (nnue_stack) {
-    nnue_stack->pop();
-  }
 
   if (ctx.ply + 1 < MAX_PLY && scratch.history) {
     scratch.history->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] =
@@ -367,10 +345,8 @@ struct LazySmpTask {
   MoveHistory history;
   KillerTable killers;
   MoveOrderingTables ordering;
-  SfNnueStack nnue_stack;
   bool has_history = false;
   bool has_killers = false;
-  bool has_nnue = false;
   Move move{};
   int move_number = 0;
   MoveEvaluationContext eval_ctx;
@@ -390,9 +366,6 @@ struct LazySmpTask {
     ::operator delete(ptr, size, std::align_val_t{alignof(LazySmpTask)});
   }
 };
-
-static_assert(alignof(LazySmpTask) >= alignof(NNUEdata),
-              "LazySmpTask must satisfy NNUE alignment requirements");
 
 struct LazySmpContext {
   std::mutex queue_mutex;
@@ -447,9 +420,6 @@ void execute_lazy_task(LazySmpTask& task, LazySmpThread& thread) {
   if (!ctx) {
     return;
   }
-
-  SfNnueStack* nnue_stack = task.has_nnue ? &task.nnue_stack : nullptr;
-  ScopedNnueThreadContext nnue_guard(nnue_stack);
 
   SearchScratch scratch{};
   scratch.history = task.has_history ? &task.history : nullptr;
@@ -676,10 +646,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
   if (allow_null_move(board, depth)) {
     UndoNull undo_null = make_null_move(board);
-    SfNnueStack* nnue_stack = current_thread_nnue_stack();
-    if (nnue_stack) {
-      nnue_stack->push_null();
-    }
     const int null_move_reduction = search_params().null_move_reduction;
     SearchResult null_result = alphabeta_minimax(
         board, depth - 1 - null_move_reduction, beta - 1, beta, flip_side(stm),
@@ -687,16 +653,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         nodes, nullptr, nullptr, 0);
     if (null_result.aborted) {
       undo_null_move(board, undo_null);
-      if (nnue_stack) {
-        nnue_stack->pop();
-      }
       return null_result;
     }
     const int score_after_null = normalize_mate_score(null_result.score, ply);
     undo_null_move(board, undo_null);
-    if (nnue_stack) {
-      nnue_stack->pop();
-    }
     if (score_after_null >= beta) {
       SearchResult cutoff{};
       cutoff.score = score_after_null;
@@ -940,12 +900,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         task->parent_move_storage = *parent_move;
       }
       task->abort_flag = smp_ctx->abort_flag;
-      if (SfNnueStack* nnue_stack = current_thread_nnue_stack()) {
-        task->nnue_stack = *nnue_stack;
-        task->has_nnue = true;
-      } else {
-        task->has_nnue = false;
-      }
       split_point->add_task();
       smp_ctx->enqueue(std::move(task));
       continue;
@@ -1062,15 +1016,6 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
   scratch.local_abort = nullptr;
   scratch.thread = tls_lazy_thread;
-
-  std::unique_ptr<SfNnueStack> nnue_stack;
-  SfNnueStack* nnue_stack_ptr = nullptr;
-  if (sf_nnue_active()) {
-    nnue_stack = std::make_unique<SfNnueStack>();
-    nnue_stack->reset();
-    nnue_stack_ptr = nnue_stack.get();
-  }
-  ScopedNnueThreadContext nnue_guard(nnue_stack_ptr);
 
   double root_complexity_hint = 0.0;
   if (params.time_manager) {

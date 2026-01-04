@@ -2,23 +2,19 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/evaluation_params.hpp"
-<<<<<<< HEAD
-=======
 #include "chess/moves.hpp"
->>>>>>> nnue_version
 #include "chess/search.hpp"
 #include "chess/search_params.hpp"
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cstdint>
 #include <optional>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-<<<<<<< HEAD
-=======
 #include <stdexcept>
->>>>>>> nnue_version
 #include <string>
 #include <thread>
 #include <vector>
@@ -26,12 +22,6 @@
 namespace py = pybind11;
 using namespace pybind11::literals;
 
-<<<<<<< HEAD
-=======
-// From nnue_module.cpp
-void bind_nnue(py::module_& m);
-
->>>>>>> nnue_version
 namespace {
 
 template <typename T>
@@ -41,40 +31,22 @@ void assign_if_present(const py::dict& src, const char* key, T& target) {
   }
 }
 
-template <std::size_t N>
+template <typename T, std::size_t N>
 void assign_array_if_present(const py::dict& src, const char* key,
-                             std::array<int, N>& target) {
-  if (src.contains(key)) {
-    auto seq = py::cast<py::sequence>(src[key]);
-    if (seq.size() != static_cast<py::ssize_t>(N)) {
-      throw std::invalid_argument(std::string(key) + " must have " +
-                                  std::to_string(N) + " elements");
-    }
-    for (std::size_t i = 0; i < N; ++i) {
-      target[i] = py::cast<int>(seq[i]);
-    }
+                             std::array<T, N>& target) {
+  if (!src.contains(key)) {
+    return;
+  }
+  auto seq = py::cast<py::sequence>(src[key]);
+  if (seq.size() != static_cast<py::ssize_t>(N)) {
+    throw std::invalid_argument(std::string(key) + " must have " +
+                                std::to_string(N) + " elements");
+  }
+  for (std::size_t i = 0; i < N; ++i) {
+    target[i] = py::cast<T>(seq[i]);
   }
 }
 
-<<<<<<< HEAD
-=======
-template <std::size_t N>
-void assign_array_double_if_present(const py::dict& src, const char* key,
-                                    std::array<double, N>& target) {
-  if (src.contains(key)) {
-    auto seq = py::cast<py::sequence>(src[key]);
-    if (seq.size() > static_cast<py::ssize_t>(N)) {
-      throw std::invalid_argument(
-          std::string(key) + " must have <= " + std::to_string(N) + " elements");
-    }
-    const std::size_t limit = static_cast<std::size_t>(seq.size());
-    for (std::size_t i = 0; i < limit; ++i) {
-      target[i] = py::cast<double>(seq[i]);
-    }
-  }
-}
-
->>>>>>> nnue_version
 struct PinPair {
   int base;
   int mobility;
@@ -146,8 +118,6 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.evaluation.early_queen_penalty);
     assign_if_present(ev, "flank_pawn_penalty",
                       params.evaluation.flank_pawn_penalty);
-<<<<<<< HEAD
-=======
     assign_if_present(ev, "knight_mobility_scale",
                       params.evaluation.knight_mobility_scale);
     assign_if_present(ev, "bishop_mobility_scale",
@@ -162,19 +132,16 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.evaluation.isolated_pawn_penalty);
     assign_if_present(ev, "backward_pawn_penalty",
                       params.evaluation.backward_pawn_penalty);
->>>>>>> nnue_version
+    assign_if_present(ev, "eval_bias", params.evaluation.eval_bias);
+    assign_if_present(ev, "eval_slope", params.evaluation.eval_slope);
+    assign_if_present(ev, "eval_quiet_cap", params.evaluation.eval_quiet_cap);
     assign_array_if_present(ev, "king_attack_weights",
                             params.evaluation.king_attack_weights);
     assign_array_if_present(ev, "threat_base", params.evaluation.threat_base);
-
-<<<<<<< HEAD
-=======
-    assign_array_double_if_present(ev, "phase_weights_mg",
-                                   params.evaluation.phase_weights_mg);
-    assign_array_double_if_present(ev, "phase_weights_eg",
-                                   params.evaluation.phase_weights_eg);
-
->>>>>>> nnue_version
+    assign_array_if_present(ev, "phase_weights_mg",
+                            params.evaluation.phase_weights_mg);
+    assign_array_if_present(ev, "phase_weights_eg",
+                            params.evaluation.phase_weights_eg);
     if (ev.contains("bishop_pin_penalty")) {
       auto pair = parse_pin_pair(ev["bishop_pin_penalty"], "bishop_pin_penalty");
       params.evaluation.bishop_pin_penalty.base = pair.base;
@@ -315,8 +282,6 @@ py::object eval_fen_single(const std::string& fen,
   return py::dict("ok"_a = true, "cp"_a = res.cp);
 }
 
-<<<<<<< HEAD
-=======
 bool quiet_fen(const std::string& fen) {
   chess::Board b = chess::initial_board(fen);
   return chess::is_quiet_position(b, b.side_to_move);
@@ -328,14 +293,13 @@ py::list quiet_fens(const std::vector<std::string>& fens) {
     try {
       chess::Board b = chess::initial_board(fen);
       out.append(py::bool_(chess::is_quiet_position(b, b.side_to_move)));
-    } catch (const std::exception& ex) {
+    } catch (const std::exception&) {
       out.append(py::none()); // signal parse error
     }
   }
   return out;
 }
 
->>>>>>> nnue_version
 struct SelfPlayOptions {
   int depth = 4;
   std::uint64_t movetime_ms = 0; // 0 means unused
@@ -350,8 +314,6 @@ struct SelfPlayResult {
   int games_played = 0;
 };
 
-<<<<<<< HEAD
-=======
 struct ArenaResult {
   int wins = 0;
   int losses = 0;
@@ -360,7 +322,6 @@ struct ArenaResult {
   double score = 0.0;
 };
 
->>>>>>> nnue_version
 double game_outcome(chess::Board board) {
   const bool king_captured = board.king_captured != chess::PieceColor::None;
   const bool has_moves = chess::has_legal_moves(board, board.side_to_move);
@@ -452,8 +413,6 @@ SelfPlayResult selfplay_many(const std::vector<std::string>& start_fens,
   return out;
 }
 
-<<<<<<< HEAD
-=======
 ArenaResult arena_selfplay(const std::vector<std::string>& start_fens,
                            const std::optional<py::dict>& base_params_dict,
                            const std::optional<py::dict>& cand_params_dict,
@@ -548,13 +507,6 @@ ArenaResult arena_selfplay(const std::vector<std::string>& start_fens,
   res.score = (total > 0) ? (res.wins + 0.5 * res.draws) / total : 0.0;
   return res;
 }
-
-struct ClockControls {
-  std::uint64_t wtime = 0;
-  std::uint64_t btime = 0;
-  std::uint64_t increment = 0;
-  int moves_to_go = 40;
-};
 
 ArenaResult arena_selfplay_clock(const std::vector<std::string>& start_fens,
                                  const std::optional<py::dict>& base_params_dict,
@@ -700,23 +652,16 @@ ArenaResult arena_selfplay_clock(const std::vector<std::string>& start_fens,
   res.score = (total > 0) ? (res.wins + 0.5 * res.draws) / total : 0.0;
   return res;
 }
->>>>>>> nnue_version
 } // namespace
 
 PYBIND11_MODULE(skaks_eval, m) {
   m.doc() = "skaks evaluation bindings";
-
-<<<<<<< HEAD
-=======
-  bind_nnue(m);
 
   m.def("is_quiet", &quiet_fen, py::arg("fen"),
         "Return True if side-to-move is not in check and has no captures,"
         " promotions, castling, en-passant, or checking moves.");
   m.def("is_quiet_batch", &quiet_fens, py::arg("fens"),
         "Vectorized is_quiet; returns list of bool, None on parse errors.");
-
->>>>>>> nnue_version
   m.def("eval_fens", &eval_fens, py::arg("fens"),
         py::arg("params") = std::nullopt, py::arg("threads") = 0,
         "Evaluate many FENs in parallel. params is an optional dict with"
@@ -747,8 +692,6 @@ PYBIND11_MODULE(skaks_eval, m) {
       py::arg("max_plies") = 160, py::arg("sample_stride") = 4,
       "Run internal self-play over start_fens and return sampled FENs."
       " Exactly one of depth or movetime_ms must be positive.");
-<<<<<<< HEAD
-=======
 
   m.def(
       "arena",
@@ -774,5 +717,4 @@ PYBIND11_MODULE(skaks_eval, m) {
       " built-in params unless base_params is provided; cand_params overrides"
       " the candidate (fallbacks to baseline). Exactly one of depth or"
       " movetime_ms or clock must be positive.");
->>>>>>> nnue_version
 }

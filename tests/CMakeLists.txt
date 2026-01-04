@@ -28,19 +28,7 @@ add_executable(chess_engine_tests
   time_manager_tests.cpp
   zobrist_tests.cpp
   params_loader_tests.cpp
-  nnue_features_tests.cpp
-  nnue_incremental_tests.cpp
-  nnue_sf_tests.cpp
-  sf_eval_tests.cpp
   uci_tests.cpp
-)
-
-set_source_files_properties(
-  ${CMAKE_CURRENT_SOURCE_DIR}/../src/sf_nnue/nnue.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../src/sf_nnue/misc.cpp
-  PROPERTIES
-    COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-sign-conversion;-Wno-implicit-int-conversion;-Wno-vla-cxx-extension"
-    COMPILE_DEFINITIONS "USE_NEON;IS_64BIT=1"
 )
 
 target_link_libraries(chess_engine_tests
@@ -60,6 +48,11 @@ target_include_directories(chess_engine_tests
 
 target_include_directories(chess_engine_tests SYSTEM PUBLIC
   ${YAML_CPP_INCLUDE_DIR}
+)
+
+target_compile_definitions(chess_engine_tests
+  PRIVATE
+    TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
 )
 
 chess_set_default_warnings(chess_engine_tests)

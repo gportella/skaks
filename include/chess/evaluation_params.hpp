@@ -51,6 +51,9 @@ struct EvaluationParams {
   PinPenalty knight_pin_penalty{};
   PinPenalty pawn_pin_straight_penalty{};
   PinPenalty pawn_pin_diagonal_penalty{};
+  double eval_bias = 0.0;
+  double eval_slope = 1.0;
+  double eval_quiet_cap = 800.0;
   std::array<double, static_cast<std::size_t>(OccupancyType::bK) + 1>
       reserved{}; // placeholder to preserve layout
   std::array<float, static_cast<std::size_t>(TermId::Count)> phase_weights_mg{};
@@ -97,6 +100,9 @@ inline EvaluationParams default_evaluation_params() {
   params.knight_pin_penalty = {15, 0};
   params.pawn_pin_straight_penalty = {6, 2};
   params.pawn_pin_diagonal_penalty = {10, 2};
+  params.eval_bias = 0.0;
+  params.eval_slope = 1.0;
+  params.eval_quiet_cap = 800.0;
   for (std::size_t i = 0; i < params.phase_weights_mg.size(); ++i) {
     params.phase_weights_mg[i] = 1.0f;
     params.phase_weights_eg[i] = 1.0f;

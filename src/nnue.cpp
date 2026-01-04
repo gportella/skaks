@@ -1,5 +1,6 @@
 #include "chess/nnue.hpp"
 
+#include "chess/board.hpp"
 #include "chess/nnue_incremental.hpp"
 #include "chess/types_io.hpp"
 #include "sf_nnue/nnue.h"
@@ -8,8 +9,10 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -226,11 +229,41 @@ int eval_sf_backend(const Board& board, SfNnueStack* stack) {
   if (stack) {
     auto ptrs = stack->pointer_triplet();
     NNUEdata* nnue_ptrs[3] = {ptrs[0], ptrs[1], ptrs[2]};
-    return nnue_evaluate_incremental(player, pieces.data(), squares.data(),
-                                     nnue_ptrs);
+    const int value = nnue_evaluate_incremental(player, pieces.data(),
+                                                squares.data(), nnue_ptrs);
+    if (const char* debug = std::getenv("SKAKS_DEBUG_NNUE")) {
+      (void)debug;
+      const std::string fen_str = board_to_fen(board);
+      const int fen_eval = nnue_evaluate_fen(fen_str.c_str());
+      std::ostringstream oss;
+      oss << "[nnue-debug] fen=" << fen_str << " player=" << player
+          << " stack=1 eval=" << value << " fen_eval=" << fen_eval;
+      std::cerr << oss.str() << "\n";
+    }
+    return value;
   }
 
-  return nnue_evaluate(player, pieces.data(), squares.data());
+  const int value = nnue_evaluate(player, pieces.data(), squares.data());
+  if (const char* debug = std::getenv("SKAKS_DEBUG_NNUE")) {
+    (void)debug;
+    const std::string fen_str = board_to_fen(board);
+    const int fen_eval = nnue_evaluate_fen(fen_str.c_str());
+    std::ostringstream oss;
+    oss << "[nnue-debug] fen=" << fen_str << " player=" << player
+        << " stack=0 eval=" << value << " fen_eval=" << fen_eval;
+    std::cerr << oss.str() << "\n";
+    std::cerr << "[nnue-debug] pieces:";
+    std::size_t i = 0;
+    for (; i < pieces.size() && pieces[i]; ++i) {
+      std::cerr << ' ' << pieces[i];
+    }
+    std::cerr << "\n[nnue-debug] squares:";
+    for (std::size_t j = 0; j < squares.size() && j < i; ++j) {
+      std::cerr << ' ' << squares[j];
+    }
+    std::cerr << "\n";
+  }
+  return value;
 }
 } // namespace
 

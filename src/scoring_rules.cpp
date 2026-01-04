@@ -4,7 +4,6 @@
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
 #include "chess/evaluation_params.hpp"
-#include "chess/nnue.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/pins.hpp"
 #include "chess/pst_tables.hpp"
@@ -1001,18 +1000,16 @@ int evaluate_board(const Board& board) {
     return 100000; // White wins
   }
 
-  if (sf_nnue_active()) {
-    return evaluate_sf_nnue(board);
-  }
-
-  if (const auto net = active_nnue()) {
-    const auto feat = make_nnue_features(board);
-    const float eval = net->forward(feat);
-    return static_cast<int>(std::lround(eval));
-  }
-
   const auto v = compute_eval_vector(board);
-  return eval_linear(v, phase_weights());
+  const int raw_linear = eval_linear(v, phase_weights());
+  const auto& params = evaluation_params();
+  const double slope =
+      std::abs(params.eval_slope) < 1e-9 ? 1.0 : params.eval_slope;
+  const double bias = params.eval_bias;
+  const double quiet_cap = std::max(1.0, params.eval_quiet_cap);
+  const double adjusted = bias + slope * static_cast<double>(raw_linear);
+  const double compressed = quiet_cap * std::tanh(adjusted / quiet_cap);
+  return static_cast<int>(std::lround(compressed));
 }
 
 } // namespace chess

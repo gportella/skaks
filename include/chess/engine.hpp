@@ -1,7 +1,6 @@
 #pragma once
 
 #include "chess/board.hpp"
-#include "chess/eval_mode.hpp"
 #include "chess/history.hpp"
 #include "chess/search.hpp"
 #include "chess/transposition_table.hpp"
@@ -26,10 +25,6 @@ public:
   [[nodiscard]] SearchResult search(Board& board,
                                     const SearchParameters& params);
   [[nodiscard]] int evaluate(const Board& board) const;
-  void set_evaluation_mode(EvaluationMode mode);
-  [[nodiscard]] EvaluationMode evaluation_mode() const {
-    return eval_mode_;
-  }
 
   void set_thread_count(int count);
   [[nodiscard]] int thread_count() const {
@@ -49,7 +44,6 @@ public:
 
 private:
   EvaluationConfig eval_config_;
-  EvaluationMode eval_mode_ = EvaluationMode::Native;
   MoveHistory history_;
   TranspositionTable tt_;
   int thread_count_ = 1;

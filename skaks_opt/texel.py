@@ -31,7 +31,9 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--data", required=True, help="CSV with fen,outcome[,weight] columns"
+        "--data",
+        required=True,
+        help="CSV file or directory containing fen,outcome[,weight] data",
     )
     parser.add_argument("--trials", type=int, default=100, help="Number of trials")
     parser.add_argument("--jobs", type=int, default=1, help="Parallel Optuna jobs")
@@ -184,38 +186,65 @@ def load_texel_csv(path: Path | str, limit: int | None = None) -> TexelDataset:
     outcomes: List[float] = []
     weights: List[float] = []
     sides: List[int] = []
-    with path.open("r", newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh)
-        if not reader.fieldnames or "fen" not in reader.fieldnames:
-            raise ValueError("CSV must contain fen column")
-        outcome_col = None
-        for candidate in ("outcome", "result", "score"):
-            if candidate in reader.fieldnames:
-                outcome_col = candidate
-                break
-        if outcome_col is None:
-            raise ValueError("CSV must contain an outcome/result column")
-        for row in reader:
-            if limit is not None and len(fens) >= limit:
-                break
-            fen = row["fen"].strip()
-            try:
-                value = float(row[outcome_col])
-            except Exception:
-                continue
-            if not (0.0 <= value <= 1.0):
-                continue
-            weight = float(row.get("weight", 1.0) or 1.0)
-            fens.append(fen)
-            outcomes.append(value)
-            weights.append(weight)
-            stm = row.get("side_to_move")
-            if stm is not None and stm.lower().startswith("w"):
-                sides.append(1)
-            elif stm is not None and stm.lower().startswith("b"):
-                sides.append(-1)
-            else:
-                sides.append(_parse_side_to_move(fen))
+    paths: List[Path]
+    if path.is_dir():
+        paths = sorted(p for p in path.rglob("*.csv") if p.is_file())
+    else:
+        paths = [path]
+
+    if not paths:
+        raise ValueError(f"no CSV files found at {path}")
+
+    remaining = limit
+
+    def load_one(csv_path: Path, remaining_limit: int | None) -> int | None:
+        nonlocal fens, outcomes, weights, sides
+        limit_left = remaining_limit
+        with csv_path.open("r", newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            if not reader.fieldnames or "fen" not in reader.fieldnames:
+                raise ValueError(f"CSV {csv_path} missing fen column")
+            outcome_col = None
+            for candidate in ("outcome", "result", "score"):
+                if candidate in reader.fieldnames:
+                    outcome_col = candidate
+                    break
+            if outcome_col is None:
+                raise ValueError(f"CSV {csv_path} missing outcome/result column")
+            for row in reader:
+                if limit_left is not None and limit_left <= 0:
+                    return 0
+                fen = row["fen"].strip()
+                if not fen:
+                    continue
+                try:
+                    value = float(row[outcome_col])
+                except Exception:
+                    continue
+                if not (0.0 <= value <= 1.0):
+                    continue
+                weight = float(row.get("weight", 1.0) or 1.0)
+                fens.append(fen)
+                outcomes.append(value)
+                weights.append(weight)
+                stm = row.get("side_to_move")
+                if stm is not None and stm.lower().startswith("w"):
+                    sides.append(1)
+                elif stm is not None and stm.lower().startswith("b"):
+                    sides.append(-1)
+                else:
+                    sides.append(_parse_side_to_move(fen))
+                if limit_left is not None:
+                    limit_left -= 1
+        if limit_left is None:
+            return None
+        return max(limit_left, 0)
+
+    for csv_path in paths:
+        remaining = load_one(csv_path, remaining)
+        if remaining is not None and remaining <= 0:
+            break
+
     if not fens:
         raise ValueError(f"no rows loaded from {path}")
     return TexelDataset(

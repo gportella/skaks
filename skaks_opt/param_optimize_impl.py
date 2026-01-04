@@ -76,6 +76,8 @@ CHESS_SWARM = [
 ]
 PALETTE = ["cyan", "magenta", "yellow", "green", "bright_white", "bright_blue"]
 
+START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
 
 def _live_line(text: str) -> None:
     """Render a single updating line (carriage return based)."""
@@ -448,7 +450,8 @@ def evaluate_candidate(
             raise ValueError(
                 "Arena binding does not support clock controls; use depth or time-per-move"
             )
-        fen_pool = start_fens or ["start"]
+        fen_pool = list(start_fens) if start_fens else [START_FEN]
+        fen_pool = [START_FEN if fen == "start" else fen for fen in fen_pool]
         if games > len(fen_pool):
             copies = (games + len(fen_pool) - 1) // len(fen_pool)
             fen_pool = (fen_pool * copies)[:games]

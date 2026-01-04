@@ -2,9 +2,7 @@
 
 #include "chess/board.hpp"
 #include "chess/defaults.hpp"
-#include "chess/eval_mode.hpp"
 #include "chess/moves.hpp"
-#include "chess/nnue.hpp"
 #include "chess/polyglot.hpp"
 #include "chess/score.hpp"
 #include "chess/types_io.hpp"
@@ -52,30 +50,6 @@ void log_uci(std::string_view direction, std::string_view payload) {
   }
   stream << direction << ": " << payload << '\n';
   stream.flush();
-}
-
-std::string eval_mode_to_string(EvaluationMode mode) {
-  switch (mode) {
-  case EvaluationMode::Native:
-    return "native";
-  case EvaluationMode::Stockfish:
-    return "stockfish";
-  }
-  return "native";
-}
-
-std::optional<EvaluationMode> eval_mode_from_string(std::string_view text) {
-  std::string lowered(text.begin(), text.end());
-  std::transform(
-      lowered.begin(), lowered.end(), lowered.begin(),
-      [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-  if (lowered == "native" || lowered == "default") {
-    return EvaluationMode::Native;
-  }
-  if (lowered == "stockfish" || lowered == "sf") {
-    return EvaluationMode::Stockfish;
-  }
-  return std::nullopt;
 }
 
 [[noreturn]] void fatal_uci_violation(const Board& board,
@@ -557,8 +531,6 @@ void run_uci_loop(Engine& engine, int default_depth,
       static_cast<int>(std::clamp(detected_threads, 1u, 256u));
   int thread_count = std::clamp(engine.thread_count(), kMinThreads, max_threads);
   engine.set_thread_count(thread_count);
-  EvaluationMode eval_mode = engine.evaluation_mode();
-  std::string nnue_option_value;
 
   auto join_worker = [&]() {
     if (search_state->worker.joinable()) {
@@ -679,25 +651,6 @@ void run_uci_loop(Engine& engine, int default_depth,
         const std::string line_out = threads_line.str();
         log_uci("out", line_out);
         std::cout << line_out << '\n';
-      }
-      {
-        std::ostringstream eval_line;
-        eval_line << "option name EvalMode type combo default "
-                  << eval_mode_to_string(eval_mode)
-                  << " var native var stockfish";
-        const std::string eval_out = eval_line.str();
-        log_uci("out", eval_out);
-        std::cout << eval_out << '\n';
-      }
-      {
-        std::ostringstream nnue_line;
-        nnue_line << "option name NNUEFile type string default";
-        if (!nnue_option_value.empty()) {
-          nnue_line << ' ' << nnue_option_value;
-        }
-        const std::string nnue_out = nnue_line.str();
-        log_uci("out", nnue_out);
-        std::cout << nnue_out << '\n';
       }
       log_uci("out", "uciok");
       std::cout << "uciok" << '\n';
@@ -833,95 +786,6 @@ void run_uci_loop(Engine& engine, int default_depth,
           std::cout << info << '\n';
           std::cout.flush();
         }
-      } else if (lowered_name == "evalmode") {
-        const auto parsed = eval_mode_from_string(value);
-        if (!parsed) {
-          const std::string info =
-              "info string Unknown EvalMode value: " + value;
-          log_uci("out", info);
-          std::cout << info << '\n';
-          std::cout.flush();
-          continue;
-        }
-        if (*parsed == EvaluationMode::Stockfish && !sf_nnue_active()) {
-          const std::string info =
-              "info string EvalMode=stockfish requires a loaded .nnue file";
-          log_uci("out", info);
-          std::cout << info << '\n';
-          std::cout.flush();
-          continue;
-        }
-        eval_mode = *parsed;
-        engine.set_evaluation_mode(eval_mode);
-        const std::string info =
-            "info string EvalMode set to " + eval_mode_to_string(eval_mode);
-        log_uci("out", info);
-        std::cout << info << '\n';
-        std::cout.flush();
-      } else if (lowered_name == "nnuefile") {
-        std::string path = value;
-        if (path.empty()) {
-          set_active_nnue(nullptr);
-          nnue_option_value.clear();
-          const std::string info = "info string NNUEFile cleared; native eval "
-                                   "will use built-in features";
-          log_uci("out", info);
-          std::cout << info << '\n';
-          std::cout.flush();
-          continue;
-        }
-
-        std::string error;
-        bool is_sf = false;
-        try {
-          const std::filesystem::path fs_path(path);
-          const auto ext = fs_path.extension().string();
-          std::string lowered_ext(ext);
-          std::transform(lowered_ext.begin(), lowered_ext.end(),
-                         lowered_ext.begin(), [](unsigned char ch) {
-                           return static_cast<char>(std::tolower(ch));
-                         });
-          if (lowered_ext == ".nnue") {
-            is_sf = true;
-            if (!load_sf_nnue(path, error)) {
-              const std::string info =
-                  "info string Failed to load .nnue file: " + error;
-              log_uci("out", info);
-              std::cout << info << '\n';
-              std::cout.flush();
-              continue;
-            }
-          } else {
-            auto net = std::make_shared<NnueNetwork>();
-            if (!load_nnue_from_file(path, *net, error)) {
-              const std::string info =
-                  "info string Failed to load NNUE weights: " + error;
-              log_uci("out", info);
-              std::cout << info << '\n';
-              std::cout.flush();
-              continue;
-            }
-            set_active_nnue(std::move(net));
-          }
-        } catch (const std::exception& ex) {
-          const std::string info =
-              std::string("info string Error loading NNUE file: ") + ex.what();
-          log_uci("out", info);
-          std::cout << info << '\n';
-          std::cout.flush();
-          continue;
-        }
-
-        nnue_option_value = path;
-        std::string info = "info string Loaded ";
-        info += is_sf ? ".nnue" : "NNUE";
-        info += " weights from " + path;
-        if (is_sf && eval_mode != EvaluationMode::Stockfish) {
-          info += "; set EvalMode=stockfish to enable";
-        }
-        log_uci("out", info);
-        std::cout << info << '\n';
-        std::cout.flush();
       }
     } else if (keyword == "staticeval") {
       stop_search(true);
