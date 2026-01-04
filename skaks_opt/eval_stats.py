@@ -924,7 +924,9 @@ def _render_png_table(stats: dict, path: pathlib.Path) -> bool:
     return True
 
 
-def _metric_specs(stats: dict) -> List[tuple[str, tuple[float, float, float], str, bool]]:
+def _metric_specs(
+    stats: dict,
+) -> List[tuple[str, tuple[float, float, float], str, bool]]:
     return [
         (
             "RMSE (↓)",
@@ -988,8 +990,12 @@ def _plain_metric_row(
             formatted.append(format(value, fmt))
             comparable.append((idx, value))
     if comparable:
-        key_fn = (lambda item: item[1])
-        selected = max(comparable, key=key_fn) if higher_is_better else min(comparable, key=key_fn)
+        key_fn = lambda item: item[1]
+        selected = (
+            max(comparable, key=key_fn)
+            if higher_is_better
+            else min(comparable, key=key_fn)
+        )
         best_index = selected[0]
     return formatted, best_index
 
@@ -1120,7 +1126,9 @@ def _term_bar(value: float, max_value: float, length: int = 24) -> str:
     filled = min(length, max(0, int(round(ratio * length))))
     if ratio > 0.0 and filled == 0:
         filled = 1
-    color_index = min(len(_TERM_BAR_COLORS) - 1, int(ratio * (len(_TERM_BAR_COLORS) - 1)))
+    color_index = min(
+        len(_TERM_BAR_COLORS) - 1, int(ratio * (len(_TERM_BAR_COLORS) - 1))
+    )
     color = _TERM_BAR_COLORS[color_index]
     filled_str = _TERM_BAR_CHAR * filled
     empty_str = _TERM_BAR_CHAR * (length - filled)

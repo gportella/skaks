@@ -103,7 +103,9 @@ def _build_gradient_bar(ratio: float, segments: int = 48) -> str:
 
         # Blend partially filled segments toward the palette color
         if fill_level < 1.0:
-            blended_rgb = _blend_rgb(base_rgb, _hex_to_rgb(_TRAIL_COLOR), 1.0 - fill_level)
+            blended_rgb = _blend_rgb(
+                base_rgb, _hex_to_rgb(_TRAIL_COLOR), 1.0 - fill_level
+            )
             color = _rgb_to_hex(blended_rgb)
         else:
             color = _rgb_to_hex(base_rgb)

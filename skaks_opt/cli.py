@@ -180,6 +180,25 @@ def main():
         help="Reserved for engine-level concurrency (future use) (default: %(default)s)",
     )
     selfplay_parser.add_argument(
+        "--dask-scheduler",
+        help="Dask scheduler address for distributed arenas (e.g. tcp://host:8786)",
+    )
+    selfplay_parser.add_argument(
+        "--dask-workers",
+        type=int,
+        help="Spawn a local Dask cluster with this many workers",
+    )
+    selfplay_parser.add_argument(
+        "--dask-threads",
+        type=int,
+        help="Threads per local Dask worker (default: 1)",
+    )
+    selfplay_parser.add_argument(
+        "--dask-shards",
+        type=int,
+        help="Override number of arena shards submitted to Dask",
+    )
+    selfplay_parser.add_argument(
         "--cma-popsize",
         type=int,
         help="Override CMA-ES population size",
@@ -220,6 +239,11 @@ def main():
         "--child-output",
         action="store_true",
         help="Silence per-repeat progress output",
+    )
+    selfplay_parser.add_argument(
+        "--no-rich-progress",
+        action="store_true",
+        help="Disable rich table summaries (plain text output)",
     )
     selfplay_parser.add_argument(
         "--seed",
@@ -315,6 +339,11 @@ def main():
             cma_sigma=args.cma_sigma,
             seed=args.seed,
             start_fens=args.start_fen,
+            dask_scheduler=args.dask_scheduler,
+            dask_local_workers=args.dask_workers,
+            dask_local_threads=args.dask_threads,
+            dask_shard_hint=args.dask_shards,
+            rich_progress=not args.no_rich_progress,
         )
         run_selfplay(config)
     elif args.command == "optimize-search":

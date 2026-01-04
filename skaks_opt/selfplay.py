@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 
+import os
 import sys
 import math
 import multiprocessing as mp
 import random
 import time
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,12 +19,16 @@ from skaks_opt.params import DEFAULT_PARAMS
 
 try:
     from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
 
     HAS_RICH = True
     console = Console(highlight=False, soft_wrap=False)
 except Exception:
     HAS_RICH = False
     console = None
+    Panel = None  # type: ignore
+    Table = None  # type: ignore
 
 
 ANSI_COLORS = {
@@ -39,6 +45,16 @@ SPINNER_FRAMES = ["|", "/", "-", "\\"]
 CHESS_SWARM = ["♔", "♕", "♖", "♗", "♘", "♙", "♚", "♛", "♜", "♝", "♞", "♟"]
 PALETTE = ["cyan", "magenta", "yellow", "green", "bright_white", "bright_blue"]
 DEFAULT_START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+
+@dataclass
+class CandidateResult:
+    index: int
+    score: float
+    data: Dict[str, Any]
+    wld: Tuple[int, int, int]
+    wall: float
+    accepted: bool = False
 
 
 def _color(text: str, color: str) -> str:
@@ -107,6 +123,8 @@ class SelfPlayConfig:
     dask_local_workers: Optional[int] = None
     dask_local_threads: Optional[int] = None
     start_fens: Optional[List[str]] = None
+    dask_shard_hint: Optional[int] = None
+    rich_progress: bool = True
 
 
 def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
@@ -590,6 +608,130 @@ def score_to_elo(score: float) -> float:
     return 400.0 * math.log10(score / (1.0 - score))
 
 
+@contextmanager
+def _dask_client(config: "SelfPlayConfig"):
+    host_env = os.environ.get("DASK_SCHEDULER_SERVICE_HOST")
+    port_env = os.environ.get("DASK_SCHEDULER_SERVICE_PORT")
+
+    scheduler_addr: Optional[str]
+    if config.dask_scheduler:
+        scheduler_addr = config.dask_scheduler
+    elif host_env and port_env:
+        endpoint = f"{host_env}:{port_env}".strip()
+        scheduler_addr = endpoint if "//" in endpoint else f"tcp://{endpoint}"
+    else:
+        scheduler_addr = None
+
+    if not scheduler_addr and not config.dask_local_workers:
+        yield None, config.dask_shard_hint
+        return
+
+    if config.dask_scheduler and config.dask_local_workers:
+        raise RuntimeError("Use either --dask-scheduler or --dask-workers, not both")
+
+    try:
+        from distributed import Client, LocalCluster
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError(
+            "dask.distributed is required for Dask-enabled selfplay"
+        ) from exc
+
+    client = None
+    cluster = None
+    try:
+        if scheduler_addr:
+            client = Client(scheduler_addr)
+            source = (
+                config.dask_scheduler
+                if config.dask_scheduler
+                else f"env {host_env}:{port_env}"
+            )
+            _final_line(f"[dask] Connected to scheduler at {scheduler_addr} ({source})")
+        else:
+            cluster = LocalCluster(
+                n_workers=config.dask_local_workers,
+                threads_per_worker=config.dask_local_threads or 1,
+                processes=True,
+                dashboard_address=None,
+            )
+            client = Client(cluster)
+            _final_line(
+                f"[dask] Started LocalCluster with {config.dask_local_workers} workers"
+            )
+
+        shard_hint = config.dask_shard_hint
+        if shard_hint is None and client is not None:
+            try:
+                shard_hint = len(client.nthreads())
+            except Exception:
+                shard_hint = None
+        yield client, shard_hint
+    finally:
+        try:
+            if client is not None:
+                client.close()
+        finally:
+            if cluster is not None:
+                cluster.close()
+
+
+def _render_iteration_summary(
+    iteration: int, candidates: List[CandidateResult], config: "SelfPlayConfig"
+) -> None:
+    if not candidates:
+        return
+
+    rich_enabled = (
+        config.rich_progress
+        and HAS_RICH
+        and console is not None
+        and Table is not None
+        and Panel is not None
+    )
+
+    if rich_enabled:
+        assert Table is not None
+        assert Panel is not None
+        table = Table(box=None, expand=False)
+        table.add_column("#", justify="right")
+        table.add_column("Score", justify="right")
+        table.add_column("W-L-D", justify="center")
+        table.add_column("Elo≈", justify="right")
+        table.add_column("Time (s)", justify="right")
+        table.add_column("Status", justify="left")
+
+        for idx, result in enumerate(candidates, start=1):
+            marker = "★" if idx == 1 else ""
+            saved = "✅" if result.accepted else ""
+            table.add_row(
+                f"{marker}{result.index}",
+                f"{result.score:.3f}",
+                f"{result.wld[0]}/{result.wld[1]}/{result.wld[2]}",
+                f"{score_to_elo(result.score):+.1f}",
+                f"{result.wall:.1f}",
+                saved,
+            )
+
+        console.print(
+            Panel(
+                table,
+                title=f"Iteration {iteration}",
+                expand=False,
+                border_style="bright_blue",
+            )
+        )
+    else:
+        _final_line(f"Iteration {iteration} results:")
+        for idx, result in enumerate(candidates, start=1):
+            marker = "*" if idx == 1 else "-"
+            saved = " [saved]" if result.accepted else ""
+            _final_line(
+                f"  {marker} cand#{result.index} score={result.score:.3f} "
+                f"WLD={result.wld[0]}/{result.wld[1]}/{result.wld[2]} "
+                f"Elo~{score_to_elo(result.score):+.1f} time={result.wall:.1f}s{saved}"
+            )
+
+
 def run_selfplay(config: SelfPlayConfig) -> Path:
     if skaks_eval is None:
         raise RuntimeError("skaks_eval not available; install bindings first")
@@ -639,115 +781,155 @@ def run_selfplay(config: SelfPlayConfig) -> Path:
 
     beam: List[Tuple[float, Dict[str, Any]]] = [(best_score, best_data)]
 
-    for iteration in range(1, config.iterations + 1):
-        candidates: List[Tuple[float, Dict[str, Any], Tuple[int, int, int], float]] = []
+    rich_enabled = (
+        config.rich_progress
+        and HAS_RICH
+        and console is not None
+        and Table is not None
+        and Panel is not None
+    )
 
-        if config.strategy == "beam":
-            parents = [data for (_, data) in beam] or [best_data]
-            for idx in range(config.beam_size):
-                parent = parents[idx % len(parents)]
-                cand_data = perturb_params(
-                    parent,
-                    config.noise,
+    with _dask_client(config) as (dask_client, shard_hint):
+        for iteration in range(1, config.iterations + 1):
+            candidate_results: List[CandidateResult] = []
+
+            if config.strategy == "beam":
+                parents = [data for (_, data) in beam] or [best_data]
+                for idx in range(config.beam_size):
+                    parent = parents[idx % len(parents)]
+                    cand_data = perturb_params(
+                        parent,
+                        config.noise,
+                        include_prefixes=include_prefixes or None,
+                        exclude_prefixes=config.exclude_prefix,
+                    )
+                    score, wld, wall = evaluate_candidate_repeats(
+                        candidate_data=cand_data,
+                        baseline_data=baseline_data,
+                        games=config.games,
+                        depth=config.depth,
+                        time_per_move=config.time_per_move,
+                        clock=config.clock,
+                        arena_workers=config.arena_workers,
+                        repeats=config.repeats,
+                        start_fens=target_fens,
+                        quiet=config.child_output,
+                        dask_client=dask_client,
+                        shard_hint=shard_hint,
+                    )
+                    candidate_results.append(
+                        CandidateResult(
+                            index=idx + 1,
+                            score=score,
+                            data=cand_data,
+                            wld=wld,
+                            wall=wall,
+                        )
+                    )
+                    if not rich_enabled:
+                        color = PALETTE[idx % len(PALETTE)]
+                        _final_line(
+                            f"{_color('✓', 'green')} iter={iteration} cand={idx + 1}/{config.beam_size} "
+                            f"score={_color(f'{score:.3f}', color)} "
+                            f"WLD={wld[0]}/{wld[1]}/{wld[2]} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                        )
+
+                candidate_results.sort(key=lambda item: item.score, reverse=True)
+                beam = [
+                    (result.score, result.data)
+                    for result in candidate_results[: config.beam_size]
+                ]
+                top_result = candidate_results[0]
+            else:
+                paths, mean_vec, is_int = _flatten_params(
+                    best_data,
                     include_prefixes=include_prefixes or None,
                     exclude_prefixes=config.exclude_prefix,
                 )
-                score, wld, wall = evaluate_candidate_repeats(
-                    candidate_data=cand_data,
-                    baseline_data=baseline_data,
-                    games=config.games,
-                    depth=config.depth,
-                    time_per_move=config.time_per_move,
-                    clock=config.clock,
-                    arena_workers=config.arena_workers,
-                    repeats=config.repeats,
-                    start_fens=target_fens,
-                    quiet=config.child_output,
+                popsize = (
+                    config.cma_popsize
+                    if config.cma_popsize is not None
+                    else max(4, int(4 + 3 * math.log(len(mean_vec) + 1)))
                 )
-                color = PALETTE[idx % len(PALETTE)]
+                sigma = (
+                    config.cma_sigma if config.cma_sigma is not None else config.noise
+                )
+                sigma = max(1e-4, sigma)
+
+                for idx in range(popsize):
+                    vec = []
+                    for value in mean_vec:
+                        scale = sigma * max(abs(value), 1.0)
+                        vec.append(value + random.gauss(0.0, scale))
+                    cand_data = _vector_to_params(base_data, paths, vec, is_int)
+                    score, wld, wall = evaluate_candidate_repeats(
+                        candidate_data=cand_data,
+                        baseline_data=baseline_data,
+                        games=config.games,
+                        depth=config.depth,
+                        time_per_move=config.time_per_move,
+                        clock=config.clock,
+                        arena_workers=config.arena_workers,
+                        repeats=config.repeats,
+                        start_fens=target_fens,
+                        quiet=config.child_output,
+                        dask_client=dask_client,
+                        shard_hint=shard_hint,
+                    )
+                    candidate_results.append(
+                        CandidateResult(
+                            index=idx + 1,
+                            score=score,
+                            data=cand_data,
+                            wld=wld,
+                            wall=wall,
+                        )
+                    )
+                    if not rich_enabled:
+                        color = PALETTE[idx % len(PALETTE)]
+                        _final_line(
+                            f"{_color('✓', 'green')} iter={iteration} cand={idx + 1}/{popsize} "
+                            f"score={_color(f'{score:.3f}', color)} "
+                            f"WLD={wld[0]}/{wld[1]}/{wld[2]} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                        )
+
+                candidate_results.sort(key=lambda item: item.score, reverse=True)
+                top_result = candidate_results[0]
+                mu = max(1, popsize // 2)
+                weights = [math.log(mu + 0.5) - math.log(i + 1) for i in range(mu)]
+                weight_sum = sum(weights)
+                weights = [w / weight_sum for w in weights]
+
+                new_mean = [0.0 for _ in mean_vec]
+                for rank in range(min(mu, len(candidate_results))):
+                    vec_paths, vec_values, _ = _flatten_params(
+                        candidate_results[rank].data,
+                        include_prefixes=include_prefixes or None,
+                        exclude_prefixes=config.exclude_prefix,
+                    )
+                    if vec_paths != paths:
+                        continue
+                    for value_idx, value in enumerate(vec_values):
+                        new_mean[value_idx] += weights[rank] * value
+                mean_vec = new_mean
+                best_data = _vector_to_params(base_data, paths, mean_vec, is_int)
+                beam = [(top_result.score, best_data)]
+
+            accept_candidate = top_result.score > best_score
+            if accept_candidate:
+                best_score = top_result.score
+                best_data = top_result.data
+                baseline_data = deepcopy(best_data)
+                top_result.accepted = True
+                _save_params(best_data, best_path)
                 _final_line(
-                    f"{_color('✓', 'green')} iter={iteration} cand={idx + 1}/{config.beam_size} "
-                    f"score={_color(f'{score:.3f}', color)} "
-                    f"WLD={wld[0]}/{wld[1]}/{wld[2]} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                    _color(
+                        f"⚑ new best score={best_score:.3f} saved to {best_path}",
+                        "yellow",
+                    )
                 )
-                candidates.append((score, cand_data, wld, wall))
 
-            candidates.sort(key=lambda item: item[0], reverse=True)
-            beam = [
-                (score, data) for score, data, _, _ in candidates[: config.beam_size]
-            ]
-            top_score, top_data, _, _ = candidates[0]
-        else:
-            paths, mean_vec, is_int = _flatten_params(
-                best_data,
-                include_prefixes=include_prefixes or None,
-                exclude_prefixes=config.exclude_prefix,
-            )
-            popsize = (
-                config.cma_popsize
-                if config.cma_popsize is not None
-                else max(4, int(4 + 3 * math.log(len(mean_vec) + 1)))
-            )
-            sigma = config.cma_sigma if config.cma_sigma is not None else config.noise
-            sigma = max(1e-4, sigma)
-
-            for idx in range(popsize):
-                vec = []
-                for value in mean_vec:
-                    scale = sigma * max(abs(value), 1.0)
-                    vec.append(value + random.gauss(0.0, scale))
-                cand_data = _vector_to_params(base_data, paths, vec, is_int)
-                score, wld, wall = evaluate_candidate_repeats(
-                    candidate_data=cand_data,
-                    baseline_data=baseline_data,
-                    games=config.games,
-                    depth=config.depth,
-                    time_per_move=config.time_per_move,
-                    clock=config.clock,
-                    arena_workers=config.arena_workers,
-                    repeats=config.repeats,
-                    start_fens=target_fens,
-                    quiet=config.child_output,
-                )
-                color = PALETTE[idx % len(PALETTE)]
-                _final_line(
-                    f"{_color('✓', 'green')} iter={iteration} cand={idx + 1}/{popsize} "
-                    f"score={_color(f'{score:.3f}', color)} "
-                    f"WLD={wld[0]}/{wld[1]}/{wld[2]} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
-                )
-                candidates.append((score, cand_data, wld, wall))
-
-            candidates.sort(key=lambda item: item[0], reverse=True)
-            top_score, top_data, _, _ = candidates[0]
-            mu = max(1, popsize // 2)
-            weights = [math.log(mu + 0.5) - math.log(i + 1) for i in range(mu)]
-            weight_sum = sum(weights)
-            weights = [w / weight_sum for w in weights]
-
-            new_mean = [0.0 for _ in mean_vec]
-            for rank in range(min(mu, len(candidates))):
-                vec_paths, vec_values, _ = _flatten_params(
-                    candidates[rank][1],
-                    include_prefixes=include_prefixes or None,
-                    exclude_prefixes=config.exclude_prefix,
-                )
-                if vec_paths != paths:
-                    continue
-                for idx, value in enumerate(vec_values):
-                    new_mean[idx] += weights[rank] * value
-            mean_vec = new_mean
-            best_data = _vector_to_params(base_data, paths, mean_vec, is_int)
-            beam = [(top_score, best_data)]
-
-        if top_score > best_score:
-            best_score = top_score
-            best_data = top_data
-            _save_params(best_data, best_path)
-            _final_line(
-                _color(
-                    f"⚑ new best score={best_score:.3f} saved to {best_path}", "yellow"
-                )
-            )
+            _render_iteration_summary(iteration, candidate_results, config)
 
     _final_line(
         _color(f"🏁 Best score={best_score:.3f}, params at {best_path}", "bright_white")

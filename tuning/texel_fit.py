@@ -57,7 +57,9 @@ def _parse_side_to_move(fen: str) -> int:
     return 1 if parts[1] == "w" else -1
 
 
-def _read_texel_csv(path: Path, limit: int | None) -> Tuple[List[str], List[float], List[float], List[int]]:
+def _read_texel_csv(
+    path: Path, limit: int | None
+) -> Tuple[List[str], List[float], List[float], List[int]]:
     fens: List[str] = []
     outcomes: List[float] = []
     weights: List[float] = []
@@ -200,7 +202,9 @@ def texel_loss(
     try:
         import skaks_eval as sk
     except ImportError as exc:  # pragma: no cover
-        raise RuntimeError("skaks_eval is not installed; install bindings first") from exc
+        raise RuntimeError(
+            "skaks_eval is not installed; install bindings first"
+        ) from exc
 
     eps = 1e-9
     total_weight = 0.0
@@ -234,13 +238,22 @@ def texel_loss(
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Texel tuning for skaks eval")
-    parser.add_argument("--dataset", "--data", required=True, help="CSV with fen,outcome[,weight] columns")
+    parser.add_argument(
+        "--dataset",
+        "--data",
+        required=True,
+        help="CSV with fen,outcome[,weight] columns",
+    )
     parser.add_argument("--trials", type=int, default=100, help="Number of trials")
     parser.add_argument("--jobs", type=int, default=1, help="Parallel Optuna jobs")
     parser.add_argument("--threads", type=int, default=0, help="Threads for skaks_eval")
-    parser.add_argument("--batch-size", type=int, default=512, help="Batch size for eval_fens")
+    parser.add_argument(
+        "--batch-size", type=int, default=512, help="Batch size for eval_fens"
+    )
     parser.add_argument("--limit", type=int, default=None, help="Optional row cap")
-    parser.add_argument("--cp-cap", type=float, default=None, help="Clamp evals and targets")
+    parser.add_argument(
+        "--cp-cap", type=float, default=None, help="Clamp evals and targets"
+    )
     parser.add_argument(
         "--pov",
         choices=["side", "white"],
@@ -293,7 +306,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Colorize progress output",
     )
     parser.add_argument("--best-out", type=Path, help="Write best params to YAML")
-    parser.add_argument("--metrics-out", type=Path, help="Write per-trial metrics to CSV")
+    parser.add_argument(
+        "--metrics-out", type=Path, help="Write per-trial metrics to CSV"
+    )
     parser.add_argument("--plot-out", type=Path, help="Loss plot output (png)")
     parser.add_argument("--quiet", action="store_true", help="Reduce Optuna logging")
     parser.add_argument(
@@ -320,7 +335,9 @@ def _build_parser() -> argparse.ArgumentParser:
         default="full",
         help="Restrict tuned parameter subset",
     )
-    parser.add_argument("--include-arrays", action="store_true", help="Tune array params")
+    parser.add_argument(
+        "--include-arrays", action="store_true", help="Tune array params"
+    )
     parser.add_argument(
         "--base-params",
         "--params",
@@ -514,7 +531,9 @@ def main(argv: List[str] | None = None) -> None:
 
     best = study.best_trial
 
-    def _coerce_params(params: dict[str, float]) -> tuple[dict[str, int | float], float | None]:
+    def _coerce_params(
+        params: dict[str, float],
+    ) -> tuple[dict[str, int | float], float | None]:
         coerced: dict[str, int | float] = {}
         texel_scale_value: float | None = None
         for name, value in params.items():
