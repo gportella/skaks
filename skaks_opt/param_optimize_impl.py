@@ -243,6 +243,36 @@ def perturb_params(
     return data
 
 
+def _coerce_numeric_types(template: Any, payload: Any) -> Any:
+    """Best-effort type alignment so ints in the template stay ints."""
+    if template is None:
+        return payload
+    if isinstance(template, dict) and isinstance(payload, dict):
+        return {
+            key: _coerce_numeric_types(template.get(key), value)
+            for key, value in payload.items()
+        }
+    if isinstance(template, list) and isinstance(payload, list):
+        coerced: List[Any] = []
+        for idx, value in enumerate(payload):
+            tmpl = template[idx] if idx < len(template) else None
+            coerced.append(_coerce_numeric_types(tmpl, value))
+        return coerced
+    if isinstance(template, bool):
+        return bool(payload)
+    if isinstance(template, int):
+        if isinstance(payload, (int, bool)):
+            return int(payload)
+        if isinstance(payload, float):
+            return int(round(payload))
+        return payload
+    if isinstance(template, float):
+        if isinstance(payload, (int, float)):
+            return float(payload)
+        return payload
+    return payload
+
+
 def _flatten_params(
     data: Dict[str, Any],
     include_prefixes: Optional[List[str]],
@@ -397,10 +427,11 @@ def _run_arena_shard(
         import skaks_eval as _skaks_eval  # local import for multiprocessing
     except Exception as exc:  # pragma: no cover - surfaced in parent process
         raise RuntimeError(f"skaks_eval not available in worker: {exc}")
+    coerced_cand = _coerce_numeric_types(base_params, cand_params)
     res = _skaks_eval.arena(
         start_fens=start_fens,
         base_params=base_params,
-        cand_params=cand_params,
+        cand_params=coerced_cand,
         games=len(start_fens),
         depth=depth,
         movetime_ms=movetime_ms,
@@ -459,10 +490,11 @@ def evaluate_candidate(
             fen_pool = fen_pool[:games]
 
         if arena_workers <= 1:
+            coerced_cand = _coerce_numeric_types(baseline_data, candidate_data)
             res = skaks_eval.arena(
                 start_fens=fen_pool,
                 base_params=baseline_data,
-                cand_params=candidate_data,
+                cand_params=coerced_cand,
                 games=games,
                 depth=depth or 0,
                 movetime_ms=movetime_ms,

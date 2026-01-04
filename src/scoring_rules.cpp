@@ -10,9 +10,8 @@
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 
-#if defined(__clang__)
-#define SKAKS_HAVE_AVX_INTRINSICS (__has_target_feature("avx"))
-#elif defined(__AVX__)
+// Only enable AVX code when the translation unit is built with -mavx (or higher).
+#if defined(__AVX__)
 #define SKAKS_HAVE_AVX_INTRINSICS 1
 #else
 #define SKAKS_HAVE_AVX_INTRINSICS 0
