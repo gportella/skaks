@@ -109,8 +109,11 @@ class UciEngine:
         *,
         add_uci_arg: bool = False,
         extra_args: Optional[list[str]] = None,
+        suppress_info_strings: bool = False,
     ):
         env = os.environ.copy()
+        if suppress_info_strings:
+            env["SKAKS_SUPPRESS_INFO_STRINGS"] = "1"
         argv = [binary]
         if add_uci_arg:
             argv.append("--uci")
@@ -299,6 +302,10 @@ def _needs_uci_arg(binary: str) -> bool:
     return name.startswith("skaks")
 
 
+def _should_suppress_info(binary: str) -> bool:
+    return Path(binary).name.lower().startswith("skaks")
+
+
 def run_game(
     *,
     depth: Optional[int],
@@ -385,6 +392,7 @@ def run_game(
                     opponent_eval,
                     opponent_threads_arg,
                 ),
+                suppress_info_strings=_should_suppress_info(opponent_path),
             ) as opponent,
             UciEngine(
                 reference_path,
@@ -396,6 +404,7 @@ def run_game(
                     reference_eval,
                     reference_threads_arg,
                 ),
+                suppress_info_strings=_should_suppress_info(reference_path),
             ) as reference,
         ):
             clock: Optional[MatchClock] = None

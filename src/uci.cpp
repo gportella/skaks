@@ -52,6 +52,27 @@ void log_uci(std::string_view direction, std::string_view payload) {
   stream.flush();
 }
 
+bool info_strings_enabled() {
+  static bool initialized = false;
+  static bool enabled = true;
+  if (!initialized) {
+    initialized = true;
+    const char* flag = std::getenv("SKAKS_SUPPRESS_INFO_STRINGS");
+    if (flag != nullptr && *flag != '\0') {
+      std::string value(flag);
+      std::transform(value.begin(), value.end(), value.begin(),
+                     [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                     });
+      if (value == "1" || value == "true" || value == "yes" ||
+          value == "on") {
+        enabled = false;
+      }
+    }
+  }
+  return enabled;
+}
+
 [[noreturn]] void fatal_uci_violation(const Board& board,
                                       std::string_view detail) {
   const std::string fen = board_to_fen(board);
@@ -64,8 +85,10 @@ void log_uci(std::string_view direction, std::string_view payload) {
   std::cerr << message << '\n';
   std::cerr.flush();
 
-  std::cout << "info string " << message << '\n';
-  std::cout.flush();
+  if (info_strings_enabled()) {
+    std::cout << "info string " << message << '\n';
+    std::cout.flush();
+  }
 
   std::abort();
 }
@@ -783,8 +806,10 @@ void run_uci_loop(Engine& engine, int default_depth,
           const std::string info = "info string Threads option is limited to " +
                                    std::to_string(max_threads);
           log_uci("out", info);
-          std::cout << info << '\n';
-          std::cout.flush();
+          if (info_strings_enabled()) {
+            std::cout << info << '\n';
+            std::cout.flush();
+          }
         }
       }
     } else if (keyword == "staticeval") {
@@ -795,7 +820,10 @@ void run_uci_loop(Engine& engine, int default_depth,
       std::ostringstream oss;
       oss << "info string static_eval_white " << white_eval;
       log_uci("out", oss.str());
-      std::cout << oss.str() << '\n';
+      if (info_strings_enabled()) {
+        std::cout << oss.str() << '\n';
+        std::cout.flush();
+      }
       std::ostringstream oss2;
       oss2 << "info score cp " << stm_eval;
       log_uci("out", oss2.str());

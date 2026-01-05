@@ -18,6 +18,7 @@
 #include "chess/uci.hpp"
 #include "chess/version.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -30,6 +31,8 @@
 #include <thread>
 #include <vector>
 
+#include <string>
+
 namespace {
 
 constexpr std::array<const char*, static_cast<std::size_t>(chess::TermId::Count)>
@@ -39,6 +42,27 @@ constexpr std::array<const char*, static_cast<std::size_t>(chess::TermId::Count)
                   "PassedPawns",   "Initiative",   "Hanging",
                   "KingRing",      "BishopPair",   "RookFiles",
                   "MinorMobility", "PawnStructure"};
+
+bool suppress_info_strings() {
+  static bool initialized = false;
+  static bool suppressed = false;
+  if (!initialized) {
+    initialized = true;
+    const char* flag = std::getenv("SKAKS_SUPPRESS_INFO_STRINGS");
+    if (flag != nullptr && *flag != '\0') {
+      std::string value(flag);
+      std::transform(value.begin(), value.end(), value.begin(),
+                     [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                     });
+      if (value == "1" || value == "true" || value == "yes" ||
+          value == "on") {
+        suppressed = true;
+      }
+    }
+  }
+  return suppressed;
+}
 
 chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options);
 
@@ -446,7 +470,7 @@ int main(int argc, char** argv) {
     const std::string output =
         best_move ? move_to_uci(*best_move) : std::string("0000");
     std::cout << output << "\n";
-    if (move_from_book) {
+    if (move_from_book && !suppress_info_strings()) {
       std::cout << "info string move sourced from polyglot book" << std::endl;
     }
 
