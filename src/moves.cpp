@@ -341,7 +341,7 @@ void undo_see_move(Board& b, const UndoSEE& u) {
   b.occupancy[2] = u.occupancy_before[2];
 }
 
-inline Undo make_move(Board& b, const Move& m) {
+Undo make_move(Board& b, const Move& m) {
   const bool white = (b.side_to_move == SideToMove::White);
   const Square king_rook =
       kCastlingSideConfigs[to_index(b.side_to_move)].rook_kingside_start;
@@ -807,7 +807,7 @@ int update_castling_rights(Board& b, const Move& m) {
   return mask;
 }
 
-inline void undo_move(Board& b, const Undo& u) {
+void undo_move(Board& b, const Undo& u) {
   // Switch side to move back
   b.side_to_move = flip_side(b.side_to_move);
   if (b.side_to_move == SideToMove::Black) {
