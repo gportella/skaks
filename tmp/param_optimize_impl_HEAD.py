@@ -8,7 +8,6 @@ for machine-readable results.
 """
 
 import argparse
-import contextlib
 import itertools
 import json
 import math
@@ -462,151 +461,6 @@ def score_to_elo(score: float) -> float:
     return 400.0 * math.log10(score / (1.0 - score))
 
 
-def _normalize_scheduler_address(address: str) -> str:
-    address = address.strip()
-    if not address:
-        return address
-    if "://" in address:
-        return address
-    return f"tcp://{address}"
-
-
-def _load_jobqueue_config(config_path: Optional[str]) -> Dict[str, Any]:
-    if not config_path:
-        return {}
-    path = Path(config_path).expanduser()
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise SystemExit(f"Failed to read dask-jobqueue config {path}: {exc}") from exc
-
-    loader = yaml.safe_load
-    if path.suffix.lower() == ".json":
-        loader = json.loads
-    try:
-        payload = loader(text)
-    except Exception as exc:  # pragma: no cover - config errors reported to user
-        raise SystemExit(f"Failed to parse dask-jobqueue config {path}: {exc}") from exc
-    if payload is None:
-        return {}
-    if not isinstance(payload, dict):
-        raise SystemExit(
-            f"dask-jobqueue config {path} must describe a mapping of keyword arguments"
-        )
-    return cast(Dict[str, Any], payload)
-
-
-def _dask_probe_workers(client: Any) -> int:
-    try:
-        info = client.scheduler_info()
-        workers = info.get("workers", {})
-        return len(workers or {})
-    except Exception:
-        return 0
-
-
-def _ensure_dask_ready(
-    client: Any, *, min_workers: int = 1, timeout: float = 60.0
-) -> None:
-    if min_workers <= 0:
-        min_workers = 1
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if _dask_probe_workers(client) >= min_workers:
-            return
-        time.sleep(0.5)
-    raise TimeoutError(
-        f"Dask client did not reach {min_workers} worker(s) within {timeout:.0f}s"
-    )
-
-
-@contextlib.contextmanager
-def _dask_client_from_args(
-    args: argparse.Namespace,
-) -> "contextlib.Iterator[Tuple[Optional[Any], Optional[int]]]":
-    wants_client = any(
-        [
-            getattr(args, "dask_scheduler", None),
-            getattr(args, "dask_workers", None),
-            getattr(args, "dask_jobqueue", False),
-        ]
-    )
-    if not wants_client:
-        yield None, None
-        return
-
-    try:
-        from dask.distributed import Client, LocalCluster  # type: ignore
-    except Exception as exc:  # pragma: no cover - surfaced to CLI user
-        raise SystemExit("Dask distributed is required for --dask-* options") from exc
-
-    cluster: Optional[Any] = None
-    client: Optional[Any] = None
-    stack = contextlib.ExitStack()
-    try:
-        if getattr(args, "dask_jobqueue", False):
-            try:
-                from dask_jobqueue import SLURMCluster  # type: ignore
-            except Exception as exc:  # pragma: no cover
-                raise SystemExit(
-                    "dask-jobqueue must be installed to use --dask-jobqueue"
-                ) from exc
-            cluster = SLURMCluster(**_load_jobqueue_config(args.dask_jobqueue_config))
-            if args.dask_jobqueue_jobs:
-                cluster.scale(args.dask_jobqueue_jobs)
-            if (
-                args.dask_jobqueue_adapt_min is not None
-                or args.dask_jobqueue_adapt_max is not None
-            ):
-                cluster.adapt(
-                    minimum=args.dask_jobqueue_adapt_min,
-                    maximum=args.dask_jobqueue_adapt_max,
-                )
-            client = Client(cluster)
-            _final_line(
-                f"Connected to SLURM-backed Dask cluster ({cluster.name})"
-            )
-        elif getattr(args, "dask_scheduler", None):
-            address = _normalize_scheduler_address(args.dask_scheduler)
-            client = Client(address)
-            _final_line(f"Connected to Dask scheduler at {address}")
-        else:
-            workers = getattr(args, "dask_workers", None)
-            if not workers:
-                raise SystemExit(
-                    "--dask-workers must be set when launching a local Dask cluster"
-                )
-            threads = getattr(args, "dask_threads", None) or 1
-            cluster = LocalCluster(
-                n_workers=max(1, int(workers)),
-                threads_per_worker=max(1, int(threads)),
-                processes=True,
-                dashboard_address=None,
-            )
-            client = Client(cluster)
-            _final_line(
-                f"Started local Dask cluster with {workers} worker(s) x {threads} thread(s)"
-            )
-
-        assert client is not None
-        stack.callback(lambda: client.close())
-        if cluster is not None:
-            stack.callback(lambda: cluster.close())
-
-        min_workers = args.dask_shards if args.dask_shards else 1
-        try:
-            _ensure_dask_ready(client, min_workers=max(1, min_workers))
-        except TimeoutError as exc:  # pragma: no cover - reported to CLI
-            raise SystemExit(str(exc)) from exc
-
-        shard_hint = args.dask_shards
-        if not shard_hint:
-            shard_hint = max(1, _dask_probe_workers(client))
-        yield client, shard_hint
-    finally:
-        stack.close()
-
-
 def _run_arena_shard(
     payload: Tuple[
         List[str],
@@ -674,8 +528,6 @@ def evaluate_candidate(
     opponent_params: Optional[Path] = None,
     opponent_time_per_move: Optional[float] = None,
     opponent_depth_factor: Optional[float] = None,
-    dask_client: Optional[Any] = None,
-    dask_shard_hint: Optional[int] = None,
 ) -> Tuple[float, Tuple[int, int, int], float]:
     if use_arena:
         if skaks_eval is None:
@@ -698,41 +550,7 @@ def evaluate_candidate(
         else:
             fen_pool = fen_pool[:games]
 
-        shard_target = (
-            dask_shard_hint
-            if dask_client is not None and dask_shard_hint and dask_shard_hint > 0
-            else arena_workers
-        )
-
-        if dask_client is not None:
-            target = shard_target if shard_target and shard_target > 0 else len(fen_pool)
-            chunk = max(1, (len(fen_pool) + target - 1) // target)
-            payloads = []
-            for i in range(0, len(fen_pool), chunk):
-                payloads.append(
-                    (
-                        fen_pool[i : i + chunk],
-                        baseline_data,
-                        candidate_data,
-                        coerce_template,
-                        depth or 0,
-                        movetime_ms,
-                        160,
-                    )
-                )
-            futures = [dask_client.submit(_run_arena_shard, payload) for payload in payloads]
-            try:
-                shard_results = dask_client.gather(futures)
-            finally:
-                for fut in futures:
-                    try:
-                        fut.release()
-                    except Exception:
-                        pass
-            wins = sum(r["wins"] for r in shard_results)
-            losses = sum(r["losses"] for r in shard_results)
-            draws = sum(r["draws"] for r in shard_results)
-        elif arena_workers <= 1:
+        if arena_workers <= 1:
             coerced_base, coerced_cand = _prepare_arena_params(
                 baseline_data, candidate_data, coerce_template
             )
@@ -1100,310 +918,298 @@ def optimize_loop(args: argparse.Namespace) -> None:
         if not start_fens:
             raise SystemExit("Failed to sample start positions from PGN")
 
-    dask_cm = _dask_client_from_args(args)
-    dask_client, dask_shard_hint = dask_cm.__enter__()
-    try:
-        for step in range(1, args.iterations + 1):
-            candidates: List[Tuple[float, Dict[str, Any], Tuple[int, int, int], float]] = []
+    for step in range(1, args.iterations + 1):
+        candidates: List[Tuple[float, Dict[str, Any], Tuple[int, int, int], float]] = []
 
-            if args.strategy == "beam":
-                parents = [data for (_, data) in beam] or [best_data]
-                for i in range(args.beam_size):
-                    parent = parents[i % len(parents)]
-                    cand_data = perturb_params(
-                        parent,
-                        args.noise,
-                        include_prefixes=include_prefixes,
-                        exclude_prefixes=args.exclude_prefix,
-                    )
-                    cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
-                    _save_params(cand_data, cand_path)
-                    try:
-                        color = next(color_cycle)
-
-                        def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
-                            spinner = next(spin_cycle)
-                            piece = next(piece_cycle)
-                            offset = next(move_cycle)
-                            pad_left = " " * offset
-                            pad_right = " " * (15 - offset)
-                            track = f"{pad_left}{piece}{pad_right}"
-                            lead = _color(f"{spinner} {track}", color)
-                            display_rep = min(rep_idx + 1, repeats)
-                            line = (
-                                f"{lead} iter {_color(str(step), color)}/{args.iterations} "
-                                f"cand {_color(str(i + 1), color)}/{args.beam_size} "
-                                f"repeat {_color(str(display_rep), color)}/{repeats} "
-                                f"t={elapsed:.1f}s"
-                            )
-                            _live_line(line)
-
-                        # Emit an explicit batch start line so logs show when a
-                        # candidate's games begin (useful for long-running runs).
-                        _final_line(
-                            f"[BATCH START] iter={step} cand={i + 1}/{args.beam_size} games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
-                        )
-                        sys.stdout.flush()
-
-                        score, (w, losses, d), wall = evaluate_candidate_repeats(
-                            repeats=args.repeats,
-                            progress_cb=progress_cb,
-                            quiet=quiet_child,
-                            use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
-                            coerce_template=baseline_data
-                            if baseline_data is not None
-                            else parent,
-                            engine=engine,
-                            baseline_params=baseline_params,
-                            candidate_params=cand_path,
-                            baseline_data=baseline_data,
-                            candidate_data=cand_data,
-                            games=args.games,
-                            depth=args.depth,
-                            time_per_move=args.time_per_move,
-                            clock=args.clock,
-                            concurrency=args.concurrency,
-                            arena_workers=args.arena_workers,
-                            base_label="base",
-                            cand_label="cand",
-                            external=external,
-                            opponent=opponent,
-                            opponent_params=opponent_params,
-                            opponent_time_per_move=opponent_time,
-                            opponent_depth_factor=args.opponent_depth_factor
-                            if hasattr(args, "opponent_depth_factor")
-                            else None,
-                            dask_client=dask_client,
-                            dask_shard_hint=dask_shard_hint,
-                        )
-                        _final_line(
-                            f"{_color('✓', 'green')} iter={step} cand={i + 1}/{args.beam_size} "
-                            f"score={_color(f'{score:.3f}', color)} "
-                            f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
-                        )
-                        candidates.append((score, cand_data, (w, losses, d), wall))
-                    finally:
-                        try:
-                            cand_path.unlink()
-                        except OSError:
-                            pass
-
-                candidates.sort(key=lambda x: x[0], reverse=True)
-                beam = [(score, data) for score, data, _, _ in candidates[: args.beam_size]]
-                top_score, top_data, _, _ = candidates[0]
-            else:  # CMA-like strategy
-                paths, mean_vec, is_int = _flatten_params(
-                    best_data,
+        if args.strategy == "beam":
+            parents = [data for (_, data) in beam] or [best_data]
+            for i in range(args.beam_size):
+                parent = parents[i % len(parents)]
+                cand_data = perturb_params(
+                    parent,
+                    args.noise,
                     include_prefixes=include_prefixes,
                     exclude_prefixes=args.exclude_prefix,
                 )
-                popsize = (
-                    args.cma_popsize
-                    if args.cma_popsize is not None
-                    else max(4, int(4 + 3 * math.log(len(mean_vec) + 1)))
-                )
-                mu = max(1, popsize // 2)
-                weights = [math.log(mu + 0.5) - math.log(i + 1) for i in range(mu)]
-                weight_sum = sum(weights)
-                weights = [w / weight_sum for w in weights]
-
-                sigma = args.cma_sigma if args.cma_sigma is not None else args.noise
-                sigma = max(1e-4, sigma)
-
-                for i in range(popsize):
-                    vec = []
-                    for val in mean_vec:
-                        scale = sigma * max(abs(val), 1.0)
-                        vec.append(val + random.gauss(0.0, scale))
-                    cand_data = _vector_to_params(base_data, paths, vec, is_int)
-                    cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
-                    _save_params(cand_data, cand_path)
-                    try:
-                        color = next(color_cycle)
-
-                        def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
-                            spinner = next(spin_cycle)
-                            piece = next(piece_cycle)
-                            offset = next(move_cycle)
-                            pad_left = " " * offset
-                            pad_right = " " * (15 - offset)
-                            track = f"{pad_left}{piece}{pad_right}"
-                            lead = _color(f"{spinner} {track}", color)
-                            display_rep = min(rep_idx + 1, repeats)
-                            line = (
-                                f"{lead} iter {_color(str(step), color)}/{args.iterations} "
-                                f"cand {_color(str(i + 1), color)}/{popsize} "
-                                f"repeat {_color(str(display_rep), color)}/{repeats} "
-                                f"t={elapsed:.1f}s"
-                            )
-                            _live_line(line)
-
-                        _final_line(
-                            f"[BATCH START] iter={step} cand={i + 1}/{popsize} games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
-                        )
-                        sys.stdout.flush()
-
-                        score, (w, losses, d), wall = evaluate_candidate_repeats(
-                            repeats=args.repeats,
-                            progress_cb=progress_cb,
-                            quiet=quiet_child,
-                            use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
-                            coerce_template=baseline_data
-                            if baseline_data is not None
-                            else base_data,
-                            engine=engine,
-                            baseline_params=baseline_params,
-                            candidate_params=cand_path,
-                            baseline_data=baseline_data,
-                            candidate_data=cand_data,
-                            games=args.games,
-                            depth=args.depth,
-                            time_per_move=args.time_per_move,
-                            clock=args.clock,
-                            concurrency=args.concurrency,
-                            arena_workers=args.arena_workers,
-                            base_label="base",
-                            cand_label="cand",
-                            external=external,
-                            opponent=opponent,
-                            opponent_params=opponent_params,
-                            opponent_time_per_move=opponent_time,
-                            opponent_depth_factor=args.opponent_depth_factor
-                            if hasattr(args, "opponent_depth_factor")
-                            else None,
-                            dask_client=dask_client,
-                            dask_shard_hint=dask_shard_hint,
-                        )
-                        _final_line(
-                            f"{_color('✓', 'green')} iter={step} cand={i + 1}/{popsize} "
-                            f"score={_color(f'{score:.3f}', color)} "
-                            f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
-                        )
-                        candidates.append((score, cand_data, (w, losses, d), wall))
-                    finally:
-                        try:
-                            cand_path.unlink()
-                        except OSError:
-                            pass
-
-                candidates.sort(key=lambda x: x[0], reverse=True)
-                top_score, top_data, _, _ = candidates[0]
-
-                # Recombine top mu candidates to update mean_vec
-                new_mean = [0.0 for _ in mean_vec]
-                for rank in range(min(mu, len(candidates))):
-                    vec_paths, vec_vals, _ = _flatten_params(
-                        candidates[rank][1],
-                        include_prefixes=include_prefixes,
-                        exclude_prefixes=args.exclude_prefix,
-                    )
-                    if vec_paths != paths:
-                        continue
-                    for idx, val in enumerate(vec_vals):
-                        new_mean[idx] += weights[rank] * val
-                mean_vec = new_mean
-                best_data = _vector_to_params(base_data, paths, mean_vec, is_int)
-                beam = [(top_score, best_data)]
-
-            # Only persist when the candidate is strictly better than the
-            # current on-disk best. We read the meta file first in case another
-            # replicate already wrote an improved best params during this run.
-            try:
-                import json as _json
-
-                disk_meta = None
-                if meta_path.exists():
-                    try:
-                        disk_meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-                    except Exception:
-                        disk_meta = None
-                disk_score = float(disk_meta.get("score")) if disk_meta else best_score
-            except Exception:
-                disk_score = best_score
-
-            # Apply a per-iteration relaxation to the on-disk score if requested.
-            # This makes it gradually easier to overwrite a stubborn best.
-            try:
-                decay = float(getattr(args, "baseline_decay", 0.0))
-            except Exception:
-                decay = 0.0
-            effective_disk_score = disk_score - (decay * float(step))
-
-            # Acceptance policy: prefer strictly greater score, but allow
-            # forced/seed accepts or raising the floor when applicable.
-            accept_candidate = False
-            if top_score > effective_disk_score:
-                accept_candidate = True
-            else:
-                # Force-accept first N replacements to seed the leaderboard
-                force_n = int(getattr(args, "force_accept_first", 0))
-                if force_n > 0:
-                    # Count replacements by comparing on-disk score vs initial best
-                    # Use a heuristic counter by checking meta timestamp or simple
-                    # comparison: if disk_score equals initial baseline we treat
-                    # as early run. Simpler: allow up to force_n accepts across
-                    # this run tracked via a small in-memory counter stored on
-                    # args object.
-                    if not hasattr(args, "_accepted_replacements"):
-                        setattr(args, "_accepted_replacements", 0)
-                    if getattr(args, "_accepted_replacements") < force_n:
-                        accept_candidate = True
-                        setattr(
-                            args,
-                            "_accepted_replacements",
-                            getattr(args, "_accepted_replacements") + 1,
-                        )
-                # If current on-disk best is below min_score, allow replacing
-                # when candidate reaches the min_score floor
-                if not accept_candidate:
-                    min_floor = float(getattr(args, "min_score", 0.0))
-                    try:
-                        if (
-                            float(top_score) >= min_floor
-                            and float(effective_disk_score) < min_floor
-                        ):
-                            accept_candidate = True
-                    except Exception:
-                        pass
-
-            if accept_candidate:
-                best_score = top_score
-                best_data = top_data
-                # Atomic write: write to temp then move into place.
-                tmp = best_path.with_suffix(best_path.suffix + ".tmp")
+                cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
+                _save_params(cand_data, cand_path)
                 try:
-                    _save_params(best_data, tmp)
-                    tmp.replace(best_path)
-                    meta = {"score": float(best_score), "timestamp": time.time()}
-                    meta_path.write_text(_json.dumps(meta), encoding="utf-8")
+                    color = next(color_cycle)
+
+                    def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
+                        spinner = next(spin_cycle)
+                        piece = next(piece_cycle)
+                        offset = next(move_cycle)
+                        pad_left = " " * offset
+                        pad_right = " " * (15 - offset)
+                        track = f"{pad_left}{piece}{pad_right}"
+                        lead = _color(f"{spinner} {track}", color)
+                        display_rep = min(rep_idx + 1, repeats)
+                        line = (
+                            f"{lead} iter {_color(str(step), color)}/{args.iterations} "
+                            f"cand {_color(str(i + 1), color)}/{args.beam_size} "
+                            f"repeat {_color(str(display_rep), color)}/{repeats} "
+                            f"t={elapsed:.1f}s"
+                        )
+                        _live_line(line)
+
+                    # Emit an explicit batch start line so logs show when a
+                    # candidate's games begin (useful for long-running runs).
                     _final_line(
-                        f"{_color('⚑', 'yellow')} new best score={best_score:.3f} saved to {best_path}"
+                        f"[BATCH START] iter={step} cand={i + 1}/{args.beam_size} games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
                     )
-                    # Also emit a greppable log line
-                    _final_line(f"[NEW BEST] score={best_score:.3f} path={best_path}")
-                    # When a new best is accepted, make it the baseline for
-                    # subsequent candidate evaluations in this run (so future
-                    # candidates are tested against the best-known params).
-                    if not getattr(args, "external_opponent", False):
-                        try:
-                            baseline_params = best_path
-                            baseline_data = best_data
-                        except Exception:
-                            pass
+                    sys.stdout.flush()
+
+                    score, (w, losses, d), wall = evaluate_candidate_repeats(
+                        repeats=args.repeats,
+                        progress_cb=progress_cb,
+                        quiet=quiet_child,
+                        use_arena=args.use_arena_binding,
+                        start_fens=start_fens,
+                        coerce_template=baseline_data
+                        if baseline_data is not None
+                        else parent,
+                        engine=engine,
+                        baseline_params=baseline_params,
+                        candidate_params=cand_path,
+                        baseline_data=baseline_data,
+                        candidate_data=cand_data,
+                        games=args.games,
+                        depth=args.depth,
+                        time_per_move=args.time_per_move,
+                        clock=args.clock,
+                        concurrency=args.concurrency,
+                        arena_workers=args.arena_workers,
+                        base_label="base",
+                        cand_label="cand",
+                        external=external,
+                        opponent=opponent,
+                        opponent_params=opponent_params,
+                        opponent_time_per_move=opponent_time,
+                        opponent_depth_factor=args.opponent_depth_factor
+                        if hasattr(args, "opponent_depth_factor")
+                        else None,
+                    )
+                    _final_line(
+                        f"{_color('✓', 'green')} iter={step} cand={i + 1}/{args.beam_size} "
+                        f"score={_color(f'{score:.3f}', color)} "
+                        f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                    )
+                    candidates.append((score, cand_data, (w, losses, d), wall))
                 finally:
                     try:
-                        if tmp.exists():
-                            tmp.unlink()
-                    except Exception:
+                        cand_path.unlink()
+                    except OSError:
                         pass
 
-    finally:
-        exc_type, exc_value, exc_tb = sys.exc_info()
-        suppressed = dask_cm.__exit__(exc_type, exc_value, exc_tb)
-        if suppressed and exc_type is not None:
-            return
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            beam = [(score, data) for score, data, _, _ in candidates[: args.beam_size]]
+            top_score, top_data, _, _ = candidates[0]
+        else:  # CMA-like strategy
+            paths, mean_vec, is_int = _flatten_params(
+                best_data,
+                include_prefixes=include_prefixes,
+                exclude_prefixes=args.exclude_prefix,
+            )
+            popsize = (
+                args.cma_popsize
+                if args.cma_popsize is not None
+                else max(4, int(4 + 3 * math.log(len(mean_vec) + 1)))
+            )
+            mu = max(1, popsize // 2)
+            weights = [math.log(mu + 0.5) - math.log(i + 1) for i in range(mu)]
+            weight_sum = sum(weights)
+            weights = [w / weight_sum for w in weights]
+
+            sigma = args.cma_sigma if args.cma_sigma is not None else args.noise
+            sigma = max(1e-4, sigma)
+
+            for i in range(popsize):
+                vec = []
+                for val in mean_vec:
+                    scale = sigma * max(abs(val), 1.0)
+                    vec.append(val + random.gauss(0.0, scale))
+                cand_data = _vector_to_params(base_data, paths, vec, is_int)
+                cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
+                _save_params(cand_data, cand_path)
+                try:
+                    color = next(color_cycle)
+
+                    def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
+                        spinner = next(spin_cycle)
+                        piece = next(piece_cycle)
+                        offset = next(move_cycle)
+                        pad_left = " " * offset
+                        pad_right = " " * (15 - offset)
+                        track = f"{pad_left}{piece}{pad_right}"
+                        lead = _color(f"{spinner} {track}", color)
+                        display_rep = min(rep_idx + 1, repeats)
+                        line = (
+                            f"{lead} iter {_color(str(step), color)}/{args.iterations} "
+                            f"cand {_color(str(i + 1), color)}/{popsize} "
+                            f"repeat {_color(str(display_rep), color)}/{repeats} "
+                            f"t={elapsed:.1f}s"
+                        )
+                        _live_line(line)
+
+                    _final_line(
+                        f"[BATCH START] iter={step} cand={i + 1}/{popsize} games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
+                    )
+                    sys.stdout.flush()
+
+                    score, (w, losses, d), wall = evaluate_candidate_repeats(
+                        repeats=args.repeats,
+                        progress_cb=progress_cb,
+                        quiet=quiet_child,
+                        use_arena=args.use_arena_binding,
+                        start_fens=start_fens,
+                        coerce_template=baseline_data
+                        if baseline_data is not None
+                        else base_data,
+                        engine=engine,
+                        baseline_params=baseline_params,
+                        candidate_params=cand_path,
+                        baseline_data=baseline_data,
+                        candidate_data=cand_data,
+                        games=args.games,
+                        depth=args.depth,
+                        time_per_move=args.time_per_move,
+                        clock=args.clock,
+                        concurrency=args.concurrency,
+                        arena_workers=args.arena_workers,
+                        base_label="base",
+                        cand_label="cand",
+                        external=external,
+                        opponent=opponent,
+                        opponent_params=opponent_params,
+                        opponent_time_per_move=opponent_time,
+                        opponent_depth_factor=args.opponent_depth_factor
+                        if hasattr(args, "opponent_depth_factor")
+                        else None,
+                    )
+                    _final_line(
+                        f"{_color('✓', 'green')} iter={step} cand={i + 1}/{popsize} "
+                        f"score={_color(f'{score:.3f}', color)} "
+                        f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                    )
+                    candidates.append((score, cand_data, (w, losses, d), wall))
+                finally:
+                    try:
+                        cand_path.unlink()
+                    except OSError:
+                        pass
+
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            top_score, top_data, _, _ = candidates[0]
+
+            # Recombine top mu candidates to update mean_vec
+            new_mean = [0.0 for _ in mean_vec]
+            for rank in range(min(mu, len(candidates))):
+                vec_paths, vec_vals, _ = _flatten_params(
+                    candidates[rank][1],
+                    include_prefixes=include_prefixes,
+                    exclude_prefixes=args.exclude_prefix,
+                )
+                if vec_paths != paths:
+                    continue
+                for idx, val in enumerate(vec_vals):
+                    new_mean[idx] += weights[rank] * val
+            mean_vec = new_mean
+            best_data = _vector_to_params(base_data, paths, mean_vec, is_int)
+            beam = [(top_score, best_data)]
+
+        # Only persist when the candidate is strictly better than the
+        # current on-disk best. We read the meta file first in case another
+        # replicate already wrote an improved best params during this run.
+        try:
+            import json as _json
+
+            disk_meta = None
+            if meta_path.exists():
+                try:
+                    disk_meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception:
+                    disk_meta = None
+            disk_score = float(disk_meta.get("score")) if disk_meta else best_score
+        except Exception:
+            disk_score = best_score
+
+        # Apply a per-iteration relaxation to the on-disk score if requested.
+        # This makes it gradually easier to overwrite a stubborn best.
+        try:
+            decay = float(getattr(args, "baseline_decay", 0.0))
+        except Exception:
+            decay = 0.0
+        effective_disk_score = disk_score - (decay * float(step))
+
+        # Acceptance policy: prefer strictly greater score, but allow
+        # forced/seed accepts or raising the floor when applicable.
+        accept_candidate = False
+        if top_score > effective_disk_score:
+            accept_candidate = True
+        else:
+            # Force-accept first N replacements to seed the leaderboard
+            force_n = int(getattr(args, "force_accept_first", 0))
+            if force_n > 0:
+                # Count replacements by comparing on-disk score vs initial best
+                # Use a heuristic counter by checking meta timestamp or simple
+                # comparison: if disk_score equals initial baseline we treat
+                # as early run. Simpler: allow up to force_n accepts across
+                # this run tracked via a small in-memory counter stored on
+                # args object.
+                if not hasattr(args, "_accepted_replacements"):
+                    setattr(args, "_accepted_replacements", 0)
+                if getattr(args, "_accepted_replacements") < force_n:
+                    accept_candidate = True
+                    setattr(
+                        args,
+                        "_accepted_replacements",
+                        getattr(args, "_accepted_replacements") + 1,
+                    )
+            # If current on-disk best is below min_score, allow replacing
+            # when candidate reaches the min_score floor
+            if not accept_candidate:
+                min_floor = float(getattr(args, "min_score", 0.0))
+                try:
+                    if (
+                        float(top_score) >= min_floor
+                        and float(effective_disk_score) < min_floor
+                    ):
+                        accept_candidate = True
+                except Exception:
+                    pass
+
+        if accept_candidate:
+            best_score = top_score
+            best_data = top_data
+            # Atomic write: write to temp then move into place.
+            tmp = best_path.with_suffix(best_path.suffix + ".tmp")
+            try:
+                _save_params(best_data, tmp)
+                tmp.replace(best_path)
+                meta = {"score": float(best_score), "timestamp": time.time()}
+                meta_path.write_text(_json.dumps(meta), encoding="utf-8")
+                _final_line(
+                    f"{_color('⚑', 'yellow')} new best score={best_score:.3f} saved to {best_path}"
+                )
+                # Also emit a greppable log line
+                _final_line(f"[NEW BEST] score={best_score:.3f} path={best_path}")
+                # When a new best is accepted, make it the baseline for
+                # subsequent candidate evaluations in this run (so future
+                # candidates are tested against the best-known params).
+                if not getattr(args, "external_opponent", False):
+                    try:
+                        baseline_params = best_path
+                        baseline_data = best_data
+                    except Exception:
+                        pass
+            finally:
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except Exception:
+                    pass
+
     # Read on-disk meta if available so final report reflects global best
     try:
         import json as _json
@@ -1562,49 +1368,6 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         type=int,
         default=1,
         help="Parallel arena shards (arena binding mode)",
-    )
-    parser.add_argument(
-        "--dask-scheduler",
-        help="Existing Dask scheduler address (e.g. tcp://scheduler:8786)",
-    )
-    parser.add_argument(
-        "--dask-shards",
-        type=int,
-        help="Override number of arena shards submitted to Dask",
-    )
-    parser.add_argument(
-        "--dask-workers",
-        type=int,
-        help="Spawn a local Dask cluster with this many workers",
-    )
-    parser.add_argument(
-        "--dask-threads",
-        type=int,
-        help="Threads per local Dask worker (default: 1)",
-    )
-    parser.add_argument(
-        "--dask-jobqueue",
-        action="store_true",
-        help="Launch a SLURMCluster via dask-jobqueue for arena shards",
-    )
-    parser.add_argument(
-        "--dask-jobqueue-config",
-        help="Optional YAML/JSON file with kwargs for SLURMCluster(...)",
-    )
-    parser.add_argument(
-        "--dask-jobqueue-jobs",
-        type=int,
-        help="Number of SLURM jobs/nodes to request when scaling the cluster",
-    )
-    parser.add_argument(
-        "--dask-jobqueue-adapt-min",
-        type=int,
-        help="Minimum jobs when using adaptive scaling with dask-jobqueue",
-    )
-    parser.add_argument(
-        "--dask-jobqueue-adapt-max",
-        type=int,
-        help="Maximum jobs when using adaptive scaling with dask-jobqueue",
     )
     parser.add_argument(
         "--cma-popsize",
