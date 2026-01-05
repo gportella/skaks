@@ -12,13 +12,14 @@ import itertools
 import json
 import math
 import multiprocessing as mp
+import os
 import random
 import shutil
 import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from skaks_opt import arena_runner
 from skaks_opt.params import DEFAULT_PARAMS
@@ -363,6 +364,7 @@ def run_batch(
     opponent_depth_factor: Optional[float] = None,
     concurrency: int,
     quiet: bool,
+    disable_elo_store: bool = False,
 ) -> Dict[str, Any]:
     summary_path = Path(tempfile.mkstemp(suffix="_summary.json")[1])
     argv: List[str] = [
@@ -400,6 +402,8 @@ def run_batch(
         argv.extend(["--clock", str(clock)])
     if not quiet:
         argv.append("--verbose")
+    if disable_elo_store:
+        argv.append("--no-elo-store")
 
     try:
         args = arena_runner.parse_args(argv)
@@ -425,6 +429,129 @@ def run_batch(
             summary_path.unlink()
         except OSError:
             pass
+
+
+def _run_external_shard(
+    *,
+    engine: Path,
+    opponent: Path,
+    candidate_params_data: Dict[str, Any],
+    opponent_params: Optional[Path],
+    games: int,
+    depth: Optional[int],
+    time_per_move: Optional[float],
+    clock: Optional[float],
+    opponent_time_per_move: Optional[float],
+    opponent_depth_factor: Optional[float],
+    concurrency: int,
+    engine_label: str,
+    opponent_label: str,
+    quiet: bool,
+) -> Dict[str, Any]:
+    fd, tmp_path = tempfile.mkstemp(suffix="_cand.yaml")
+    os.close(fd)
+    cand_path = Path(tmp_path)
+    try:
+        _save_params(candidate_params_data, cand_path)
+        return run_batch(
+            engine=engine,
+            opponent=opponent,
+            engine_params=cand_path,
+            opponent_params=opponent_params,
+            engine_label=engine_label,
+            opponent_label=opponent_label,
+            games=games,
+            depth=depth,
+            time_per_move=time_per_move,
+            clock=clock,
+            opponent_time_per_move=opponent_time_per_move,
+            opponent_depth_factor=opponent_depth_factor,
+            concurrency=concurrency,
+            quiet=quiet,
+            disable_elo_store=True,
+        )
+    finally:
+        try:
+            cand_path.unlink()
+        except OSError:
+            pass
+
+
+def _merge_external_payloads(payloads: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    first = next((payload for payload in payloads if payload), None)
+    if first is None:
+        return {}
+
+    combined_summary: Dict[str, int] = {}
+    total_games = 0
+    total_completed = 0
+    total_failures = 0
+    total_timing = 0.0
+
+    for payload in payloads:
+        if not payload:
+            continue
+        total_games += int(payload.get("games", 0))
+        total_completed += int(payload.get("completed", 0))
+        total_failures += int(payload.get("failures", 0))
+        total_timing += float(payload.get("timing_sec", 0.0))
+        summary = payload.get("summary", {})
+        for key, value in summary.items():
+            combined_summary[key] = combined_summary.get(key, 0) + int(value)
+
+    labels = first.get("labels", {}) or {}
+    white_label = labels.get("white")
+    black_label = labels.get("black")
+    wins = int(combined_summary.get(white_label, 0)) if white_label else 0
+    losses = int(combined_summary.get(black_label, 0)) if black_label else 0
+    draws = int(combined_summary.get("draw", 0))
+
+    elo_seed = first.get("elo", {}) or {}
+    rating_path = Path(arena_runner.DEFAULT_ELO_STORE)
+    if not rating_path.is_absolute():
+        rating_path = Path(arena_runner.__file__).resolve().parent / rating_path
+    rating_start = arena_runner.load_rating(
+        rating_path, fallback=arena_runner.DEFAULT_ELO_START
+    )
+    opponent_rating = float(
+        elo_seed.get("opponent", arena_runner.DEFAULT_ELO_OPPONENT)
+    )
+    elo = arena_runner.compute_elo(
+        rating=rating_start,
+        opponent_rating=opponent_rating,
+        wins=wins,
+        losses=losses,
+        draws=draws,
+        k_factor=arena_runner.DEFAULT_ELO_K_FACTOR,
+    )
+
+    if elo.games > 0:
+        try:
+            arena_runner.store_rating(rating_path, elo.rating_after)
+        except Exception:
+            pass
+
+    return {
+        "games": total_games,
+        "completed": total_completed,
+        "failures": total_failures,
+        "summary": combined_summary,
+        "labels": labels,
+        "timing_sec": total_timing,
+        "parameters": first.get("parameters"),
+        "elo": {
+            "start": elo.rating_before,
+            "opponent": elo.opponent_rating,
+            "delta": elo.delta,
+            "new": elo.rating_after,
+            "expected_score": elo.expected_score,
+            "actual_score": elo.actual_score,
+            "games": elo.games,
+            "wins": elo.wins,
+            "losses": elo.losses,
+            "draws": elo.draws,
+        },
+    }
 
 
 def aggregate_two_sided(
@@ -766,22 +893,66 @@ def evaluate_candidate(
         return score, (wins, losses, draws), wall
     else:
         if external:
-            s1 = run_batch(
-                engine=engine,
-                opponent=opponent,
-                engine_params=candidate_params,
-                opponent_params=opponent_params,
-                engine_label=base_label,
-                opponent_label=cand_label,
-                games=games,
-                depth=depth,
-                time_per_move=time_per_move,
-                clock=clock,
-                opponent_time_per_move=opponent_time_per_move,
-                opponent_depth_factor=opponent_depth_factor,
-                concurrency=concurrency,
-                quiet=quiet,
-            )
+            if dask_client is not None and games > 0:
+                shard_target = (
+                    dask_shard_hint if dask_shard_hint and dask_shard_hint > 0 else None
+                )
+                if shard_target is None:
+                    shard_target = concurrency if concurrency > 0 else 1
+                shard_target = max(1, min(shard_target, games))
+                chunk = max(1, (games + shard_target - 1) // shard_target)
+                shard_concurrency = max(1, concurrency // shard_target) if concurrency > 0 else 1
+                futures = []
+                for start in range(0, games, chunk):
+                    shard_games = min(chunk, games - start)
+                    futures.append(
+                        dask_client.submit(
+                            _run_external_shard,
+                            engine=engine,
+                            opponent=opponent,
+                            candidate_params_data=candidate_data,
+                            opponent_params=opponent_params,
+                            games=shard_games,
+                            depth=depth,
+                            time_per_move=time_per_move,
+                            clock=clock,
+                            opponent_time_per_move=opponent_time_per_move,
+                            opponent_depth_factor=opponent_depth_factor,
+                            concurrency=shard_concurrency,
+                            engine_label=base_label,
+                            opponent_label=cand_label,
+                            quiet=quiet,
+                            pure=False,
+                        )
+                    )
+                try:
+                    shard_payloads = dask_client.gather(futures)
+                finally:
+                    for fut in futures:
+                        try:
+                            fut.release()
+                        except Exception:
+                            pass
+                s1 = _merge_external_payloads(shard_payloads)
+                if not s1:
+                    raise RuntimeError("external shards returned no summary payloads")
+            else:
+                s1 = run_batch(
+                    engine=engine,
+                    opponent=opponent,
+                    engine_params=candidate_params,
+                    opponent_params=opponent_params,
+                    engine_label=base_label,
+                    opponent_label=cand_label,
+                    games=games,
+                    depth=depth,
+                    time_per_move=time_per_move,
+                    clock=clock,
+                    opponent_time_per_move=opponent_time_per_move,
+                    opponent_depth_factor=opponent_depth_factor,
+                    concurrency=concurrency,
+                    quiet=quiet,
+                )
             s2 = {"summary": {}}
         else:
             half_games = max(2, games // 2)
