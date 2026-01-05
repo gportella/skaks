@@ -682,8 +682,12 @@ def _ensure_dask_ready(client: Any, expected: Optional[int]) -> int:
     if wait_target:
         try:
             client.wait_for_workers(n_workers=wait_target, timeout=60)
-        except _DaskTimeout:
-            pass
+        except _DaskTimeout as exc:
+            info = client.nthreads()
+            current = len(info)
+            raise RuntimeError(
+                f"Dask worker rendezvous timed out: {current}/{wait_target} workers ready"
+            ) from exc
 
     info = client.nthreads()
     worker_count = len(info)

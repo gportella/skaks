@@ -1,0 +1,12 @@
+skaks-opt selfplay \
+  --params best_params_optimized.yaml \
+  --start-params best_params_optimized.yaml \
+  --output tuning/best_params_optimized_new.yaml \
+  --games 80 \
+  --iterations 22 \
+  --repeats 2 \
+  --noise 0.06 \
+  --beam-size 10 \
+  --time-per-move 0.20 \
+  --engine skaks \
+  --dask-scheduler tcp://dask-695b8ff5a5459e6cc4116e09-dask-scheduler.domino-compute.svc.cluster.local:8786
