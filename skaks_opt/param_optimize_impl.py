@@ -513,9 +513,7 @@ def _merge_external_payloads(payloads: Sequence[Dict[str, Any]]) -> Dict[str, An
     rating_start = arena_runner.load_rating(
         rating_path, fallback=arena_runner.DEFAULT_ELO_START
     )
-    opponent_rating = float(
-        elo_seed.get("opponent", arena_runner.DEFAULT_ELO_OPPONENT)
-    )
+    opponent_rating = float(elo_seed.get("opponent", arena_runner.DEFAULT_ELO_OPPONENT))
     elo = arena_runner.compute_elo(
         rating=rating_start,
         opponent_rating=opponent_rating,
@@ -598,6 +596,7 @@ def _load_jobqueue_config(config_path: Optional[str]) -> Dict[str, Any]:
         payload = loader(text)
     except Exception as exc:  # pragma: no cover - config errors reported to user
         raise SystemExit(f"Failed to parse dask-jobqueue config {path}: {exc}") from exc
+    payload = _modernize_jobqueue_config(payload)
     if payload is None:
         return {}
     if not isinstance(payload, dict):
@@ -605,6 +604,21 @@ def _load_jobqueue_config(config_path: Optional[str]) -> Dict[str, Any]:
             f"dask-jobqueue config {path} must describe a mapping of keyword arguments"
         )
     return cast(Dict[str, Any], payload)
+
+
+def _modernize_jobqueue_config(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        updated: Dict[str, Any] = {}
+        for key, value in obj.items():
+            updated[key] = _modernize_jobqueue_config(value)
+        if "job_extra" in updated and "job_extra_directives" not in updated:
+            updated["job_extra_directives"] = updated.pop("job_extra")
+        else:
+            updated.pop("job_extra", None)
+        return updated
+    if isinstance(obj, list):
+        return [_modernize_jobqueue_config(item) for item in obj]
+    return obj
 
 
 def _dask_probe_workers(client: Any) -> int:
@@ -662,37 +676,24 @@ def _dask_client_from_args(
                 raise SystemExit(
                     "dask-jobqueue must be installed to use --dask-jobqueue"
                 ) from exc
-            cluster = SLURMCluster(**_load_jobqueue_config(args.dask_jobqueue_config))
-            if args.dask_jobqueue_jobs:
-                cluster.scale(args.dask_jobqueue_jobs)
-            if (
-                args.dask_jobqueue_adapt_min is not None
-                or args.dask_jobqueue_adapt_max is not None
-            ):
-                cluster.adapt(
-                    minimum=args.dask_jobqueue_adapt_min,
-                    maximum=args.dask_jobqueue_adapt_max,
-            payload = _modernize_jobqueue_config(payload)
-            if not isinstance(payload, dict):
+            config = _load_jobqueue_config(args.dask_jobqueue_config)
+            cluster = SLURMCluster(**config)
+            jobs = getattr(args, "dask_jobqueue_jobs", None)
+            if jobs:
+                cluster.scale(jobs)
+            adapt_kwargs: Dict[str, Any] = {}
+            adapt_min = getattr(args, "dask_jobqueue_adapt_min", None)
+            adapt_max = getattr(args, "dask_jobqueue_adapt_max", None)
+            if adapt_min is not None:
+                adapt_kwargs["minimum"] = adapt_min
+            if adapt_max is not None:
+                adapt_kwargs["maximum"] = adapt_max
+            if adapt_kwargs:
+                cluster.adapt(**adapt_kwargs)
             client = Client(cluster)
             _final_line(f"Connected to SLURM-backed Dask cluster ({cluster.name})")
         elif getattr(args, "dask_scheduler", None):
             address = _normalize_scheduler_address(args.dask_scheduler)
-
-
-        def _modernize_jobqueue_config(obj: Any) -> Any:
-            if isinstance(obj, dict):
-                updated: Dict[str, Any] = {}
-                for key, value in obj.items():
-                    updated[key] = _modernize_jobqueue_config(value)
-                if "job_extra" in updated and "job_extra_directives" not in updated:
-                    updated["job_extra_directives"] = updated.pop("job_extra")
-                else:
-                    updated.pop("job_extra", None)
-                return updated
-            if isinstance(obj, list):
-                return [_modernize_jobqueue_config(item) for item in obj]
-            return obj
             client = Client(address)
             _final_line(f"Connected to Dask scheduler at {address}")
         else:
@@ -718,13 +719,14 @@ def _dask_client_from_args(
         if cluster is not None:
             stack.callback(lambda: cluster.close())
 
-        min_workers = args.dask_shards if args.dask_shards else 1
+        shard_request = getattr(args, "dask_shards", None)
+        min_workers = shard_request if shard_request else 1
         try:
             _ensure_dask_ready(client, min_workers=max(1, min_workers))
         except TimeoutError as exc:  # pragma: no cover - reported to CLI
             raise SystemExit(str(exc)) from exc
 
-        shard_hint = args.dask_shards
+        shard_hint = shard_request
         if not shard_hint:
             shard_hint = max(1, _dask_probe_workers(client))
         yield client, shard_hint
@@ -917,7 +919,9 @@ def evaluate_candidate(
                     shard_target = concurrency if concurrency > 0 else 1
                 shard_target = max(1, min(shard_target, games))
                 chunk = max(1, (games + shard_target - 1) // shard_target)
-                shard_concurrency = max(1, concurrency // shard_target) if concurrency > 0 else 1
+                shard_concurrency = (
+                    max(1, concurrency // shard_target) if concurrency > 0 else 1
+                )
                 futures = []
                 for start in range(0, games, chunk):
                     shard_games = min(chunk, games - start)
