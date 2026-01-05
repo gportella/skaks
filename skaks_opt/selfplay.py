@@ -625,15 +625,48 @@ def _dask_probe_worker(dask_worker: Any) -> Dict[str, Any]:
     except Exception as exc:  # pragma: no cover - diagnostic surface
         return {"ok": False, "error": f"import failed: {exc}"}
 
-    try:
-        probe = _skaks_eval.eval_fen_single(DEFAULT_START_FEN)
-    except Exception as exc:
-        return {"ok": False, "error": f"probe failed: {exc}"}
+    ok = False
+    cp: Optional[int] = None
+    error_msg: Optional[str] = None
+
+    if hasattr(_skaks_eval, "eval_fen_single"):
+        try:
+            probe = _skaks_eval.eval_fen_single(DEFAULT_START_FEN)
+        except Exception as exc:
+            return {"ok": False, "error": f"eval_fen_single failed: {exc}"}
+        ok = bool(probe.get("ok"))
+        cp = probe.get("cp")  # type: ignore[assignment]
+        error_msg = probe.get("error")
+        if not ok and not error_msg:
+            error_msg = "eval_fen_single reported failure"
+    elif hasattr(_skaks_eval, "eval_fens"):
+        try:
+            probe = _skaks_eval.eval_fens([DEFAULT_START_FEN], params=None, threads=1)
+        except Exception as exc:
+            return {"ok": False, "error": f"eval_fens failed: {exc}"}
+        cp_data = probe.get("cp")
+        if cp_data is not None:
+            try:
+                cp = int(cp_data[0])  # type: ignore[index]
+            except Exception:
+                cp = None
+        err_list = probe.get("errors") or []
+        if err_list:
+            first_err = err_list[0]
+            if first_err:
+                error_msg = str(first_err)
+        if error_msg is None:
+            ok = True
+    else:
+        return {"ok": False, "error": "skaks_eval missing eval bindings"}
+
+    if not ok:
+        return {"ok": False, "error": error_msg or "probe failed", "worker": getattr(dask_worker, "address", None)}
 
     payload: Dict[str, Any] = {
-        "ok": bool(probe.get("ok")),
-        "cp": probe.get("cp"),
-        "error": probe.get("error"),
+        "ok": True,
+        "cp": cp,
+        "error": error_msg,
         "worker": getattr(dask_worker, "address", None),
     }
     return payload
