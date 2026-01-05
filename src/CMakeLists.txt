@@ -1,3 +1,5 @@
+find_package(Threads REQUIRED)
+
 add_library(chess_engine_core STATIC
   attack_masks.cpp
   board.cpp
@@ -40,7 +42,8 @@ chess_set_default_warnings(chess_engine_core)
 chess_enable_sanitizers(chess_engine_core)
 
 target_link_libraries(chess_engine_core
-  PRIVATE
+  PUBLIC
+    Threads::Threads
     yaml-cpp
 )
 
@@ -67,7 +70,6 @@ target_include_directories(skaks SYSTEM PUBLIC
 target_link_libraries(skaks
   PRIVATE
     chess_engine_core
-    yaml-cpp
 )
 
 target_link_directories(skaks PRIVATE
