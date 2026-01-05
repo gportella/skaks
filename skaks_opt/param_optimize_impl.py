@@ -677,9 +677,16 @@ def _dask_client_from_args(
                     "dask-jobqueue must be installed to use --dask-jobqueue"
                 ) from exc
             config = _load_jobqueue_config(args.dask_jobqueue_config)
+            _final_line("[DASK] Initializing SLURMCluster with config:")
+            for key, value in sorted(config.items()):
+                _final_line(f"[DASK]   {key}={value}")
             cluster = SLURMCluster(**config)
+            _final_line(
+                f"[DASK] Requested SLURMCluster {cluster.name} -- scale_target={getattr(args, 'dask_jobqueue_jobs', 'auto')}"
+            )
             jobs = getattr(args, "dask_jobqueue_jobs", None)
             if jobs:
+                _final_line(f"[DASK] cluster.scale({jobs})")
                 cluster.scale(jobs)
             adapt_kwargs: Dict[str, Any] = {}
             adapt_min = getattr(args, "dask_jobqueue_adapt_min", None)
@@ -689,6 +696,7 @@ def _dask_client_from_args(
             if adapt_max is not None:
                 adapt_kwargs["maximum"] = adapt_max
             if adapt_kwargs:
+                _final_line(f"[DASK] cluster.adapt({adapt_kwargs})")
                 cluster.adapt(**adapt_kwargs)
             client = Client(cluster)
             _final_line(f"Connected to SLURM-backed Dask cluster ({cluster.name})")
