@@ -28,10 +28,9 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
-
-#include <string>
 
 namespace {
 
@@ -51,12 +50,10 @@ bool suppress_info_strings() {
     const char* flag = std::getenv("SKAKS_SUPPRESS_INFO_STRINGS");
     if (flag != nullptr && *flag != '\0') {
       std::string value(flag);
-      std::transform(value.begin(), value.end(), value.begin(),
-                     [](unsigned char c) {
-                       return static_cast<char>(std::tolower(c));
-                     });
-      if (value == "1" || value == "true" || value == "yes" ||
-          value == "on") {
+      std::transform(
+          value.begin(), value.end(), value.begin(),
+          [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      if (value == "1" || value == "true" || value == "yes" || value == "on") {
         suppressed = true;
       }
     }

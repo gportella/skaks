@@ -661,7 +661,11 @@ def _dask_probe_worker(dask_worker: Any) -> Dict[str, Any]:
         return {"ok": False, "error": "skaks_eval missing eval bindings"}
 
     if not ok:
-        return {"ok": False, "error": error_msg or "probe failed", "worker": getattr(dask_worker, "address", None)}
+        return {
+            "ok": False,
+            "error": error_msg or "probe failed",
+            "worker": getattr(dask_worker, "address", None),
+        }
 
     payload: Dict[str, Any] = {
         "ok": True,
@@ -696,13 +700,12 @@ def _ensure_dask_ready(client: Any, expected: Optional[int]) -> int:
 
     probe_results: Dict[str, Dict[str, Any]] = client.run(_dask_probe_worker)
     failures = {
-        addr: data
-        for addr, data in probe_results.items()
-        if not data.get("ok", False)
+        addr: data for addr, data in probe_results.items() if not data.get("ok", False)
     }
     if failures:
         msgs = ", ".join(
-            f"{addr}: {entry.get('error', 'unknown')}" for addr, entry in failures.items()
+            f"{addr}: {entry.get('error', 'unknown')}"
+            for addr, entry in failures.items()
         )
         raise RuntimeError(f"skaks_eval unavailable on workers: {msgs}")
 

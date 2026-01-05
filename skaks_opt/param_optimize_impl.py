@@ -563,9 +563,7 @@ def _dask_client_from_args(
                     maximum=args.dask_jobqueue_adapt_max,
                 )
             client = Client(cluster)
-            _final_line(
-                f"Connected to SLURM-backed Dask cluster ({cluster.name})"
-            )
+            _final_line(f"Connected to SLURM-backed Dask cluster ({cluster.name})")
         elif getattr(args, "dask_scheduler", None):
             address = _normalize_scheduler_address(args.dask_scheduler)
             client = Client(address)
@@ -705,7 +703,9 @@ def evaluate_candidate(
         )
 
         if dask_client is not None:
-            target = shard_target if shard_target and shard_target > 0 else len(fen_pool)
+            target = (
+                shard_target if shard_target and shard_target > 0 else len(fen_pool)
+            )
             chunk = max(1, (len(fen_pool) + target - 1) // target)
             payloads = []
             for i in range(0, len(fen_pool), chunk):
@@ -720,7 +720,9 @@ def evaluate_candidate(
                         160,
                     )
                 )
-            futures = [dask_client.submit(_run_arena_shard, payload) for payload in payloads]
+            futures = [
+                dask_client.submit(_run_arena_shard, payload) for payload in payloads
+            ]
             try:
                 shard_results = dask_client.gather(futures)
             finally:
@@ -1104,7 +1106,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
     dask_client, dask_shard_hint = dask_cm.__enter__()
     try:
         for step in range(1, args.iterations + 1):
-            candidates: List[Tuple[float, Dict[str, Any], Tuple[int, int, int], float]] = []
+            candidates: List[
+                Tuple[float, Dict[str, Any], Tuple[int, int, int], float]
+            ] = []
 
             if args.strategy == "beam":
                 parents = [data for (_, data) in beam] or [best_data]
@@ -1121,7 +1125,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     try:
                         color = next(color_cycle)
 
-                        def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
+                        def progress_cb(
+                            rep_idx: int, repeats: int, elapsed: float
+                        ) -> None:
                             spinner = next(spin_cycle)
                             piece = next(piece_cycle)
                             offset = next(move_cycle)
@@ -1190,7 +1196,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             pass
 
                 candidates.sort(key=lambda x: x[0], reverse=True)
-                beam = [(score, data) for score, data, _, _ in candidates[: args.beam_size]]
+                beam = [
+                    (score, data) for score, data, _, _ in candidates[: args.beam_size]
+                ]
                 top_score, top_data, _, _ = candidates[0]
             else:  # CMA-like strategy
                 paths, mean_vec, is_int = _flatten_params(
@@ -1222,7 +1230,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     try:
                         color = next(color_cycle)
 
-                        def progress_cb(rep_idx: int, repeats: int, elapsed: float) -> None:
+                        def progress_cb(
+                            rep_idx: int, repeats: int, elapsed: float
+                        ) -> None:
                             spinner = next(spin_cycle)
                             piece = next(piece_cycle)
                             offset = next(move_cycle)
