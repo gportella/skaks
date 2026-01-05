@@ -490,7 +490,7 @@ bool is_check(const Board& b, SideToMove stm) {
 
 bool has_legal_moves(Board& b, SideToMove stm) {
   uint16_t move_count = 0;
-  auto _ = generate_legal_moves(b, stm, move_count);
+  generate_legal_moves(b, stm, move_count);
   return move_count > 0;
 }
 } // namespace chess
