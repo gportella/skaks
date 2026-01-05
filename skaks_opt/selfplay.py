@@ -619,6 +619,59 @@ def _normalize_scheduler_address(raw: Optional[str]) -> Optional[str]:
     return value
 
 
+def _dask_probe_worker(dask_worker: Any) -> Dict[str, Any]:
+    try:
+        import skaks_eval as _skaks_eval
+    except Exception as exc:  # pragma: no cover - diagnostic surface
+        return {"ok": False, "error": f"import failed: {exc}"}
+
+    try:
+        probe = _skaks_eval.eval_fen_single(DEFAULT_START_FEN)
+    except Exception as exc:
+        return {"ok": False, "error": f"probe failed: {exc}"}
+
+    payload: Dict[str, Any] = {
+        "ok": bool(probe.get("ok")),
+        "cp": probe.get("cp"),
+        "error": probe.get("error"),
+        "worker": getattr(dask_worker, "address", None),
+    }
+    return payload
+
+
+def _ensure_dask_ready(client: Any, expected: Optional[int]) -> int:
+    try:
+        from distributed.utils import TimeoutError as _DaskTimeout
+    except Exception:  # pragma: no cover - optional dependency
+        _DaskTimeout = TimeoutError  # type: ignore[assignment]
+
+    wait_target = expected if expected and expected > 0 else None
+    if wait_target:
+        try:
+            client.wait_for_workers(n_workers=wait_target, timeout=60)
+        except _DaskTimeout:
+            pass
+
+    info = client.nthreads()
+    worker_count = len(info)
+    if worker_count == 0:
+        raise RuntimeError("Dask connected but no workers registered")
+
+    probe_results: Dict[str, Dict[str, Any]] = client.run(_dask_probe_worker)
+    failures = {
+        addr: data
+        for addr, data in probe_results.items()
+        if not data.get("ok", False)
+    }
+    if failures:
+        msgs = ", ".join(
+            f"{addr}: {entry.get('error', 'unknown')}" for addr, entry in failures.items()
+        )
+        raise RuntimeError(f"skaks_eval unavailable on workers: {msgs}")
+
+    return worker_count
+
+
 @contextmanager
 def _dask_client(config: "SelfPlayConfig"):
     host_env = os.environ.get("DASK_SCHEDULER_SERVICE_HOST")
@@ -671,11 +724,11 @@ def _dask_client(config: "SelfPlayConfig"):
             )
 
         shard_hint = config.dask_shard_hint
-        if shard_hint is None and client is not None:
-            try:
-                shard_hint = len(client.nthreads())
-            except Exception:
-                shard_hint = None
+        if client is not None:
+            expected = config.dask_local_workers if cluster else shard_hint
+            worker_count = _ensure_dask_ready(client, expected)
+            if shard_hint is None or shard_hint <= 0:
+                shard_hint = worker_count
         yield client, shard_hint
     finally:
         try:

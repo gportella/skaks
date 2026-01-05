@@ -30,6 +30,14 @@ def read_samples(path):
     return rows
 
 
+def _collect_group_scales(row, prefix):
+    keys = [f"{prefix}_g{i}" for i in range(7)]
+    values = [row.get(k) for k in keys]
+    if any(value is not None for value in values):
+        return [float(value) if value is not None else 1.0 for value in values]
+    return None
+
+
 def make_temp_start(base_yaml, mg_scale, eg_scale):
     # read text and strip possible markdown fences (```yaml ... ```)
     text = open(base_yaml, "r").read()
@@ -159,14 +167,37 @@ def main(argv=None):
         samples = samples[: args.max_run]
 
     for i, s in enumerate(samples, 1):
-        mg = s.get("mg_scale") or s.get("phase_weights_mg") or s.get("mg")
-        eg = s.get("eg_scale") or s.get("phase_weights_eg") or s.get("eg")
+        mg = (
+            _collect_group_scales(s, "mg")
+            or s.get("mg_scale")
+            or s.get("phase_weights_mg")
+            or s.get("mg")
+        )
+        eg = (
+            _collect_group_scales(s, "eg")
+            or s.get("eg_scale")
+            or s.get("phase_weights_eg")
+            or s.get("eg")
+        )
         if mg is None or eg is None:
             print(f"Skipping sample {i} missing mg/eg: {s}")
             continue
         tmp_yaml = make_temp_start(args.base, mg, eg)
         out_csv = Path(args.outdir) / f"sample_{i:06d}.csv"
-        cmd = f"python scripts/grid_weights_eval.py --start {shlex.quote(tmp_yaml)} --scales {mg},{eg} --games {args.games} --depth {args.depth} --concurrency {args.concurrency} --out {shlex.quote(str(out_csv))}"
+        if isinstance(mg, (list, tuple)) or isinstance(eg, (list, tuple)):
+            cmd = (
+                "python scripts/grid_weights_eval.py "
+                f"--start {shlex.quote(tmp_yaml)} "
+                f"--games {args.games} --depth {args.depth} "
+                f"--concurrency {args.concurrency} --out {shlex.quote(str(out_csv))}"
+            )
+        else:
+            cmd = (
+                "python scripts/grid_weights_eval.py "
+                f"--start {shlex.quote(tmp_yaml)} --scales {mg},{eg} "
+                f"--games {args.games} --depth {args.depth} "
+                f"--concurrency {args.concurrency} --out {shlex.quote(str(out_csv))}"
+            )
         rc = run_cmd(cmd, dry_run=args.dry_run)
         if rc != 0 and not args.dry_run:
             print(f"Sample {i} failed with rc={rc}")

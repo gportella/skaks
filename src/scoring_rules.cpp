@@ -1012,8 +1012,10 @@ int evaluate_board(const Board& board) {
     return 100000; // White wins
   }
 
+  // are we really applying params here??
   const auto v = compute_eval_vector(board);
   const int raw_linear = eval_linear(v, phase_weights());
+  // are we really applying params here??
   const auto& params = evaluation_params();
   const double slope =
       std::abs(params.eval_slope) < 1e-9 ? 1.0 : params.eval_slope;

@@ -148,8 +148,17 @@ def _load_params(path: Path) -> Dict[str, Any]:
 
 
 def _save_params(data: Dict[str, Any], path: Path) -> None:
+    # Align numeric leaf types so downstream consumers (UCI engine params) keep
+    # integers where expected while still preserving floats for the few
+    # genuinely real-valued parameters. This mirrors the coercion logic used
+    # when handing params to arenas, ensuring on-disk artifacts stay
+    # engine-friendly without requiring manual cleanup later.
+    # Work on a deep copy so callers retaining the original dict don't observe
+    # in-place coercion side effects.
+    snapshot = json.loads(json.dumps(data))
+    coerced = _coerce_numeric_types(DEFAULT_PARAMS, snapshot)
     with path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(data, f, sort_keys=True)
+        yaml.safe_dump(coerced, f, sort_keys=True)
 
 
 def _collect_numeric_leaves(
