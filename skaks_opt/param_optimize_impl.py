@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Simple self-play optimizer loop using the existing batch match runner.
+"""Simple self-play optimizer loop using the internal arena batch runner.
 
 This script perturbs numeric YAML params, runs head-to-head matches against a
 baseline (with both color orders), and keeps the best candidate by score.
-It relies on validation_moves/batch_stockfish_matches.py with --summary-json
-for machine-readable results.
+Machine-readable results are obtained via arena_runner with --summary-json.
 """
 
 import argparse
@@ -15,13 +14,13 @@ import math
 import multiprocessing as mp
 import random
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
+from skaks_opt import arena_runner
 from skaks_opt.params import DEFAULT_PARAMS
 
 try:
@@ -54,12 +53,6 @@ ANSI_COLORS = {
     "bright_blue": "\033[94m",
 }
 ANSI_RESET = "\033[0m"
-
-BATCH_SCRIPT = (
-    Path(__file__).resolve().parent.parent
-    / "validation_moves"
-    / "batch_stockfish_matches.py"
-)
 
 SPINNER_FRAMES = ["|", "/", "-", "\\"]
 # Unicode chess glyphs for livelier progress (requested by user)
@@ -372,9 +365,7 @@ def run_batch(
     quiet: bool,
 ) -> Dict[str, Any]:
     summary_path = Path(tempfile.mkstemp(suffix="_summary.json")[1])
-    cmd = [
-        sys.executable,
-        str(BATCH_SCRIPT),
+    argv: List[str] = [
         "--engine",
         str(engine),
         "--opponent",
@@ -394,47 +385,40 @@ def run_batch(
         "60",
     ]
     if engine_params:
-        cmd.extend(["--engine-params", str(engine_params)])
+        argv.extend(["--engine-params", str(engine_params)])
     if opponent_params:
-        cmd.extend(["--opponent-params", str(opponent_params)])
+        argv.extend(["--opponent-params", str(opponent_params)])
     if opponent_time_per_move is not None:
-        cmd.extend(["--opponent-time-per-move", str(opponent_time_per_move)])
+        argv.extend(["--opponent-time-per-move", str(opponent_time_per_move)])
     if opponent_depth_factor is not None:
-        cmd.extend(["--opponent-depth-factor", str(opponent_depth_factor)])
+        argv.extend(["--opponent-depth-factor", str(opponent_depth_factor)])
     if depth is not None:
-        cmd.extend(["--depth", str(depth)])
+        argv.extend(["--depth", str(depth)])
     elif time_per_move is not None:
-        cmd.extend(["--time-per-move", str(time_per_move)])
+        argv.extend(["--time-per-move", str(time_per_move)])
     elif clock is not None:
-        cmd.extend(["--clock", str(clock)])
-    # Always capture output so failures can be diagnosed even when quiet.
-    run_kwargs: Dict[str, Any] = {"check": False, "text": True, "capture_output": True}
+        argv.extend(["--clock", str(clock)])
+    if not quiet:
+        argv.append("--verbose")
+
     try:
-        proc = subprocess.run(cmd, **run_kwargs)
-        out = proc.stdout or ""
-        err = proc.stderr or ""
-        # If the batch runner wrote a summary JSON we can proceed with it
-        # even if the process returned a non-zero exit code (some engines
-        # may crash occasionally). Prefer returning the summary to keep
-        # the optimizer running; surface stdout/stderr in logs.
+        args = arena_runner.parse_args(argv)
+        exit_code = arena_runner.run_batch(args)
         try:
             payload = json.loads(summary_path.read_text(encoding="utf-8"))
         except Exception:
             payload = None
-        if proc.returncode != 0:
+        if exit_code != 0:
             if payload is not None:
-                # Log the failure but return the partial summary
                 sys.stderr.write(
-                    f"batch runner exited {proc.returncode}, returning available summary.\nstdout:\n{out}\nstderr:\n{err}\n"
+                    "batch runner returned non-zero exit; using summary results anyway.\n"
                 )
                 return payload
-            msg = (
-                f"batch runner failed with code {proc.returncode}\n"
-                f"stdout:\n{out}\n\n"
-                f"stderr:\n{err}\n\n"
-                f"summary_json:{payload}\n"
+            raise RuntimeError(
+                f"batch runner failed with code {exit_code} and no summary available"
             )
-            raise RuntimeError(msg)
+        if payload is None:
+            raise RuntimeError("batch runner succeeded but produced no summary")
         return payload
     finally:
         try:
