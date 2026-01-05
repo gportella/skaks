@@ -363,7 +363,8 @@ struct LazySmpTask {
   }
 
   static void operator delete(void* ptr, std::size_t size) noexcept {
-    ::operator delete(ptr, size, std::align_val_t{alignof(LazySmpTask)});
+    (void)size;
+    ::operator delete(ptr, std::align_val_t{alignof(LazySmpTask)});
   }
 };
 
