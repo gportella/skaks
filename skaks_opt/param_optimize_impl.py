@@ -672,11 +672,27 @@ def _dask_client_from_args(
                 cluster.adapt(
                     minimum=args.dask_jobqueue_adapt_min,
                     maximum=args.dask_jobqueue_adapt_max,
-                )
+            payload = _modernize_jobqueue_config(payload)
+            if not isinstance(payload, dict):
             client = Client(cluster)
             _final_line(f"Connected to SLURM-backed Dask cluster ({cluster.name})")
         elif getattr(args, "dask_scheduler", None):
             address = _normalize_scheduler_address(args.dask_scheduler)
+
+
+        def _modernize_jobqueue_config(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                updated: Dict[str, Any] = {}
+                for key, value in obj.items():
+                    updated[key] = _modernize_jobqueue_config(value)
+                if "job_extra" in updated and "job_extra_directives" not in updated:
+                    updated["job_extra_directives"] = updated.pop("job_extra")
+                else:
+                    updated.pop("job_extra", None)
+                return updated
+            if isinstance(obj, list):
+                return [_modernize_jobqueue_config(item) for item in obj]
+            return obj
             client = Client(address)
             _final_line(f"Connected to Dask scheduler at {address}")
         else:
