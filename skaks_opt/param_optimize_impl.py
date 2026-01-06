@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from skaks_opt import arena_runner
+from skaks_opt.dask_support import dask_client_from_args
 from skaks_opt.params import DEFAULT_PARAMS
 
 try:
@@ -571,177 +572,6 @@ def score_to_elo(score: float) -> float:
     return 400.0 * math.log10(score / (1.0 - score))
 
 
-def _normalize_scheduler_address(address: str) -> str:
-    address = address.strip()
-    if not address:
-        return address
-    if "://" in address:
-        return address
-    return f"tcp://{address}"
-
-
-def _load_jobqueue_config(config_path: Optional[str]) -> Dict[str, Any]:
-    if not config_path:
-        return {}
-    path = Path(config_path).expanduser()
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise SystemExit(f"Failed to read dask-jobqueue config {path}: {exc}") from exc
-
-    loader = yaml.safe_load
-    if path.suffix.lower() == ".json":
-        loader = json.loads
-    try:
-        payload = loader(text)
-    except Exception as exc:  # pragma: no cover - config errors reported to user
-        raise SystemExit(f"Failed to parse dask-jobqueue config {path}: {exc}") from exc
-    payload = _modernize_jobqueue_config(payload)
-    if payload is None:
-        return {}
-    if not isinstance(payload, dict):
-        raise SystemExit(
-            f"dask-jobqueue config {path} must describe a mapping of keyword arguments"
-        )
-    return cast(Dict[str, Any], payload)
-
-
-def _modernize_jobqueue_config(obj: Any) -> Any:
-    if isinstance(obj, dict):
-        updated: Dict[str, Any] = {}
-        for key, value in obj.items():
-            updated[key] = _modernize_jobqueue_config(value)
-        if "job_extra" in updated and "job_extra_directives" not in updated:
-            updated["job_extra_directives"] = updated.pop("job_extra")
-        else:
-            updated.pop("job_extra", None)
-        return updated
-    if isinstance(obj, list):
-        return [_modernize_jobqueue_config(item) for item in obj]
-    return obj
-
-
-def _dask_probe_workers(client: Any) -> int:
-    try:
-        info = client.scheduler_info()
-        workers = info.get("workers", {})
-        return len(workers or {})
-    except Exception:
-        return 0
-
-
-def _ensure_dask_ready(
-    client: Any, *, min_workers: int = 1, timeout: float = 60.0
-) -> None:
-    if min_workers <= 0:
-        min_workers = 1
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if _dask_probe_workers(client) >= min_workers:
-            return
-        time.sleep(0.5)
-    raise TimeoutError(
-        f"Dask client did not reach {min_workers} worker(s) within {timeout:.0f}s"
-    )
-
-
-@contextlib.contextmanager
-def _dask_client_from_args(
-    args: argparse.Namespace,
-) -> "contextlib.Iterator[Tuple[Optional[Any], Optional[int]]]":
-    wants_client = any(
-        [
-            getattr(args, "dask_scheduler", None),
-            getattr(args, "dask_workers", None),
-            getattr(args, "dask_jobqueue", False),
-        ]
-    )
-    if not wants_client:
-        yield None, None
-        return
-
-    try:
-        from dask.distributed import Client, LocalCluster  # type: ignore
-    except Exception as exc:  # pragma: no cover - surfaced to CLI user
-        raise SystemExit("Dask distributed is required for --dask-* options") from exc
-
-    cluster: Optional[Any] = None
-    client: Optional[Any] = None
-    stack = contextlib.ExitStack()
-    try:
-        if getattr(args, "dask_jobqueue", False):
-            try:
-                from dask_jobqueue import SLURMCluster  # type: ignore
-            except Exception as exc:  # pragma: no cover
-                raise SystemExit(
-                    "dask-jobqueue must be installed to use --dask-jobqueue"
-                ) from exc
-            config = _load_jobqueue_config(args.dask_jobqueue_config)
-            _final_line("[DASK] Initializing SLURMCluster with config:")
-            for key, value in sorted(config.items()):
-                _final_line(f"[DASK]   {key}={value}")
-            cluster = SLURMCluster(**config)
-            _final_line(
-                f"[DASK] Requested SLURMCluster {cluster.name} -- scale_target={getattr(args, 'dask_jobqueue_jobs', 'auto')}"
-            )
-            jobs = getattr(args, "dask_jobqueue_jobs", None)
-            if jobs:
-                _final_line(f"[DASK] cluster.scale({jobs})")
-                cluster.scale(jobs)
-            adapt_kwargs: Dict[str, Any] = {}
-            adapt_min = getattr(args, "dask_jobqueue_adapt_min", None)
-            adapt_max = getattr(args, "dask_jobqueue_adapt_max", None)
-            if adapt_min is not None:
-                adapt_kwargs["minimum"] = adapt_min
-            if adapt_max is not None:
-                adapt_kwargs["maximum"] = adapt_max
-            if adapt_kwargs:
-                _final_line(f"[DASK] cluster.adapt({adapt_kwargs})")
-                cluster.adapt(**adapt_kwargs)
-            client = Client(cluster)
-            _final_line(f"Connected to SLURM-backed Dask cluster ({cluster.name})")
-        elif getattr(args, "dask_scheduler", None):
-            address = _normalize_scheduler_address(args.dask_scheduler)
-            client = Client(address)
-            _final_line(f"Connected to Dask scheduler at {address}")
-        else:
-            workers = getattr(args, "dask_workers", None)
-            if not workers:
-                raise SystemExit(
-                    "--dask-workers must be set when launching a local Dask cluster"
-                )
-            threads = getattr(args, "dask_threads", None) or 1
-            cluster = LocalCluster(
-                n_workers=max(1, int(workers)),
-                threads_per_worker=max(1, int(threads)),
-                processes=True,
-                dashboard_address=None,
-            )
-            client = Client(cluster)
-            _final_line(
-                f"Started local Dask cluster with {workers} worker(s) x {threads} thread(s)"
-            )
-
-        assert client is not None
-        stack.callback(lambda: client.close())
-        if cluster is not None:
-            stack.callback(lambda: cluster.close())
-
-        shard_request = getattr(args, "dask_shards", None)
-        min_workers = shard_request if shard_request else 1
-        try:
-            _ensure_dask_ready(client, min_workers=max(1, min_workers))
-        except TimeoutError as exc:  # pragma: no cover - reported to CLI
-            raise SystemExit(str(exc)) from exc
-
-        shard_hint = shard_request
-        if not shard_hint:
-            shard_hint = max(1, _dask_probe_workers(client))
-        yield client, shard_hint
-    finally:
-        stack.close()
-
-
 def _run_arena_shard(
     payload: Tuple[
         List[str],
@@ -1285,7 +1115,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
         if not start_fens:
             raise SystemExit("Failed to sample start positions from PGN")
 
-    dask_cm = _dask_client_from_args(args)
+    dask_cm = dask_client_from_args(args)
     dask_client, dask_shard_hint = dask_cm.__enter__()
     try:
         for step in range(1, args.iterations + 1):
@@ -1533,12 +1363,6 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 # Force-accept first N replacements to seed the leaderboard
                 force_n = int(getattr(args, "force_accept_first", 0))
                 if force_n > 0:
-                    # Count replacements by comparing on-disk score vs initial best
-                    # Use a heuristic counter by checking meta timestamp or simple
-                    # comparison: if disk_score equals initial baseline we treat
-                    # as early run. Simpler: allow up to force_n accepts across
-                    # this run tracked via a small in-memory counter stored on
-                    # args object.
                     if not hasattr(args, "_accepted_replacements"):
                         setattr(args, "_accepted_replacements", 0)
                     if getattr(args, "_accepted_replacements") < force_n:

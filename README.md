@@ -107,8 +107,19 @@ ctest --test-dir build/debug --output-on-failure
 
 - The `tuning/` scripts consume those score pairs to train new eval parameters and write YAML configs you can pass back to the engine. After collecting more data, rerun tuning to update the parameters.
 
-<<<<<<< HEAD
-=======
+- Phase split helper for Texel/analysis datasets:
+
+	```sh
+	# Split a CSV (fen + score/stockfish_cp) into opening/middlegame/endgame buckets
+	skaks-opt fen-phase-split \
+	  --input tuning/texel_fit_quiet.csv \
+	  --output-dir tuning/phased
+
+	# Or write a single CSV with a phase column
+	skaks-opt fen-phase-split --input tuning/texel_fit_quiet.csv --phase-column
+	```
+
+
 ### Phase-weight-only tuning
 
 Use these when you only want to optimize the phase weights (`phase_weights_mg` / `phase_weights_eg`) already present in `tuning/best_params.yaml`.
@@ -134,7 +145,6 @@ skaks-opt param-optimize \
 ./build/debug/bin/skaks --arena --params tuning/best_params_phase.yaml --arena-games 200
 ```
 
->>>>>>> nnue_version
 ## Cross-compiling
 
 Two sample toolchain presets are provided for Linux x86_64 and arm64 targets (`cmake/toolchains/clang-linux-*.cmake`). Update the sysroot paths to match your environment, then configure:
