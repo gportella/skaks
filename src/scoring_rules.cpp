@@ -95,8 +95,6 @@ int evaluate_material(const Board& board) {
   return board.material_score;
 }
 
-// Simple center presence (placeholder), White-centric and summed (no early
-// return)
 int evaluate_pawn_center_control(const Board& board) {
   int score = 0;
   for (auto sq : {to_index(Square::D4), to_index(Square::D5),
@@ -167,6 +165,52 @@ int evaluate_king_safety(const Board& board) {
   if (board.has_castled[to_index(PieceColor::Black)])
     score -= params.castling_bonus;
 
+  auto early_king_walk_penalty = [&](PieceColor color) -> int {
+    if (params.king_walk_penalty <= 0) {
+      return 0;
+    }
+    const std::size_t idx = to_index(color);
+    if (board.has_castled[idx]) {
+      return 0;
+    }
+    const int king_sq = board.king_positions[idx];
+    if (king_sq < 0) {
+      return 0;
+    }
+    const int home_sq = (color == PieceColor::White)
+                            ? static_cast<int>(to_index(Square::E1))
+                            : static_cast<int>(to_index(Square::E8));
+    if (king_sq == home_sq) {
+      return 0;
+    }
+
+    const int rights_mask = to_mask(board.castling_rights);
+    const int color_mask = (color == PieceColor::White)
+                               ? (to_mask(CastlingRights::WhiteKingside) |
+                                  to_mask(CastlingRights::WhiteQueenside))
+                               : (to_mask(CastlingRights::BlackKingside) |
+                                  to_mask(CastlingRights::BlackQueenside));
+    if ((rights_mask & color_mask) != 0) {
+      return 0; // still technically castle-able; let opening heuristics handle
+                // it
+    }
+
+    const int mg_phase = std::min(board.phase, kPstPhaseMax);
+    if (params.king_walk_phase_limit > 0 &&
+        mg_phase <= params.king_walk_phase_limit) {
+      return 0; // already deep enough into the game
+    }
+
+    const int home_rank = (color == PieceColor::White) ? 0 : 7;
+    const int rank_drift = std::abs(rank_of(king_sq) - home_rank);
+    const int file_drift = std::abs(file_of(king_sq) - 4); // e-file origin
+    const int distance = std::max(1, rank_drift + file_drift);
+    return params.king_walk_penalty * distance;
+  };
+
+  score -= early_king_walk_penalty(PieceColor::White);
+  score += early_king_walk_penalty(PieceColor::Black);
+
   // In-check penalties/bonuses (moderate; mate handled in search)
   if (white_in_check(board))
     score -= params.check_penalty;
@@ -195,7 +239,18 @@ int evaluate_king_mobility(const Board& board) {
     score -= params.mobility_scaling * moves;
   }
 
-  return score;
+  // Fade in king mobility as the game simplifies so we do not reward early
+  // king walks. Use the same coarse phase metric as other tapered terms.
+  const int mg_phase = std::min(board.phase, kPstPhaseMax);
+  const int eg_phase = kPstPhaseMax - mg_phase;
+  if (eg_phase == 0 || score == 0) {
+    return 0;
+  }
+
+  // Integer interpolation with rounding towards nearest.
+  const int tapered =
+      (score * eg_phase + (eg_phase > 0 ? eg_phase / 2 : 0)) / kPstPhaseMax;
+  return tapered;
 }
 
 // Attacking pieces: if a piece is attacked by the opponent, penalize for White
@@ -260,6 +315,9 @@ int evaluate_hanging_pieces(const Board& board) {
     penalty = std::max(params.hanging_min_penalty, penalty);
     score += white_piece ? -penalty : +penalty;
   }
+
+  // score = 0; // Ignoring hanging piece penalty for now, will get rid of it
+  // later
 
   return score;
 }

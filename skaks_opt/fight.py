@@ -238,8 +238,47 @@ class UciEngine:
 
     def close(self) -> None:
         if self._proc.poll() is None:
-            self._send("quit")
-            self._proc.wait(timeout=5)
+            try:
+                self._send("quit")
+            except Exception:
+                pass
+            try:
+                self._proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._terminate_forcefully()
+        else:
+            try:
+                self._proc.wait()
+            except Exception:
+                pass
+        self._drain_pipes()
+
+    def _terminate_forcefully(self) -> None:
+        try:
+            self._proc.terminate()
+        except OSError:
+            return
+        try:
+            self._proc.wait(timeout=2)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            self._proc.kill()
+        except OSError:
+            return
+        try:
+            self._proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+
+    def _drain_pipes(self) -> None:
+        for stream in (self._proc.stdin, self._proc.stdout, self._proc.stderr):
+            if stream and not stream.closed:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
 
     def __enter__(self):
         return self
@@ -345,6 +384,7 @@ def run_game(
 
     white_name = Path(reference_path).name
     black_name = Path(opponent_path).name
+    opponent_requires_clock = "sunfish" in black_name.lower()
 
     reference_needs_uci = _needs_uci_arg(reference_path)
     opponent_needs_uci = _needs_uci_arg(opponent_path)
@@ -487,9 +527,23 @@ def run_game(
                             )
                         search_start = None
                         search_end = None
-                        best_move = engine.bestmove(
-                            root_fen, moves=moves, movetime_ms=movetime_ms
-                        )
+                        if (
+                            mover_color == chess.BLACK
+                            and opponent_requires_clock
+                        ):
+                            go_clock = GoClock(
+                                wtime=movetime_ms,
+                                btime=movetime_ms,
+                                winc=0,
+                                binc=0,
+                            )
+                            best_move = engine.bestmove(
+                                root_fen, moves=moves, clock=go_clock
+                            )
+                        else:
+                            best_move = engine.bestmove(
+                                root_fen, moves=moves, movetime_ms=movetime_ms
+                            )
                     else:
                         assert depth is not None
                         search_start = None

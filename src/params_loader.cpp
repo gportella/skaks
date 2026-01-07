@@ -215,6 +215,10 @@ bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval
     return false;
   if (!parse_field("flank_pawn_penalty", eval.flank_pawn_penalty))
     return false;
+  if (!parse_field("king_walk_penalty", eval.king_walk_penalty))
+    return false;
+  if (!parse_field("king_walk_phase_limit", eval.king_walk_phase_limit))
+    return false;
   if (!parse_field("knight_mobility_scale", eval.knight_mobility_scale))
     return false;
   if (!parse_field("bishop_mobility_scale", eval.bishop_mobility_scale))

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chess/eval_terms.hpp"
+#include "chess/pst_tables.hpp"
 #include "chess/types.hpp"
 
 #include <array>
@@ -37,6 +38,8 @@ struct EvaluationParams {
   int castle_urgency = 0;
   int early_queen_penalty = 0;
   int flank_pawn_penalty = 0;
+  int king_walk_penalty = 0;
+  int king_walk_phase_limit = 0;
   int knight_mobility_scale = 0;
   int bishop_mobility_scale = 0;
   int rook_mobility_scale = 0;
@@ -86,6 +89,8 @@ inline EvaluationParams default_evaluation_params() {
   params.castle_urgency = 20;
   params.early_queen_penalty = 16;
   params.flank_pawn_penalty = 8;
+  params.king_walk_penalty = 35;
+  params.king_walk_phase_limit = kPstPhaseMax - 6;
   params.knight_mobility_scale = 4;
   params.bishop_mobility_scale = 5;
   params.rook_mobility_scale = 3;

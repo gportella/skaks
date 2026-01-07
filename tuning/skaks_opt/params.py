@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Dict, List, MutableMapping
-import re
 
 __all__ = [
     "ParamSpec",
@@ -51,6 +51,8 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "castle_urgency": 20,
         "early_queen_penalty": 16,
         "flank_pawn_penalty": 8,
+        "king_walk_penalty": 35,
+        "king_walk_phase_limit": 18,
         "king_attack_weights": [14, 32, 30, 44, 74, 20, 14, 32, 30, 44, 74, 20],
         "threat_base": [0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540],
         "bishop_pin_penalty": {"base": 12, "mobility": 2},
@@ -104,6 +106,8 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("evaluation.castle_urgency", 40, 70),
         ParamSpec("evaluation.early_queen_penalty", 0, 24),
         ParamSpec("evaluation.flank_pawn_penalty", 16, 32),
+        ParamSpec("evaluation.king_walk_penalty", 0, 80),
+        ParamSpec("evaluation.king_walk_phase_limit", 0, 24),
         # Pin penalties narrowed
         ParamSpec("evaluation.bishop_pin_penalty.base", 10, 28),
         ParamSpec("evaluation.bishop_pin_penalty.mobility", 0, 6),

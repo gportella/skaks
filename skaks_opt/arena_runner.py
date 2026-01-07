@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import contextlib
 import json
 import os
+import signal
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 DEFAULT_GAMES = 100
 DEFAULT_MATCH_LIMIT = 500
@@ -25,6 +28,37 @@ DEFAULT_ELO_START = 1500.0
 DEFAULT_ELO_OPPONENT = 2600.0
 DEFAULT_ELO_K_FACTOR = 20.0
 DEFAULT_ELO_STORE = str(Path(__file__).resolve().with_name(".skaks_elo.json"))
+HAS_KILLPG = hasattr(os, "killpg")
+
+
+def _sigterm_handler(signum, frame):  # type: ignore[override]
+    raise KeyboardInterrupt()
+
+
+def _install_sigterm_handler() -> None:
+    try:
+        signal.signal(signal.SIGTERM, _sigterm_handler)
+    except (ValueError, OSError):
+        pass
+
+
+@contextlib.contextmanager
+def suppress_interrupt_signals():
+    previous: Dict[int, object] = {}
+    targets = (signal.SIGINT, signal.SIGTERM)
+    try:
+        for sig in targets:
+            try:
+                previous[sig] = signal.signal(sig, signal.SIG_IGN)
+            except (ValueError, OSError):
+                continue
+        yield
+    finally:
+        for sig, handler in previous.items():
+            try:
+                signal.signal(sig, handler)
+            except (ValueError, OSError):
+                pass
 
 __all__ = [
     "DEFAULT_DEPTH",
@@ -53,6 +87,68 @@ class ExecutedMatch:
     exit_code: int
     stdout: str
     stderr: str
+
+
+class ProcessMonitor:
+    """Tracks spawned fight processes so we can terminate them on interrupts."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._children: Set[subprocess.Popen[str]] = set()
+
+    @contextlib.contextmanager
+    def track(self, proc: subprocess.Popen[str]):
+        self.register(proc)
+        try:
+            yield proc
+        finally:
+            self.unregister(proc)
+
+    def register(self, proc: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._children.add(proc)
+
+    def unregister(self, proc: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._children.discard(proc)
+
+    def terminate_all(self, *, timeout: float = 2.0) -> None:
+        with self._lock:
+            active = list(self._children)
+        if not active:
+            return
+        for proc in active:
+            self._signal_process_group(proc, signal.SIGTERM)
+        deadline = time.monotonic() + timeout
+        for proc in active:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._signal_process_group(proc, signal.SIGKILL)
+                continue
+            try:
+                proc.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                self._signal_process_group(proc, signal.SIGKILL)
+        for proc in active:
+            try:
+                proc.wait(timeout=0)
+            except subprocess.TimeoutExpired:
+                continue
+
+    @staticmethod
+    def _signal_process_group(proc: subprocess.Popen[str], sig: int) -> None:
+        if HAS_KILLPG:
+            try:
+                os.killpg(proc.pid, sig)
+                return
+            except ProcessLookupError:
+                return
+            except OSError:
+                pass
+        try:
+            proc.send_signal(sig)
+        except OSError:
+            pass
 
 
 def positive_int(value: str) -> int:
@@ -516,15 +612,19 @@ def run_single_match(
     index: int,
     executable: str,
     command: Sequence[str],
+    monitor: ProcessMonitor,
 ) -> ExecutedMatch:
     started_at = datetime.now(timezone.utc)
     timer_start = time.perf_counter()
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         [executable, *command],
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        check=False,
+        start_new_session=True,
     )
+    with monitor.track(proc):
+        stdout, stderr = proc.communicate()
     timer_end = time.perf_counter()
     finished_at = datetime.now(timezone.utc)
     duration_ms = int(round((timer_end - timer_start) * 1000.0))
@@ -535,8 +635,8 @@ def run_single_match(
         finished_at=finished_at,
         duration_ms=duration_ms,
         exit_code=proc.returncode,
-        stdout=proc.stdout,
-        stderr=proc.stderr,
+        stdout=stdout,
+        stderr=stderr,
     )
 
 
@@ -699,6 +799,7 @@ def summarize_counts(summary: Dict[str, int], labels: Sequence[str]) -> str:
 
 
 def run_batch(args: argparse.Namespace) -> int:
+    _install_sigterm_handler()
     wall_start = time.perf_counter()
 
     connection: Optional[sqlite3.Connection] = None
@@ -799,13 +900,14 @@ def run_batch(args: argparse.Namespace) -> int:
         white_engine = args.engine if args.engine else "skaks"
         black_engine = args.opponent if args.opponent else "stockfish"
 
+        process_monitor = ProcessMonitor()
         futures: Dict[concurrent.futures.Future[ExecutedMatch], int] = {}
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=args.concurrency
         ) as executor:
             for game_index in indices:
                 future = executor.submit(
-                    run_single_match, game_index, executable, command
+                    run_single_match, game_index, executable, command, process_monitor
                 )
                 futures[future] = game_index
 
@@ -879,13 +981,16 @@ def run_batch(args: argparse.Namespace) -> int:
                             print(match.stderr.rstrip())
                     sys.stdout.flush()
             except KeyboardInterrupt:
-                print(
-                    "Interrupted by user. Cancelling outstanding games...",
-                    file=sys.stderr,
-                )
-                for future in futures:
-                    future.cancel()
+                with suppress_interrupt_signals():
+                    print(
+                        "Interrupted by user. Cancelling outstanding games...",
+                        file=sys.stderr,
+                    )
+                    process_monitor.terminate_all()
+                    for future in futures:
+                        future.cancel()
                 return 130
+        process_monitor.terminate_all(timeout=0.0)
 
         print()
         if db_path is not None:

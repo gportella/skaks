@@ -22,6 +22,10 @@ from skaks_opt.param_optimize import (
     add_subparser as add_param_optimize_subparser,
     run_param_optimize,
 )
+from skaks_opt.fen_phase_split import (
+    add_subparser as add_fen_phase_split_subparser,
+    run_fen_phase_split,
+)
 from skaks_opt.texel import add_subparser as add_texel_subparser, run_texel
 from skaks_opt.eval_stats import (
     add_subparser as add_eval_stats_subparser,
@@ -80,6 +84,9 @@ def main():
 
     # Dataset sampling subcommand
     add_dataset_subparser(subparsers)
+
+    # FEN phase split subcommand
+    add_fen_phase_split_subparser(subparsers)
 
     # Param optimizer subcommand
     add_param_optimize_subparser(subparsers)
@@ -283,6 +290,8 @@ def main():
         run_arena_sweep(args)
     elif args.command == "dataset-sample":
         run_dataset(args)
+    elif args.command == "fen-phase-split":
+        run_fen_phase_split(args)
     elif args.command == "fit":
         run_fit(args)
     elif args.command == "eval-stats":
