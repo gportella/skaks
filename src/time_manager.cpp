@@ -3,6 +3,7 @@
 #include "chess/search.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -11,13 +12,45 @@ namespace {
 constexpr std::uint64_t kMinTimeMs = 1;
 constexpr std::uint64_t kSafetyMarginMs = 5;
 constexpr std::uint64_t kReserveBufferMs = 40;
-constexpr double kIncrementBlend = 0.75;
-constexpr double kAggressiveFactor = 1.35;
+constexpr std::uint32_t kIncrementProjectionMoves = 20;
+
+struct TimeRegimeProfile {
+  std::uint64_t min_effective_ms;
+  std::uint32_t default_moves_to_go;
+  double increment_blend;
+  double aggressive_factor;
+};
+
+constexpr std::array<TimeRegimeProfile, 4> kTimeRegimeProfiles{{
+    {1'800'000, 45, 0.60, 1.20}, // Classical: cautious increment usage
+    {600'000, 30, 0.70, 1.30},   // Rapid: balanced behaviour
+    {150'000, 20, 0.55, 1.15},   // Blitz: closer to increment spending
+    {0, 12, 0.45, 1.05}          // Bullet: rely almost entirely on increment
+}};
+
+const TimeRegimeProfile& select_time_regime(std::uint64_t total_ms,
+                                            std::uint64_t increment_ms) {
+  const std::uint64_t effective_ms =
+      total_ms + increment_ms * kIncrementProjectionMoves;
+  for (const auto& profile : kTimeRegimeProfiles) {
+    if (effective_ms >= profile.min_effective_ms) {
+      return profile;
+    }
+  }
+  return kTimeRegimeProfiles.back();
+}
 
 std::uint64_t clamp_positive(std::uint64_t value) {
   return std::max<std::uint64_t>(value, kMinTimeMs);
 }
 } // namespace
+
+namespace detail {
+std::uint32_t estimate_moves_to_go(std::uint64_t total_ms,
+                                   std::uint64_t increment_ms) {
+  return select_time_regime(total_ms, increment_ms).default_moves_to_go;
+}
+} // namespace detail
 
 TimeManager::TimeManager() = default;
 
@@ -52,19 +85,13 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
     return;
   }
 
+  const auto& profile = select_time_regime(total, increment);
+  const double increment_blend = profile.increment_blend;
+  const double aggressive_factor = profile.aggressive_factor;
+
   std::uint32_t moves_to_go = limits.moves_to_go;
   if (moves_to_go == 0) {
-    if (total >= 300'000) {
-      moves_to_go = 45;
-    } else if (total >= 120'000) {
-      moves_to_go = 35;
-    } else if (total >= 60'000) {
-      moves_to_go = 28;
-    } else if (total >= 20'000) {
-      moves_to_go = 20;
-    } else {
-      moves_to_go = 12;
-    }
+    moves_to_go = profile.default_moves_to_go;
   }
 
   double base_budget = 0.0;
@@ -72,14 +99,21 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
     base_budget = static_cast<double>(total) /
                   static_cast<double>(std::max<std::uint32_t>(1, moves_to_go));
   }
-  base_budget += static_cast<double>(increment) * kIncrementBlend;
+  base_budget += static_cast<double>(increment) * increment_blend;
+
+  if (total <= 180'000) {
+    const double min_floor = static_cast<double>(increment) * 1.3;
+    const double max_cap = static_cast<double>(total) /
+                           static_cast<double>(std::max<std::uint32_t>(1, 10u));
+    base_budget = std::clamp(base_budget, min_floor, max_cap);
+  }
 
   if (base_budget <= 0.0) {
     base_budget =
         static_cast<double>(std::max<std::uint64_t>(increment, kMinTimeMs));
   }
 
-  const double aggressive_budget = base_budget * kAggressiveFactor;
+  const double aggressive_budget = base_budget * aggressive_factor;
   const std::uint64_t spend_cap = [total]() -> std::uint64_t {
     if (total == 0) {
       return std::numeric_limits<std::uint64_t>::max();
@@ -99,7 +133,7 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
   soft_limit_ms_ = base_ms;
 
   std::uint64_t extension = std::max<std::uint64_t>(
-      static_cast<std::uint64_t>(base_ms / 2), increment);
+      static_cast<std::uint64_t>(base_ms / 3), increment);
   if (total > 0) {
     const std::uint64_t reserve =
         (total > kReserveBufferMs) ? kReserveBufferMs : 0;
@@ -112,6 +146,14 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
     }
   } else {
     hard_limit_ms_ = base_ms + extension;
+  }
+
+  if (total > 0 && total <= 180'000) {
+    const std::uint64_t blitz_soft_cap =
+        std::max<std::uint64_t>(increment * 2, base_ms);
+    const std::uint64_t blitz_hard_cap = blitz_soft_cap + increment;
+    soft_limit_ms_ = std::min(soft_limit_ms_, blitz_soft_cap);
+    hard_limit_ms_ = std::min(hard_limit_ms_, blitz_hard_cap);
   }
 
   if (increment == 0 && total > 0 && total < 5'000) {

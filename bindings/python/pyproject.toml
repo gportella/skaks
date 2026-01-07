@@ -30,6 +30,14 @@ wheel.py-api = "py3"
 [tool.scikit-build.cmake]
 version = ">=3.24"
 build-type = "Release"
-args = ["-DCHESS_BUILD_PYTHON=ON"]
+args = [
+  "-DCHESS_BUILD_PYTHON=ON",
+  "-DCMAKE_POLICY_VERSION_MINIMUM=3.10",
+]
+
+[tool.scikit-build.cmake.define.macOS]
+CMAKE_C_COMPILER = "/usr/local/opt/llvm@17/bin/clang"
+CMAKE_CXX_COMPILER = "/usr/local/opt/llvm@17/bin/clang++"
+CMAKE_POLICY_VERSION_MINIMUM = "3.10"
 
 

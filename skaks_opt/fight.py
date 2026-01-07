@@ -453,6 +453,14 @@ def run_game(
                     black_moves_to_go=moves_to_go,
                 )
 
+            if (
+                reference_movetime_ms is None
+                and clock is None
+                and opponent_movetime_ms is None
+                and opponent_time_per_move is not None
+            ):
+                opponent_movetime_ms = _to_millis(opponent_time_per_move)
+
             depth_penalty = handicap_depth if handicap_enabled else 0
 
             for turn in range(limit):
@@ -484,22 +492,36 @@ def run_game(
                         )
                     else:
                         assert depth is not None
-                        if mover_color == chess.WHITE:
-                            chosen_depth = depth
-                        else:
-                            if opponent_depth_factor is not None:
-                                chosen_depth = max(
-                                    1, int(round(depth * opponent_depth_factor))
-                                )
-                            elif depth_penalty != 0:
-                                chosen_depth = max(depth - depth_penalty, 1)
-                            else:
-                                chosen_depth = depth
                         search_start = None
                         search_end = None
-                        best_move = engine.bestmove(
-                            root_fen, moves=moves, depth=chosen_depth
-                        )
+                        if mover_color == chess.WHITE:
+                            chosen_depth = depth
+                            best_move = engine.bestmove(
+                                root_fen, moves=moves, depth=chosen_depth
+                            )
+                        else:
+                            if opponent_movetime_ms is not None:
+                                go_clock = GoClock(
+                                    wtime=opponent_movetime_ms,
+                                    btime=opponent_movetime_ms,
+                                    winc=0,
+                                    binc=0,
+                                )
+                                best_move = engine.bestmove(
+                                    root_fen, moves=moves, clock=go_clock
+                                )
+                            else:
+                                if opponent_depth_factor is not None:
+                                    chosen_depth = max(
+                                        1, int(round(depth * opponent_depth_factor))
+                                    )
+                                elif depth_penalty != 0:
+                                    chosen_depth = max(depth - depth_penalty, 1)
+                                else:
+                                    chosen_depth = depth
+                                best_move = engine.bestmove(
+                                    root_fen, moves=moves, depth=chosen_depth
+                                )
                 except Exception as exc:
                     message = f"{engine_name} forfeits due to exception: {exc}"
                     print(message, file=sys.stderr)

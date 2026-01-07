@@ -403,6 +403,47 @@ int main(int argc, char** argv) {
       return result;
     };
 
+    auto emit_move_and_exit = [&](const std::optional<chess::Move>& move,
+                                  bool move_from_book_flag) -> int {
+      uint16_t legal_count = 0;
+      auto legal_moves =
+          chess::generate_legal_moves(board, board.side_to_move, legal_count);
+
+      const auto encode_move_if_present = [](const chess::Move& mv) {
+        if (mv.moving_pc == chess::OccupancyType::empty) {
+          return uint32_t{0};
+        }
+        return chess::encode_move(mv.from, mv.to, mv.moving_pc, mv.captured_pc,
+                                  mv.promo_pc, mv.flags);
+      };
+
+      if (move) {
+        const uint32_t encoded_best = encode_move_if_present(*move);
+        bool found = false;
+        for (uint16_t idx = 0; idx < legal_count; ++idx) {
+          if (legal_moves[idx] == encoded_best) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          std::cerr << "Best move is illegal for provided FEN." << std::endl;
+          return EXIT_FAILURE;
+        }
+      } else if (legal_count > 0) {
+        std::cerr << "Engine did not find a move despite legal options."
+                  << std::endl;
+        return EXIT_FAILURE;
+      }
+
+      const std::string output = move ? move_to_uci(*move) : std::string("0000");
+      std::cout << output << "\n";
+      if (move && move_from_book_flag && !suppress_info_strings()) {
+        std::cout << "info string move sourced from polyglot book" << std::endl;
+      }
+      return EXIT_SUCCESS;
+    };
+
     std::optional<chess::Move> best_move;
     bool move_from_book = false;
     if (opening_book_ready) {
@@ -416,62 +457,26 @@ int main(int argc, char** argv) {
       }
     }
 
-    chess::SearchResult search_result{};
-    if (!best_move) {
-      chess::SearchParameters params{};
-      if (cli.options.time_control.enabled) {
-        params.depth = static_cast<int>(chess::MAX_PLY) - 1;
-        params.limits = to_search_limits(cli.options.time_control);
-      } else {
-        params.depth = cli.options.search_depth;
-      }
-      params.alpha = -chess::INF;
-      params.beta = chess::INF;
-      search_result = engine.search(board, params);
-      if (search_result.best_move.moving_pc != chess::OccupancyType::empty) {
-        best_move = search_result.best_move;
-      }
-    }
-
-    uint16_t legal_count = 0;
-    auto legal_moves =
-        chess::generate_legal_moves(board, board.side_to_move, legal_count);
-
-    const auto encode_move_if_present = [](const chess::Move& move) {
-      if (move.moving_pc == chess::OccupancyType::empty) {
-        return uint32_t{0};
-      }
-      return chess::encode_move(move.from, move.to, move.moving_pc,
-                                move.captured_pc, move.promo_pc, move.flags);
-    };
-
     if (best_move) {
-      const uint32_t encoded_best = encode_move_if_present(*best_move);
-      bool found = false;
-      for (uint16_t idx = 0; idx < legal_count; ++idx) {
-        if (legal_moves[idx] == encoded_best) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        std::cerr << "Best move is illegal for provided FEN." << std::endl;
-        return EXIT_FAILURE;
-      }
-    } else if (legal_count > 0) {
-      std::cerr << "Engine did not find a move despite legal options."
-                << std::endl;
-      return EXIT_FAILURE;
+      return emit_move_and_exit(best_move, move_from_book);
     }
 
-    const std::string output =
-        best_move ? move_to_uci(*best_move) : std::string("0000");
-    std::cout << output << "\n";
-    if (move_from_book && !suppress_info_strings()) {
-      std::cout << "info string move sourced from polyglot book" << std::endl;
+    chess::SearchParameters params{};
+    if (cli.options.time_control.enabled) {
+      params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+      params.limits = to_search_limits(cli.options.time_control);
+    } else {
+      params.depth = cli.options.search_depth;
+    }
+    params.alpha = -chess::INF;
+    params.beta = chess::INF;
+
+    const chess::SearchResult search_result = engine.search(board, params);
+    if (search_result.best_move.moving_pc == chess::OccupancyType::empty) {
+      return emit_move_and_exit(std::nullopt, false);
     }
 
-    return EXIT_SUCCESS;
+    return emit_move_and_exit(search_result.best_move, false);
   }
 
   if (cli.options.use_uci) {
@@ -525,16 +530,6 @@ int main(int argc, char** argv) {
       std::cout << "Move: " << current_full_move << " Ply: " << move_number
                 << ", " << board.side_to_move << " to move.\n";
     }
-    chess::SearchParameters params{};
-    if (cli.options.time_control.enabled) {
-      params.depth = static_cast<int>(chess::MAX_PLY) - 1;
-      params.limits = to_search_limits(cli.options.time_control);
-    } else {
-      params.depth = cli.options.search_depth;
-    }
-    params.alpha = -10000;
-    params.beta = 10000;
-
     std::optional<chess::Move> move_to_play;
     std::optional<chess::SearchResult> search_result;
     bool move_from_book = false;
@@ -555,6 +550,16 @@ int main(int argc, char** argv) {
     }
 
     if (!move_to_play) {
+      chess::SearchParameters params{};
+      if (cli.options.time_control.enabled) {
+        params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        params.limits = to_search_limits(cli.options.time_control);
+      } else {
+        params.depth = cli.options.search_depth;
+      }
+      params.alpha = -10000;
+      params.beta = 10000;
+
       auto result = engine.search(board, params);
       move_to_play = result.best_move;
       search_result = result;

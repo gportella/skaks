@@ -6,6 +6,7 @@
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
+#include "chess/search_detail.hpp"
 #include "chess/search_params.hpp"
 #include "chess/time_manager.hpp"
 
@@ -31,6 +32,19 @@
 #endif
 
 namespace chess {
+
+namespace search_detail {
+
+bool should_retry_pvs(SideToMove stm, int child_score, int narrow_alpha,
+                      int narrow_beta) {
+  if (stm == SideToMove::White) {
+    return child_score >= narrow_beta;
+  }
+  return child_score <= narrow_alpha;
+}
+
+} // namespace search_detail
+
 namespace {
 
 constexpr int kMaxAspirationAttempts = 24;
@@ -236,7 +250,9 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
         output.aborted = true;
         return output;
       }
-      if (child.score >= narrow_beta) {
+      const bool need_retry = search_detail::should_retry_pvs(
+          ctx.stm, child.score, narrow_alpha, narrow_beta);
+      if (need_retry) {
         child = run_search(search_depth, ctx.alpha, ctx.beta, ctx.is_pv);
         if (child.aborted) {
           undo_move(board, undo);

@@ -25,6 +25,7 @@ add_executable(chess_engine_tests
   pin_tests.cpp
   polyglot_tests.cpp
   cli_tests.cpp
+  search_tests.cpp
   time_manager_tests.cpp
   zobrist_tests.cpp
   params_loader_tests.cpp

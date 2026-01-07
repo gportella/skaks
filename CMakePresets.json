@@ -84,6 +84,38 @@
       }
     },
     {
+      "name": "mac-intel-release",
+      "displayName": "macOS Intel Release (x86_64)",
+      "description": "Native macOS Intel release build using Homebrew LLVM 17.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/macos-x86_64",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/local/opt/llvm@17/bin/clang",
+        "CMAKE_CXX_COMPILER": "/usr/local/opt/llvm@17/bin/clang++",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_OSX_ARCHITECTURES": "x86_64",
+        "CMAKE_MAKE_PROGRAM": "/Users/guillem/miniconda3/bin/ninja",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.10",
+        "CMAKE_SKIP_INSTALL_RPATH": "ON",
+        "CHESS_ENABLE_IPO": "ON",
+        "CHESS_ENABLE_SANITIZERS": "OFF"
+      }
+    },
+    {
+      "name": "mac-intel-debug",
+      "displayName": "macOS Intel Debug (x86_64)",
+      "description": "Debug build for Intel macOS using Homebrew LLVM 17 and sanitizers.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/macos-x86_64-debug",
+      "inherits": "mac-intel-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CHESS_ENABLE_IPO": "OFF",
+        "CHESS_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
       "name": "linux-ninja-libcxx-release",
       "displayName": "Linux Release (Ninja, Clang 17 + libc++)",
       "description": "Native Linux release build using clang-17 with libc++.",
@@ -214,6 +246,14 @@
       "configurePreset": "dev-release-pi"
     },
     {
+      "name": "mac-intel-release",
+      "configurePreset": "mac-intel-release"
+    },
+    {
+      "name": "mac-intel-debug",
+      "configurePreset": "mac-intel-debug"
+    },
+    {
       "name": "linux-ninja-libcxx-release",
       "configurePreset": "linux-ninja-libcxx-release"
     },
@@ -251,6 +291,20 @@
     {
       "name": "dev-release-pi",
       "configurePreset": "dev-release-pi",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "mac-intel-release",
+      "configurePreset": "mac-intel-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "mac-intel-debug",
+      "configurePreset": "mac-intel-debug",
       "output": {
         "outputOnFailure": true
       }

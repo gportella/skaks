@@ -4,7 +4,21 @@
 
 #include <gtest/gtest.h>
 
+namespace chess::detail {
+std::uint32_t estimate_moves_to_go(std::uint64_t total_ms,
+                                   std::uint64_t increment_ms);
+}
+
 namespace {
+
+TEST(TimeManagerTests, MovesToGoRegimesAdjustWithTimeControl) {
+  using chess::detail::estimate_moves_to_go;
+
+  EXPECT_EQ(estimate_moves_to_go(3'600'000, 0), 45u);   // Classical
+  EXPECT_EQ(estimate_moves_to_go(600'000, 0), 30u);     // Rapid
+  EXPECT_EQ(estimate_moves_to_go(180'000, 5'000), 20u); // Blitz (3+5)
+  EXPECT_EQ(estimate_moves_to_go(60'000, 0), 12u);      // Bullet
+}
 
 TEST(TimeManagerTests, PerMoveBudget) {
   chess::TimeManager manager;
