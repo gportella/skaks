@@ -76,7 +76,7 @@ void sort_moves(const Board& board,
         auto pc = static_cast<OccupancyType>(move_piece(m));
         key = 1'000'000 + mvv_lva_score(cap, pc);
         auto see_gain = static_exchange_eval(board, decode_move(m));
-        if (see_gain < 0) {
+        if (see_gain <= 0) {
           key -= 10;
         } else {
           key += see_gain * 100;

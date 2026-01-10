@@ -68,6 +68,7 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "quiescence_max_ply": 12,
         "quiescence_max_noisy_moves": 16,
         "quiescence_zero_gain_skip_index": 6,
+        "quiescence_max_quiet_checks": 6,
         "null_move_reduction": 3,
         "null_move_min_depth": 4,
     },
@@ -126,6 +127,7 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("search.quiescence_max_ply", 8, 16),
         ParamSpec("search.quiescence_max_noisy_moves", 12, 30),
         ParamSpec("search.quiescence_zero_gain_skip_index", 0, 6),
+        ParamSpec("search.quiescence_max_quiet_checks", 0, 12),
         ParamSpec("search.null_move_reduction", 2, 5),
         ParamSpec("search.null_move_min_depth", 4, 9),
     ]

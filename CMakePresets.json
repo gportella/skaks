@@ -29,6 +29,8 @@
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "$ENV{HOME}/.local",
+        "CMAKE_BUILD_WITH_INSTALL_RPATH": "ON",
         "CHESS_ENABLE_IPO": "ON"
       }
     },

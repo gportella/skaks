@@ -24,6 +24,35 @@ inline int capture_gain(const Move& move) {
   return gain;
 }
 
+uint16_t collect_quiet_checks(Board& board, SideToMove stm,
+                              std::array<uint32_t, kMaxMovementCount>& out,
+                              uint16_t max_checks) {
+  uint16_t pseudo_count = 0;
+  auto pseudo = generate_all_moves(board, stm, pseudo_count);
+  uint16_t kept = 0;
+  for (uint16_t i = 0; i < pseudo_count && kept < max_checks; ++i) {
+    Move move = decode_move(pseudo[i]);
+    const bool is_capture = move.captured_pc != OccupancyType::empty;
+    const bool is_promo = move.promo_pc != OccupancyType::empty;
+    if (is_capture || is_promo) {
+      continue;
+    }
+
+    Undo undo = make_move(board, move);
+    const bool legal = !is_check(board, flip_side(stm));
+    bool gives_check = false;
+    if (legal) {
+      gives_check = is_check(board, board.side_to_move);
+    }
+    undo_move(board, undo);
+
+    if (legal && gives_check) {
+      out[kept++] = pseudo[i];
+    }
+  }
+  return kept;
+}
+
 } // namespace
 
 int quiescence(Board& board, int alpha, int beta, SideToMove stm,
@@ -137,6 +166,41 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   bool has_best = false;
   int best_score = in_check ? (maximizing ? -INF : INF) : stand_pat;
 
+  auto process_score = [&](const Move& current_move, int score_value) -> bool {
+    if (maximizing) {
+      if (score_value >= beta) {
+        if (tt)
+          tt->store(board.position_key, 0, score_value,
+                    TranspositionFlag::LowerBound, current_move, ply);
+        return true;
+      }
+      if (!has_best || score_value > best_score) {
+        best_score = score_value;
+        best_move = current_move;
+        has_best = true;
+      }
+      if (score_value > alpha) {
+        alpha = score_value;
+      }
+    } else {
+      if (score_value <= alpha) {
+        if (tt)
+          tt->store(board.position_key, 0, score_value,
+                    TranspositionFlag::UpperBound, current_move, ply);
+        return true;
+      }
+      if (!has_best || score_value < best_score) {
+        best_score = score_value;
+        best_move = current_move;
+        has_best = true;
+      }
+      if (score_value < beta) {
+        beta = score_value;
+      }
+    }
+    return false;
+  };
+
   for (uint16_t i = 0; i < move_count; ++i) {
     Move move = decode_move(moves[i]);
 
@@ -175,36 +239,28 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
                                  nodes, tt, ply + 1);
     undo_move(board, undo);
+    if (process_score(move, score)) {
+      return score;
+    }
+  }
 
-    if (maximizing) {
-      if (score >= beta) {
-        if (tt)
-          tt->store(board.position_key, 0, score, TranspositionFlag::LowerBound,
-                    move, ply);
-        return score;
-      }
-      if (!has_best || score > best_score) {
-        best_score = score;
-        best_move = move;
-        has_best = true;
-      }
-      if (score > alpha) {
-        alpha = score;
-      }
-    } else {
-      if (score <= alpha) {
-        if (tt)
-          tt->store(board.position_key, 0, score, TranspositionFlag::UpperBound,
-                    move, ply);
-        return score;
-      }
-      if (!has_best || score < best_score) {
-        best_score = score;
-        best_move = move;
-        has_best = true;
-      }
-      if (score < beta) {
-        beta = score;
+  if (!in_check && sparams.quiescence_max_quiet_checks > 0) {
+    const int quiet_cap_raw = sparams.quiescence_max_quiet_checks;
+    const uint16_t quiet_cap =
+        static_cast<uint16_t>(std::min<int>(quiet_cap_raw, kMaxMovementCount));
+    if (quiet_cap > 0) {
+      std::array<uint32_t, kMaxMovementCount> quiet_checks{};
+      const uint16_t quiet_count =
+          collect_quiet_checks(board, stm, quiet_checks, quiet_cap);
+      for (uint16_t i = 0; i < quiet_count; ++i) {
+        Move move = decode_move(quiet_checks[i]);
+        Undo undo = make_move(board, move);
+        const int score = quiescence(board, alpha, beta, flip_side(stm),
+                                     evaluator, nodes, tt, ply + 1);
+        undo_move(board, undo);
+        if (process_score(move, score)) {
+          return score;
+        }
       }
     }
   }

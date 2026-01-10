@@ -139,6 +139,10 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
   const bool is_capture = move.captured_pc != OccupancyType::empty;
   const bool is_promo = move.promo_pc != OccupancyType::empty;
   const bool quiet_like = !is_capture && !is_promo;
+  const bool king_move =
+      move.moving_pc == OccupancyType::wK || move.moving_pc == OccupancyType::bK;
+  const bool castle_move =
+      flag_is_castle(move.flags) || flag_is_long_castle(move.flags);
 
   int child_depth = ctx.depth - 1;
   const int move_number = ctx.move_number;
@@ -158,8 +162,8 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
   const int history_score = scratch.ordering.history_score(move);
 
   int reduction = 0;
-  if (quiet_like && !in_check_after_move && child_depth >= 2 &&
-      move_number > 1) {
+  if (quiet_like && !king_move && !castle_move && !in_check_after_move &&
+      child_depth >= 2 && move_number > 1) {
     const int capped_depth = std::min(child_depth, 63);
     const int capped_order = std::min(move_number, 63);
     const double depth_factor = std::log1p(static_cast<double>(capped_depth));

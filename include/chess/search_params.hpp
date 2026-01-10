@@ -11,6 +11,7 @@ struct SearchParams {
   int quiescence_max_ply = QUIESCENCE_MAX_PLY;
   int quiescence_max_noisy_moves = QUIESCENCE_MAX_NOISY_MOVES;
   int quiescence_zero_gain_skip_index = QUIESCENCE_ZERO_GAIN_SKIP_INDEX;
+  int quiescence_max_quiet_checks = QUIESCENCE_MAX_QUIET_CHECKS;
   int null_move_reduction = NULL_MOVE_REDUCTION;
   int null_move_min_depth = NULL_MOVE_MIN_DEPTH;
 };

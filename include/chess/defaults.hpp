@@ -23,6 +23,7 @@ inline constexpr int QUIESCENCE_DELTA_MARGIN = 150;
 inline constexpr int QUIESCENCE_MAX_PLY = 12;
 inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 16;
 inline constexpr int QUIESCENCE_ZERO_GAIN_SKIP_INDEX = 6;
+inline constexpr int QUIESCENCE_MAX_QUIET_CHECKS = 6;
 
 inline constexpr int NULL_MOVE_REDUCTION = 3;
 inline constexpr int NULL_MOVE_MIN_DEPTH = NULL_MOVE_REDUCTION + 1;

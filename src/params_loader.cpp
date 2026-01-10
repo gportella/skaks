@@ -299,6 +299,9 @@ bool parse_search(const YAML::Node& search_node, chess::SearchParams& search,
   if (!parse_field("quiescence_zero_gain_skip_index",
                    search.quiescence_zero_gain_skip_index))
     return false;
+  if (!parse_field("quiescence_max_quiet_checks",
+                   search.quiescence_max_quiet_checks))
+    return false;
   if (!parse_field("null_move_reduction", search.null_move_reduction))
     return false;
   if (!parse_field("null_move_min_depth", search.null_move_min_depth))

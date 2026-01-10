@@ -184,6 +184,8 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.search.quiescence_max_noisy_moves);
     assign_if_present(s, "quiescence_zero_gain_skip_index",
                       params.search.quiescence_zero_gain_skip_index);
+    assign_if_present(s, "quiescence_max_quiet_checks",
+                      params.search.quiescence_max_quiet_checks);
     assign_if_present(s, "null_move_reduction",
                       params.search.null_move_reduction);
     assign_if_present(s, "null_move_min_depth",

@@ -65,19 +65,19 @@ TEST(StaticExchangeEval, ReturnsPositiveGainForSimpleCapture) {
   EXPECT_GT(value, 0);
 }
 
-TEST(StaticExchangeEval, ReturnsZeroWhenCaptureIsLosing) {
-  auto board = parse_board("4k3/3p4/4p3/3P4/8/8/4K3/8 w - - 0 1");
+TEST(StaticExchangeEval, ReturnsNegativeWhenCaptureIsLosing) {
+  auto board = parse_board("4k3/1p6/p7/1B6/8/8/4K3/8 w - - 0 1");
   const chess::Move capture{
-      static_cast<std::uint16_t>(chess::to_index(chess::Square::D5)),
-      static_cast<std::uint16_t>(chess::to_index(chess::Square::E6)),
-      chess::OccupancyType::wP,
+      static_cast<std::uint16_t>(chess::to_index(chess::Square::B5)),
+      static_cast<std::uint16_t>(chess::to_index(chess::Square::A6)),
+      chess::OccupancyType::wB,
       chess::OccupancyType::bP,
       chess::OccupancyType::empty,
       0};
 
   const int value = chess::static_exchange_eval(board, capture);
 
-  EXPECT_EQ(value, 0);
+  EXPECT_LT(value, 0);
 }
 
 TEST(ExchangeFindSmallestAttacker, FindsBishopAttacker) {

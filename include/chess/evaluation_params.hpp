@@ -98,8 +98,8 @@ inline EvaluationParams default_evaluation_params() {
   params.doubled_pawn_penalty = 12;
   params.isolated_pawn_penalty = 16;
   params.backward_pawn_penalty = 10;
-  params.king_attack_weights = {14, 32, 30, 44, 74, 20, 14, 32, 30, 44, 74, 20};
-  params.threat_base = {0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540};
+  params.king_attack_weights = {14, 32, 30, 44, 74, 20, 14, 32, 30, 44, 74, 20}; // piece types
+  params.threat_base = {0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540}; // occupancy types, hence 0 for empty
   params.bishop_pin_penalty = {12, 2};
   params.rook_pin_penalty = {6, 1};
   params.knight_pin_penalty = {15, 0};

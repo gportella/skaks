@@ -16,8 +16,7 @@ inline int SEE_sq(Board& b, int sq) {
              b.pieces[static_cast<std::size_t>(attacker->square)],
              b.pieces[static_cast<std::size_t>(sq)], OccupancyType::empty, 0});
     b.side_to_move = flip_side(b.side_to_move);
-    value =
-        std::max(0, piece_material_magnitude(undo.captured_pc) - SEE_sq(b, sq));
+    value = piece_material_magnitude(undo.captured_pc) - SEE_sq(b, sq);
     undo_see_move(b, undo);
     b.side_to_move = flip_side(b.side_to_move);
   }
@@ -48,6 +47,6 @@ int static_exchange_eval(Board b, const Move& move) {
   b.side_to_move = flip_side(b.side_to_move);
   undo_see_move(b, undo);
 
-  return std::max(0, initial_gain - reply_gain);
+  return initial_gain - reply_gain;
 }
 } // namespace chess

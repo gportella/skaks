@@ -316,9 +316,6 @@ int evaluate_hanging_pieces(const Board& board) {
     score += white_piece ? -penalty : +penalty;
   }
 
-  // score = 0; // Ignoring hanging piece penalty for now, will get rid of it
-  // later
-
   return score;
 }
 
