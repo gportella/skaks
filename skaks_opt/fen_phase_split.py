@@ -23,6 +23,11 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
     parser = subparsers.add_parser(
         "fen-phase-split",
         help="Split FEN+score data into opening/middlegame/endgame buckets",
+        description=(
+            "Utility for taking a corpus of scored FENs and bucketing it by game "
+            "phase, either into three separate CSVs or a single CSV with a phase "
+            "column. Handy when you need phase-specific datasets for fitting."
+        ),
     )
     parser.add_argument(
         "--input",

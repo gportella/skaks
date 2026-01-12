@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 from skaks_opt import arena_runner
 from skaks_opt.dask_support import dask_client_from_args
 from skaks_opt.params import DEFAULT_PARAMS
+from skaks_opt.stats import score_to_elo, summarize_wld
 
 try:
     import skaks_eval
@@ -57,7 +58,6 @@ ANSI_COLORS = {
 ANSI_RESET = "\033[0m"
 
 SPINNER_FRAMES = ["|", "/", "-", "\\"]
-# Unicode chess glyphs for livelier progress (requested by user)
 CHESS_SWARM = [
     "♔",
     "♕",
@@ -146,11 +146,7 @@ def _load_params(path: Path) -> Dict[str, Any]:
 def _save_params(data: Dict[str, Any], path: Path) -> None:
     # Align numeric leaf types so downstream consumers (UCI engine params) keep
     # integers where expected while still preserving floats for the few
-    # genuinely real-valued parameters. This mirrors the coercion logic used
-    # when handing params to arenas, ensuring on-disk artifacts stay
-    # engine-friendly without requiring manual cleanup later.
-    # Work on a deep copy so callers retaining the original dict don't observe
-    # in-place coercion side effects.
+    # genuinely real-valued parameters.
     snapshot = json.loads(json.dumps(data))
     coerced = _coerce_numeric_types(DEFAULT_PARAMS, snapshot)
     with path.open("w", encoding="utf-8") as f:
@@ -563,15 +559,6 @@ def aggregate_two_sided(
     draws = summary1.get("draw", 0) + summary2.get("draw", 0)
     return wins, losses, draws
 
-
-def score_to_elo(score: float) -> float:
-    if score <= 0.0:
-        return -math.inf
-    if score >= 1.0:
-        return math.inf
-    return 400.0 * math.log10(score / (1.0 - score))
-
-
 def _run_arena_shard(
     payload: Tuple[
         List[str],
@@ -922,6 +909,11 @@ def optimize_loop(args: argparse.Namespace) -> None:
         current_params = baseline_params
     assert current_params is not None
 
+    confidence_level = float(getattr(args, "score_confidence", 0.95))
+    if not 0.0 < confidence_level < 1.0:
+        raise SystemExit("--score-confidence must be between 0 and 1")
+    args.score_confidence = confidence_level
+
     if args.external_opponent:
         external = True
         opponent = _resolve_engine(args.opponent)
@@ -949,6 +941,17 @@ def optimize_loop(args: argparse.Namespace) -> None:
     base_data = _load_params(current_params)
     best_data = base_data
     best_score = base_score
+    best_ci_low = best_score
+    best_ci_high = best_score
+    best_stats: Dict[str, Any] = {
+        "wins": 0,
+        "losses": 0,
+        "draws": 0,
+        "games": 0,
+        "ci_low": best_ci_low,
+        "ci_high": best_ci_high,
+        "confidence": confidence_level,
+    }
 
     # The arena binding runs in-process and cannot evaluate an external
     # opponent binary. Running with both flags would silently run an
@@ -993,6 +996,12 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 opponent_params=None,
                 opponent_time_per_move=args.opponent_time_per_move,
             )
+            base_stats = summarize_wld(
+                w,
+                losses,
+                d,
+                confidence=confidence_level,
+            )
             # If the user provided a `--start-params` (current_params), prefer
             # keeping that as the working best_data. Only use the evaluated
             # baseline score to seed `best_score` if we don't already have a
@@ -1007,6 +1016,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
             if current_params is None or (baseline_path == current_params):
                 best_score = score
                 best_data = baseline_data
+                best_ci_low = base_stats["ci_low"]
+                best_ci_high = base_stats["ci_high"]
+                best_stats = base_stats
             else:
                 # Keep the start params but ensure best_score is at least
                 # the evaluated baseline score so comparisons are meaningful.
@@ -1047,6 +1059,21 @@ def optimize_loop(args: argparse.Namespace) -> None:
 
             meta = _json.loads(meta_path.read_text(encoding="utf-8"))
             disk_score = float(meta.get("score", best_score))
+            best_ci_low = float(meta.get("score_ci_low", best_ci_low))
+            best_ci_high = float(meta.get("score_ci_high", best_ci_high))
+            best_stats.update(
+                {
+                    "wins": int(meta.get("wins", best_stats.get("wins", 0))),
+                    "losses": int(meta.get("losses", best_stats.get("losses", 0))),
+                    "draws": int(meta.get("draws", best_stats.get("draws", 0))),
+                    "games": int(meta.get("games", best_stats.get("games", 0))),
+                    "ci_low": best_ci_low,
+                    "ci_high": best_ci_high,
+                    "confidence": float(
+                        meta.get("score_confidence", best_stats.get("confidence", 0.0))
+                    ),
+                }
+            )
             if disk_score > best_score:
                 # Replace in-memory best with on-disk superior result
                 best_score = disk_score
@@ -1064,7 +1091,17 @@ def optimize_loop(args: argparse.Namespace) -> None:
         try:
             import json as _json
 
-            meta = {"score": float(best_score), "timestamp": time.time()}
+            meta = {
+                "score": float(best_score),
+                "timestamp": time.time(),
+                "wins": int(best_stats.get("wins", 0)),
+                "losses": int(best_stats.get("losses", 0)),
+                "draws": int(best_stats.get("draws", 0)),
+                "games": int(best_stats.get("games", 0)),
+                "score_ci_low": float(best_ci_low),
+                "score_ci_high": float(best_ci_high),
+                "score_confidence": float(best_stats.get("confidence", confidence_level)),
+            }
             meta_path.write_text(_json.dumps(meta), encoding="utf-8")
         except Exception:
             pass
@@ -1196,12 +1233,26 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             dask_client=dask_client,
                             dask_shard_hint=dask_shard_hint,
                         )
+                        stats = summarize_wld(
+                            w,
+                            losses,
+                            d,
+                            confidence=confidence_level,
+                        )
+                        ci_pct = int(round(stats.get("confidence", 0.0) * 100))
+                        if stats.get("confidence", 0.0) > 0:
+                            score_block = (
+                                f"{_color(f'{score:.3f}', color)}+/-{stats['margin']:.3f} "
+                                f"({ci_pct}% CI {stats['ci_low']:.3f}-{stats['ci_high']:.3f})"
+                            )
+                        else:
+                            score_block = _color(f"{score:.3f}", color)
                         _final_line(
                             f"{_color('✓', 'green')} iter={step} cand={i + 1}/{args.beam_size} "
-                            f"score={_color(f'{score:.3f}', color)} "
+                            f"score={score_block} "
                             f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
                         )
-                        candidates.append((score, cand_data, (w, losses, d), wall))
+                        candidates.append((score, cand_data, stats, wall))
                     finally:
                         try:
                             cand_path.unlink()
@@ -1212,7 +1263,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 beam = [
                     (score, data) for score, data, _, _ in candidates[: args.beam_size]
                 ]
-                top_score, top_data, _, _ = candidates[0]
+                top_score, top_data, top_stats, _ = candidates[0]
             else:  # CMA-like strategy
                 paths, mean_vec, is_int = _flatten_params(
                     best_data,
@@ -1299,12 +1350,26 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             dask_client=dask_client,
                             dask_shard_hint=dask_shard_hint,
                         )
+                        stats = summarize_wld(
+                            w,
+                            losses,
+                            d,
+                            confidence=confidence_level,
+                        )
+                        ci_pct = int(round(stats.get("confidence", 0.0) * 100))
+                        if stats.get("confidence", 0.0) > 0:
+                            score_block = (
+                                f"{_color(f'{score:.3f}', color)}+/-{stats['margin']:.3f} "
+                                f"({ci_pct}% CI {stats['ci_low']:.3f}-{stats['ci_high']:.3f})"
+                            )
+                        else:
+                            score_block = _color(f"{score:.3f}", color)
                         _final_line(
                             f"{_color('✓', 'green')} iter={step} cand={i + 1}/{popsize} "
-                            f"score={_color(f'{score:.3f}', color)} "
+                            f"score={score_block} "
                             f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
                         )
-                        candidates.append((score, cand_data, (w, losses, d), wall))
+                        candidates.append((score, cand_data, stats, wall))
                     finally:
                         try:
                             cand_path.unlink()
@@ -1312,7 +1377,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             pass
 
                 candidates.sort(key=lambda x: x[0], reverse=True)
-                top_score, top_data, _, _ = candidates[0]
+                top_score, top_data, top_stats, _ = candidates[0]
 
                 # Recombine top mu candidates to update mean_vec
                 new_mean = [0.0 for _ in mean_vec]
@@ -1342,9 +1407,17 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         disk_meta = _json.loads(meta_path.read_text(encoding="utf-8"))
                     except Exception:
                         disk_meta = None
-                disk_score = float(disk_meta.get("score")) if disk_meta else best_score
+                disk_score = (
+                    float(disk_meta.get("score")) if disk_meta else best_score
+                )
+                disk_ci_high = (
+                    float(disk_meta.get("score_ci_high"))
+                    if disk_meta and "score_ci_high" in disk_meta
+                    else best_ci_high
+                )
             except Exception:
                 disk_score = best_score
+                disk_ci_high = best_ci_high
 
             # Apply a per-iteration relaxation to the on-disk score if requested.
             # This makes it gradually easier to overwrite a stubborn best.
@@ -1353,11 +1426,18 @@ def optimize_loop(args: argparse.Namespace) -> None:
             except Exception:
                 decay = 0.0
             effective_disk_score = disk_score - (decay * float(step))
+            effective_ci_high = max(0.0, min(1.0, disk_ci_high - (decay * float(step))))
+            best_ci_high = disk_ci_high
 
             # Acceptance policy: prefer strictly greater score, but allow
             # forced/seed accepts or raising the floor when applicable.
             accept_candidate = False
-            if top_score > effective_disk_score:
+            confidence_guard = bool(getattr(args, "require_score_confidence", False))
+            confidence_ok = True
+            if confidence_guard:
+                candidate_ci_low = float(top_stats.get("ci_low", top_score))
+                confidence_ok = candidate_ci_low > effective_ci_high
+            if top_score > effective_disk_score and confidence_ok:
                 accept_candidate = True
             else:
                 # Force-accept first N replacements to seed the leaderboard
@@ -1388,12 +1468,29 @@ def optimize_loop(args: argparse.Namespace) -> None:
             if accept_candidate:
                 best_score = top_score
                 best_data = top_data
+                best_ci_low = float(top_stats.get("ci_low", best_score))
+                best_ci_high = float(top_stats.get("ci_high", best_score))
+                best_stats = dict(top_stats)
                 # Atomic write: write to temp then move into place.
                 tmp = best_path.with_suffix(best_path.suffix + ".tmp")
                 try:
                     _save_params(best_data, tmp)
                     tmp.replace(best_path)
-                    meta = {"score": float(best_score), "timestamp": time.time()}
+                    meta = {
+                        "score": float(best_score),
+                        "timestamp": time.time(),
+                        "wins": int(top_stats.get("wins", 0)),
+                        "losses": int(top_stats.get("losses", 0)),
+                        "draws": int(top_stats.get("draws", 0)),
+                        "games": int(top_stats.get("games", 0)),
+                        "score_ci_low": best_ci_low,
+                        "score_ci_high": best_ci_high,
+                        "score_confidence": float(
+                            top_stats.get(
+                                "confidence", confidence_level
+                            )
+                        ),
+                    }
                     meta_path.write_text(_json.dumps(meta), encoding="utf-8")
                     _final_line(
                         f"{_color('⚑', 'yellow')} new best score={best_score:.3f} saved to {best_path}"
@@ -1644,6 +1741,17 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         type=int,
         default=0,
         help="Force-accept the first N candidate replacements (useful to seed a weak leaderboard)",
+    )
+    parser.add_argument(
+        "--score-confidence",
+        type=float,
+        default=0.95,
+        help="Confidence level used for score/Elo intervals (0-1)",
+    )
+    parser.add_argument(
+        "--require-score-confidence",
+        action="store_true",
+        help="Require the candidate's lower confidence bound to exceed the stored best upper bound",
     )
     return parser
 

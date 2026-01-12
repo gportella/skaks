@@ -5,6 +5,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, List, Sequence, Tuple
+
 import numpy as np
 
 __all__ = [
@@ -63,34 +64,59 @@ def parse_side_to_move(fen: str) -> int:
 
 def load_csv(path: Path | str, limit: int | None = None) -> Dataset:
     path = Path(path)
+    if path.is_dir():
+        sources = sorted(p for p in path.rglob("*.csv") if p.is_file())
+    else:
+        sources = [path]
+
+    if not sources:
+        raise ValueError(f"no CSV files found at {path}")
+
     examples: List[Example] = []
     sides: List[int] = []
-    with path.open("r", newline="") as fh:
-        reader = csv.DictReader(fh)
-        if not reader.fieldnames or "fen" not in reader.fieldnames:
-            raise ValueError("CSV must contain fen column")
-        has_score = "score" in reader.fieldnames
-        has_sf = "stockfish_cp" in reader.fieldnames
-        if not has_score and not has_sf:
-            raise ValueError("CSV must contain either score or stockfish_cp column")
-        for row_idx, row in enumerate(reader):
-            if limit is not None and len(examples) >= limit:
-                break
-            fen = row["fen"].strip()
-            if has_score and row.get("score", "") != "":
-                score = float(row["score"])
-            else:
-                score = float(row["stockfish_cp"])
-            weight = float(row.get("weight", 1.0) or 1.0)
-            examples.append(Example(fen=fen, target_cp=score, weight=weight))
+    remaining = limit
 
-            stm = row.get("side_to_move")
-            if stm is not None and stm.lower().startswith("w"):
-                sides.append(1)
-            elif stm is not None and stm.lower().startswith("b"):
-                sides.append(-1)
-            else:
-                sides.append(parse_side_to_move(fen))
+    def _load_file(csv_path: Path, remaining_limit: int | None) -> int | None:
+        limit_left = remaining_limit
+        with csv_path.open("r", newline="") as fh:
+            reader = csv.DictReader(fh)
+            if not reader.fieldnames or "fen" not in reader.fieldnames:
+                raise ValueError("CSV must contain fen column")
+            has_score = "score" in reader.fieldnames
+            has_sf = "stockfish_cp" in reader.fieldnames
+            if not has_score and not has_sf:
+                raise ValueError(
+                    "CSV must contain either score or stockfish_cp column"
+                )
+            for row in reader:
+                if limit_left is not None and limit_left <= 0:
+                    return 0
+                fen = row["fen"].strip()
+                if not fen:
+                    continue
+                if has_score and row.get("score", "") != "":
+                    score = float(row["score"])
+                else:
+                    score = float(row["stockfish_cp"])
+                weight = float(row.get("weight", 1.0) or 1.0)
+                examples.append(Example(fen=fen, target_cp=score, weight=weight))
+
+                stm = row.get("side_to_move")
+                if stm is not None and stm.lower().startswith("w"):
+                    sides.append(1)
+                elif stm is not None and stm.lower().startswith("b"):
+                    sides.append(-1)
+                else:
+                    sides.append(parse_side_to_move(fen))
+                if limit_left is not None:
+                    limit_left -= 1
+        return limit_left
+
+    for csv_path in sources:
+        remaining = _load_file(csv_path, remaining)
+        if remaining is not None and remaining <= 0:
+            break
+
     if not examples:
         raise ValueError(f"no rows loaded from {path}")
     return Dataset(examples, side_override=sides)

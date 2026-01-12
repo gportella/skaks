@@ -1,47 +1,179 @@
-"""
-Unified CLI entry point for Skaks optimization and fitting.
-"""
+"""Unified CLI entry point for Skaks optimization, fitting, and tooling."""
 
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from skaks_opt.fit import add_subparser as add_fit_subparser, run_fit
+from skaks_opt.arena import add_subparser as add_arena_subparser
+from skaks_opt.arena import run_arena
+from skaks_opt.arena_sweep import add_subparser as add_arena_sweep_subparser
+from skaks_opt.arena_sweep import run_sweep as run_arena_sweep
+from skaks_opt.dataset import add_subparser as add_dataset_subparser
+from skaks_opt.dataset import run_dataset
+from skaks_opt.eval_stats import add_subparser as add_eval_stats_subparser
+from skaks_opt.eval_stats import run_eval_stats
+from skaks_opt.fen_phase_split import \
+  add_subparser as add_fen_phase_split_subparser
+from skaks_opt.fen_phase_split import run_fen_phase_split
+from skaks_opt.fit import add_subparser as add_fit_subparser
+from skaks_opt.fit import run_fit
+from skaks_opt.param_optimize import \
+  add_subparser as add_param_optimize_subparser
+from skaks_opt.param_optimize import run_param_optimize
 from skaks_opt.selfplay import SelfPlayConfig, run_selfplay
-from skaks_opt.arena import add_subparser as add_arena_subparser, run_arena
-from skaks_opt.arena_sweep import (
-    add_subparser as add_arena_sweep_subparser,
-    run_sweep as run_arena_sweep,
-)
-from skaks_opt.dataset import (
-    add_subparser as add_dataset_subparser,
-    run_dataset,
-)
-from skaks_opt.param_optimize import (
-    add_subparser as add_param_optimize_subparser,
-    run_param_optimize,
-)
-from skaks_opt.fen_phase_split import (
-    add_subparser as add_fen_phase_split_subparser,
-    run_fen_phase_split,
-)
-from skaks_opt.texel import add_subparser as add_texel_subparser, run_texel
-from skaks_opt.eval_stats import (
-    add_subparser as add_eval_stats_subparser,
-    run_eval_stats,
-)
+from skaks_opt.texel import add_subparser as add_texel_subparser
+from skaks_opt.texel import run_texel
+
+CATEGORY_PARAMETER_TUNING = "Parameter tuning"
+CATEGORY_DATA_ANALYSIS = "Data & analysis"
+CATEGORY_HELPERS = "Helper tools"
+CATEGORY_ORDER = [
+    CATEGORY_PARAMETER_TUNING,
+    CATEGORY_DATA_ANALYSIS,
+    CATEGORY_HELPERS,
+]
+
+
+class CategorizedHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    """Help formatter that groups subcommands by topic."""
+
+    def _format_action(self, action: argparse.Action) -> str:
+        if (
+            isinstance(action, argparse._SubParsersAction)
+            and getattr(action, "_category_order", None)
+        ):
+            return self._format_categorized_subparsers(action)
+        return super()._format_action(action)
+
+    def _format_categorized_subparsers(
+        self, action: argparse._SubParsersAction
+    ) -> str:
+        title = getattr(action, "title", None) or "subcommands"
+        raw_indent = getattr(self, "_current_indent", "")
+        if isinstance(raw_indent, str):
+            indent_str = raw_indent
+        else:
+            try:
+                indent_val = int(raw_indent)
+            except (TypeError, ValueError):
+                indent_val = 0
+            indent_str = " " * max(indent_val, 0)
+
+        parts: List[str] = ["\n", f"{indent_str}{title}:\n"]
+        description = getattr(action, "description", None)
+        if description:
+            parts.append(self._format_text(description))
+
+        name_order = list(action._name_parser_map.keys())
+        entries: Dict[str, List[tuple[str, str]]] = {
+            category: [] for category in getattr(action, "_category_order", [])
+        }
+        extras: List[tuple[str, str]] = []
+        for name in name_order:
+            parser = action._name_parser_map[name]
+            category = getattr(parser, "_category", None)
+            short_help = getattr(parser, "_short_help", "")
+            if category in entries:
+                entries[category].append((name, short_help))
+            else:
+                extras.append((name, short_help))
+
+        if extras:
+            extras_category = getattr(action, "_fallback_category", "Other")
+            entries.setdefault(extras_category, []).extend(extras)
+
+        name_width = 0
+        for rows in entries.values():
+            for name, _ in rows:
+                name_width = max(name_width, len(name))
+        max_help_pos = max(self._max_help_position - len(indent_str) - 4, 8)
+        name_width = min(name_width, max_help_pos)
+
+        category_indent = indent_str + " " * self._indent_increment
+        command_indent = category_indent + " " * self._indent_increment
+
+        for category in getattr(action, "_category_order", []):
+            rows = entries.get(category, [])
+            if not rows:
+                continue
+            parts.append(f"{category_indent}{category}:\n")
+            for name, help_text in rows:
+                padded = name.ljust(name_width)
+                parts.append(f"{command_indent}{padded}  {help_text}\n")
+
+        return "".join(parts)
+
+
+def _register_category(
+    subparsers: argparse._SubParsersAction,
+    name: str,
+    parser: argparse.ArgumentParser,
+    category: str,
+    help_text: Optional[str] = None,
+) -> None:
+    parser._category = category  # type: ignore[attr-defined]
+    if help_text is None:
+        help_text = _extract_help(subparsers, name)
+    parser._short_help = help_text or ""  # type: ignore[attr-defined]
+
+
+def _extract_help(subparsers: argparse._SubParsersAction, name: str) -> str:
+    for choice in getattr(subparsers, "_choices_actions", []):
+        choice_name = getattr(choice, "dest", None) or getattr(choice, "name", None)
+        if choice_name == name:
+            return getattr(choice, "help", "") or ""
+    return ""
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Skaks unified optimization/fitting CLI"
+        description="Skaks unified optimization/fitting CLI",
+        formatter_class=CategorizedHelpFormatter,
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(
+        title="Commands", dest="command", metavar="COMMAND", required=True
+    )
+    subparsers._category_order = CATEGORY_ORDER  # type: ignore[attr-defined]
+    subparsers._fallback_category = CATEGORY_HELPERS  # type: ignore[attr-defined]
 
-    # Optimize search subcommand
+    # Parameter tuning -----------------------------------------------------
+    param_parser = add_param_optimize_subparser(subparsers)
+    _register_category(
+        subparsers, "param-optimize", param_parser, CATEGORY_PARAMETER_TUNING
+    )
+
+    selfplay_help = "Beam/CMA self-play tuner across distributed arenas"
+    selfplay_parser = subparsers.add_parser(
+        "selfplay",
+        help=selfplay_help,
+        description=(
+            "Modern self-play pipeline that perturbs evaluation/search parameters, "
+            "spawns arenas locally or via Dask, and keeps the best candidates. Use "
+            "this when you want an end-to-end tuner with beam search or CMA-ES, "
+            "as opposed to the arena-driven `param-optimize` loop."
+        ),
+    )
+    _register_category(
+        subparsers, "selfplay", selfplay_parser, CATEGORY_PARAMETER_TUNING, selfplay_help
+    )
+
+    optimize_help = "Tune search-only knobs using skaks --perf metrics"
     optimize_parser = subparsers.add_parser(
-        "optimize-search", help="Optimize search parameters with Optuna"
+        "optimize-search",
+        help=optimize_help,
+        description=(
+            "Use Optuna and repeated skaks --perf runs to minimize per-position "
+            "time/nodes. This sticks to search.* settings and never plays games, "
+            "so it complements arena-driven optimizers."
+        ),
+    )
+    _register_category(
+        subparsers,
+        "optimize-search",
+        optimize_parser,
+        CATEGORY_PARAMETER_TUNING,
+        optimize_help,
     )
     optimize_parser.add_argument(
         "--quiet", action="store_true", help="Suppress output (only show best result)"
@@ -76,34 +208,63 @@ def main():
         help="Search depth for skaks --perf (default: %(default)s)",
     )
 
-    # Arena matches subcommand
-    add_arena_subparser(subparsers)
+    texel_parser = add_texel_subparser(subparsers)
+    _register_category(subparsers, "texel", texel_parser, CATEGORY_PARAMETER_TUNING)
 
-    # Arena sweep subcommand
-    add_arena_sweep_subparser(subparsers)
+    fit_parser = add_fit_subparser(subparsers)
+    _register_category(subparsers, "fit", fit_parser, CATEGORY_PARAMETER_TUNING)
 
-    # Dataset sampling subcommand
-    add_dataset_subparser(subparsers)
-
-    # FEN phase split subcommand
-    add_fen_phase_split_subparser(subparsers)
-
-    # Param optimizer subcommand
-    add_param_optimize_subparser(subparsers)
-
-    # Texel fitting subcommand
-    add_texel_subparser(subparsers)
-
-    # Parameter fitting subcommand
-    add_fit_subparser(subparsers)
-
-    # Eval stats subcommand
-    add_eval_stats_subparser(subparsers)
-
-    # Self-play optimization subcommand
-    selfplay_parser = subparsers.add_parser(
-        "selfplay", help="Run self-play optimization"
+    # Data & analysis ------------------------------------------------------
+    dataset_parser = add_dataset_subparser(subparsers)
+    _register_category(
+        subparsers, "dataset-sample", dataset_parser, CATEGORY_DATA_ANALYSIS
     )
+
+    fen_phase_parser = add_fen_phase_split_subparser(subparsers)
+    _register_category(
+        subparsers, "fen-phase-split", fen_phase_parser, CATEGORY_DATA_ANALYSIS
+    )
+
+    arena_parser = add_arena_subparser(subparsers)
+    _register_category(subparsers, "arena", arena_parser, CATEGORY_DATA_ANALYSIS)
+
+    arena_sweep_parser = add_arena_sweep_subparser(subparsers)
+    _register_category(
+        subparsers, "arena-sweep", arena_sweep_parser, CATEGORY_DATA_ANALYSIS
+    )
+
+    eval_stats_parser = add_eval_stats_subparser(subparsers)
+    _register_category(
+        subparsers, "eval-stats", eval_stats_parser, CATEGORY_DATA_ANALYSIS
+    )
+
+    # Helper tools ---------------------------------------------------------
+    monitor_help = "Track ongoing scan_out results"
+    monitor_parser = subparsers.add_parser(
+        "monitor",
+        help=monitor_help,
+        description=(
+            "Track the CSV/JSON artifacts produced by scripts/scan_progress.py to "
+            "keep an eye on long-running scan_out jobs. This is read-only and "
+            "never schedules arenas."
+        ),
+    )
+    _register_category(
+        subparsers, "monitor", monitor_parser, CATEGORY_HELPERS, monitor_help
+    )
+    monitor_parser.add_argument(
+        "--top",
+        type=int,
+        default=5,
+        help="Number of top samples to display (default: %(default)s)",
+    )
+    monitor_parser.add_argument(
+        "--interval",
+        type=int,
+        default=10,
+        help="Refresh interval in seconds (default: %(default)s)",
+    )
+
     selfplay_parser.add_argument("--params", required=True, help="YAML parameter file")
     selfplay_parser.add_argument(
         "--baseline-params",
@@ -257,22 +418,6 @@ def main():
         type=int,
         default=2025,
         help="Random seed for optimizer (default: %(default)s)",
-    )
-
-    monitor_parser = subparsers.add_parser(
-        "monitor", help="Track ongoing scan_out results"
-    )
-    monitor_parser.add_argument(
-        "--top",
-        type=int,
-        default=5,
-        help="Number of top samples to display (default: %(default)s)",
-    )
-    monitor_parser.add_argument(
-        "--interval",
-        type=int,
-        default=10,
-        help="Refresh interval in seconds (default: %(default)s)",
     )
 
     args = parser.parse_args()

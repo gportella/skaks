@@ -12,22 +12,14 @@ import optuna
 
 from skaks_opt.data import Dataset, filter_quiet, load_csv, split_dataset
 from skaks_opt.evaluator import EvalResult, evaluate_params
-from skaks_opt.params import (
-    DEFAULT_PARAMS,
-    apply_param_updates,
-    default_param_space,
-    phase_weight_param_space,
-)
+from skaks_opt.params import (DEFAULT_PARAMS, apply_param_updates,
+                              default_param_space, param_space_for_mode,
+                              phase_weight_param_space)
 
 try:  # Optional rich progress support
     from rich.console import Console
-    from rich.progress import (
-        BarColumn,
-        Progress,
-        TextColumn,
-        TimeElapsedColumn,
-        TimeRemainingColumn,
-    )
+    from rich.progress import (BarColumn, Progress, TextColumn,
+                               TimeElapsedColumn, TimeRemainingColumn)
 except Exception:  # pragma: no cover - optional dependency
     Console = None
     Progress = None
@@ -44,6 +36,11 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
     parser = subparsers.add_parser(
         "fit",
         help="Run supervised parameter fitting against labeled positions",
+        description=(
+            "Supervised Optuna loop that minimizes centipawn error on labeled "
+            "datasets (no gameplay). Useful for bringing eval parameters in line "
+            "with Stockfish targets before switching to arena-based tuning."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--data", required=True, help="CSV with FEN + score columns")
@@ -71,6 +68,12 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         "--phase-weights-only",
         action="store_true",
         help="Limit tuning to phase weight arrays",
+    )
+    parser.add_argument(
+        "--param-set",
+        choices=["full", "phase", "offense", "defense"],
+        default="full",
+        help="Select parameter subset to optimize",
     )
     parser.add_argument(
         "--error-penalty",
@@ -169,6 +172,10 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
 def _select_param_space(args: argparse.Namespace):
     if args.phase_weights_only:
         return phase_weight_param_space()
+    if args.param_set == "phase":
+        return phase_weight_param_space()
+    if args.param_set in {"offense", "defense", "full"}:
+        return param_space_for_mode(args.param_set, include_arrays=args.include_arrays)
     return default_param_space(include_arrays=args.include_arrays)
 
 

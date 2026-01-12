@@ -32,12 +32,11 @@ version = ">=3.24"
 build-type = "Release"
 args = [
   "-DCHESS_BUILD_PYTHON=ON",
-  "-DCMAKE_POLICY_VERSION_MINIMUM=3.10",
 ]
 
-[tool.scikit-build.cmake.define.macOS]
-CMAKE_C_COMPILER = "/usr/local/opt/llvm@17/bin/clang"
-CMAKE_CXX_COMPILER = "/usr/local/opt/llvm@17/bin/clang++"
+[tool.scikit-build.cmake.define]
+CMAKE_C_COMPILER = "/opt/homebrew/opt/llvm@17/bin/clang"
+CMAKE_CXX_COMPILER = "/opt/homebrew/opt/llvm@17/bin/clang++"
 CMAKE_POLICY_VERSION_MINIMUM = "3.10"
 
 

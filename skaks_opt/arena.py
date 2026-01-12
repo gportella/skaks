@@ -3,20 +3,13 @@ from __future__ import annotations
 import argparse
 import os
 
-from skaks_opt.arena_runner import (
-    DEFAULT_DEPTH,
-    DEFAULT_ELO_K_FACTOR,
-    DEFAULT_ELO_OPPONENT,
-    DEFAULT_ELO_START,
-    DEFAULT_ELO_STORE,
-    DEFAULT_GAMES,
-    DEFAULT_MATCH_LIMIT,
-    RECOMMENDED_DB_NAME,
-    non_negative_int,
-    positive_float,
-    positive_int,
-    run_batch as _run_batch,
-)
+from skaks_opt.arena_runner import (DEFAULT_DEPTH, DEFAULT_ELO_K_FACTOR,
+                                    DEFAULT_ELO_OPPONENT, DEFAULT_ELO_START,
+                                    DEFAULT_ELO_STORE, DEFAULT_GAMES,
+                                    DEFAULT_MATCH_LIMIT, RECOMMENDED_DB_NAME,
+                                    non_negative_int, positive_float,
+                                    positive_int)
+from skaks_opt.arena_runner import run_batch as _run_batch
 
 __all__ = ["add_subparser", "run_arena"]
 
@@ -248,6 +241,11 @@ def add_subparser(
     parser = subparsers.add_parser(
         "arena",
         help="Run engine-vs-engine matches with optional SQLite logging",
+        description=(
+            "Launch head-to-head matches between a reference engine and an opponent, "
+            "recording JSON summaries, Elo estimates, and optional SQLite history. "
+            "This is the low-level building block that sweep and tuning commands reuse."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     return _configure_parser(parser)

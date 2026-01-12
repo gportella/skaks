@@ -110,6 +110,11 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
     parser = subparsers.add_parser(
         "eval-stats",
         help="Summarize per-term contributions and calibration against Stockfish",
+        description=(
+            "Collects term-by-term contribution breakdowns from the engine, compares "
+            "them to Stockfish centipawns, and surfaces scaling/quiet-cap hints. Use "
+            "this to understand how the current eval behaves before retuning it."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -120,7 +125,7 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
     )
     parser.add_argument(
         "--skaks",
-        default="build/debug/src/skaks",
+        default="skaks",
         help="Path to the skaks executable",
     )
     parser.add_argument(
@@ -248,7 +253,7 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
 
 
 def run_eval_stats(args: argparse.Namespace) -> None:
-    dataset_paths = [pathlib.Path(p) for p in args.dataset]
+    dataset_paths = _expand_dataset_inputs(args.dataset)
     rng = random.Random(args.seed)
 
     rows, total_seen = _sample_dataset(
@@ -373,6 +378,19 @@ def run_eval_stats(args: argparse.Namespace) -> None:
         print(f"warnings: {len(errors)} failures while sampling (showing first 5)")
         for message in errors[:5]:
             print(f"  {message}")
+
+
+def _expand_dataset_inputs(raw_paths: Sequence[str]) -> List[pathlib.Path]:
+    expanded: List[pathlib.Path] = []
+    for raw in raw_paths:
+        path = pathlib.Path(raw).expanduser()
+        if path.is_dir():
+            expanded.extend(sorted(p for p in path.rglob("*.csv") if p.is_file()))
+        else:
+            expanded.append(path)
+    if not expanded:
+        raise SystemExit("No CSV files found for the provided --dataset inputs")
+    return expanded
 
 
 def _iter_dataset_rows(path: pathlib.Path) -> Iterable[Tuple[str, float]]:

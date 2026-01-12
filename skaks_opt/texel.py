@@ -15,19 +15,44 @@ import numpy as np
 import optuna
 import yaml
 
-from skaks_opt.params import (
-    DEFAULT_PARAMS,
-    apply_param_updates,
-    param_space_for_mode,
-)
+from skaks_opt.params import (DEFAULT_PARAMS, apply_param_updates,
+                              param_space_for_mode)
 
 __all__ = ["add_subparser", "run_texel", "load_texel_csv", "TexelDataset"]
+
+
+def _coerce_like_template(template, payload):
+    if isinstance(template, dict) and isinstance(payload, dict):
+        return {
+            key: _coerce_like_template(template.get(key), value)
+            for key, value in payload.items()
+        }
+    if isinstance(template, list) and isinstance(payload, list):
+        result = []
+        for idx, value in enumerate(payload):
+            tmpl = template[idx] if idx < len(template) else None
+            result.append(_coerce_like_template(tmpl, value))
+        return result
+    if isinstance(template, int):
+        if isinstance(payload, (int, float)):
+            return int(round(payload))
+        return payload
+    if isinstance(template, float):
+        if isinstance(payload, (int, float)):
+            return float(payload)
+        return payload
+    return payload
 
 
 def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     parser = subparsers.add_parser(
         "texel",
         help="Run Texel logistic regression tuning",
+        description=(
+            "Texel fitting pipeline that learns logistic regression weights from "
+            "outcome-labeled FENs. Ideal for calibrating evaluation terms via "
+            "probabilistic loss before arena-based validation."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -135,6 +160,18 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         help="Select parameter subset to optimize",
     )
     parser.add_argument(
+        "--min-ply",
+        type=int,
+        default=12,
+        help="Minimum ply to include (<=0 disables lower bound)",
+    )
+    parser.add_argument(
+        "--max-ply",
+        type=int,
+        default=80,
+        help="Maximum ply to include (<=0 disables upper bound)",
+    )
+    parser.add_argument(
         "--include-arrays",
         action="store_true",
         help="Include array params when available",
@@ -180,7 +217,12 @@ def _parse_side_to_move(fen: str) -> int:
     return 1 if parts[1] == "w" else -1
 
 
-def load_texel_csv(path: Path | str, limit: int | None = None) -> TexelDataset:
+def load_texel_csv(
+    path: Path | str,
+    limit: int | None = None,
+    min_ply: int | None = None,
+    max_ply: int | None = None,
+) -> TexelDataset:
     path = Path(path)
     fens: List[str] = []
     outcomes: List[float] = []
@@ -196,6 +238,10 @@ def load_texel_csv(path: Path | str, limit: int | None = None) -> TexelDataset:
         raise ValueError(f"no CSV files found at {path}")
 
     remaining = limit
+
+    min_ply = min_ply if (min_ply is not None and min_ply > 0) else None
+    max_ply = max_ply if (max_ply is not None and max_ply > 0) else None
+    warned_missing_ply = False
 
     def load_one(csv_path: Path, remaining_limit: int | None) -> int | None:
         nonlocal fens, outcomes, weights, sides
@@ -217,6 +263,25 @@ def load_texel_csv(path: Path | str, limit: int | None = None) -> TexelDataset:
                 fen = row["fen"].strip()
                 if not fen:
                     continue
+                if min_ply is not None or max_ply is not None:
+                    ply_raw = row.get("ply")
+                    ply_value: int | None = None
+                    if ply_raw not in (None, ""):
+                        try:
+                            ply_value = int(ply_raw)
+                        except Exception:
+                            ply_value = None
+                    if ply_value is None:
+                        if not warned_missing_ply:
+                            warnings.warn(
+                                "ply column missing or non-numeric; ply filtering skipped for those rows"
+                            )
+                            warned_missing_ply = True
+                    else:
+                        if min_ply is not None and ply_value < min_ply:
+                            continue
+                        if max_ply is not None and ply_value > max_ply:
+                            continue
                 try:
                     value = float(row[outcome_col])
                 except Exception:
@@ -350,7 +415,14 @@ def run_texel(args: argparse.Namespace) -> None:
 
         warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
-    dataset = load_texel_csv(args.data, limit=args.limit)
+    min_ply = args.min_ply if args.min_ply is None or args.min_ply > 0 else None
+    max_ply = args.max_ply if args.max_ply is None or args.max_ply > 0 else None
+    dataset = load_texel_csv(
+        args.data,
+        limit=args.limit,
+        min_ply=min_ply,
+        max_ply=max_ply,
+    )
     if args.require_quiet:
         dataset = filter_quiet(dataset, batch_size=args.quiet_batch)
         print(f"Filtered to {len(dataset)} quiet positions")
@@ -525,7 +597,13 @@ def run_texel(args: argparse.Namespace) -> None:
     if args.best_out:
         args.best_out.parent.mkdir(parents=True, exist_ok=True)
         with args.best_out.open("w", encoding="utf-8") as fh:
-            yaml.safe_dump(merged, fh)
+            yaml.safe_dump(
+                {
+                    key: _coerce_like_template(DEFAULT_PARAMS.get(key), value)
+                    for key, value in merged.items()
+                },
+                fh,
+            )
         print(f"wrote best params to {args.best_out}")
 
     if args.metrics_out:

@@ -686,6 +686,13 @@ def determine_winner_label(
     def _normalize(name: str) -> str:
         return Path(str(name)).name.lower()
 
+    def _normalize_result_token(raw: str) -> str:
+        cleaned = raw.strip().lower()
+        if "(" in cleaned:
+            cleaned = cleaned.split("(", 1)[0]
+        cleaned = cleaned.replace("\u00bd", "1/2")
+        return cleaned.replace(" ", "")
+
     white_tokens = {_normalize(white_label), white_label.lower()}
     black_tokens = {_normalize(black_label), black_label.lower()}
 
@@ -707,15 +714,16 @@ def determine_winner_label(
                 return "unknown"
     if result_value:
         normalized_result = result_value.strip().lower()
-        if normalized_result in {"1-0", "1 - 0"}:
-            return white_label
-        if normalized_result in {"0-1", "0 - 1"}:
-            return black_label
-        if normalized_result in {"1/2-1/2", "1/2 - 1/2", "\u00bd-\u00bd"}:
-            return "draw"
         if normalized_result.startswith("draw"):
             return "draw"
-        if normalized_result == "*":
+        token = _normalize_result_token(normalized_result)
+        if token == "1-0":
+            return white_label
+        if token == "0-1":
+            return black_label
+        if token in {"1/2-1/2", "1/2-1/2"}:
+            return "draw"
+        if token == "*":
             return "unknown"
     return "unknown"
 

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Dict, List, MutableMapping
-import re
 
 __all__ = [
     "ParamSpec",
@@ -79,6 +79,7 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "quiescence_max_ply": 12,
         "quiescence_max_noisy_moves": 16,
         "quiescence_zero_gain_skip_index": 6,
+        "quiescence_max_quiet_checks": 6,
         "null_move_reduction": 3,
         "null_move_min_depth": 4,
     },
@@ -142,6 +143,7 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("search.quiescence_max_ply", 8, 16),
         ParamSpec("search.quiescence_max_noisy_moves", 12, 30),
         ParamSpec("search.quiescence_zero_gain_skip_index", 0, 6),
+        ParamSpec("search.quiescence_max_quiet_checks", 0, 12),
         ParamSpec("search.null_move_reduction", 2, 5),
         ParamSpec("search.null_move_min_depth", 4, 9),
     ]
@@ -149,8 +151,6 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
     if include_arrays:
         for idx in range(len(DEFAULT_PARAMS["evaluation"]["king_attack_weights"])):
             specs.append(ParamSpec(f"evaluation.king_attack_weights[{idx}]", 0, 120))
-        for idx in range(len(DEFAULT_PARAMS["evaluation"]["threat_base"])):
-            specs.append(ParamSpec(f"evaluation.threat_base[{idx}]", 0, 300))
         specs.extend(_phase_weight_specs())
 
     return specs

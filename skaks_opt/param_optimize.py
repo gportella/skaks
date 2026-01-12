@@ -14,7 +14,13 @@ def _configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
 def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     parser = subparsers.add_parser(
         "param-optimize",
-        help="Run parameter optimizer loop against a baseline or external opponent",
+        help="Arena-based self-play optimizer (baseline vs candidate)",
+        description=(
+            "Perturb-and-test loop that reuses the arena batch runner, plays matches "
+            "against a baseline, and keeps the best YAML snapshot. Favor the "
+            "`selfplay` subcommand for the beam/CMA pipeline, but keep this around "
+            "for lightweight local experiments or external-opponent runs."
+        ),
     )
     return _configure_parser(parser)
 

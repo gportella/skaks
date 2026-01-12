@@ -12,20 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-from skaks_opt.arena import (
-    _configure_parser as _configure_arena_parser,
-    _normalize_args,
-)
+from skaks_opt.arena import _configure_parser as _configure_arena_parser
+from skaks_opt.arena import _normalize_args
 
 try:  # Optional rich progress support
     from rich.console import Console
-    from rich.progress import (
-        BarColumn,
-        Progress,
-        TextColumn,
-        TimeElapsedColumn,
-        TimeRemainingColumn,
-    )
+    from rich.progress import (BarColumn, Progress, TextColumn,
+                               TimeElapsedColumn, TimeRemainingColumn)
 
     HAS_RICH = True
 except Exception:  # pragma: no cover - rich is optional
@@ -493,6 +486,12 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
     parser = subparsers.add_parser(
         "arena-sweep",
         help="Evaluate parameter files via arena matches and keep the best",
+        description=(
+            "Batch runner that points the `arena` subcommand at every YAML candidate "
+            "(files, directories, or globs), aggregates their match summaries, and "
+            "copies out the strongest performer. Use this when you already have "
+            "params to compare rather than when you need to generate new ones."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     _configure_arena_parser(parser)

@@ -37,6 +37,8 @@ CSV_FIELDS = (
     "fen",
     "side_to_move",
     "stockfish_cp",
+    "qsearch_cp",
+    "qsearch_delta",
     "result",
     "outcome",
     "winner",
@@ -50,6 +52,11 @@ def add_subparser(
     parser = subparsers.add_parser(
         "dataset-sample",
         help="Sample PGNs, annotate with Stockfish, and write Texel-ready CSV shards",
+        description=(
+            "Walk PGN files/directories, sample plies with optional quiet filtering, "
+            "evaluate each position with Stockfish, and emit shardable CSVs that feed "
+            "Texel or supervised fitting."
+        ),
     )
     parser.add_argument(
         "--inputs",
@@ -82,6 +89,14 @@ def add_subparser(
         "--nodes",
         type=int,
         help="Node budget per position (optional)",
+    )
+    parser.add_argument(
+        "--qsearch-depth",
+        type=int,
+        default=-1,
+        help=(
+            "If >=0, run a second Stockfish eval at this depth (0 = quiescence) to log a quietness delta"
+        ),
     )
     parser.add_argument(
         "--stockfish-threads",
@@ -184,6 +199,8 @@ def run_dataset(args: argparse.Namespace) -> None:
     option_map = _parse_options(args.stockfish_option)
     print(f"[dataset] sampling {len(inputs)} PGNs -> {output_dir}")
     total_written = 0
+    qsearch_limit = _build_qsearch_limit(args.qsearch_depth)
+
     with chess.engine.SimpleEngine.popen_uci(str(Path(args.stockfish))) as engine:
         _configure_engine(engine, args.stockfish_threads, option_map)
         for pgn_path in inputs:
@@ -212,6 +229,7 @@ def run_dataset(args: argparse.Namespace) -> None:
                     engine=engine,
                     samples=chunk,
                     limit=limit,
+                    qsearch_limit=qsearch_limit,
                     pov=args.pov,
                     cp_cap=args.cp_cap,
                     source=pgn_path.name,
@@ -269,6 +287,12 @@ def _build_limit(args: argparse.Namespace) -> chess.engine.Limit:
     if not kwargs:
         raise SystemExit("Provide at least one of --depth/--movetime/--nodes")
     return chess.engine.Limit(**kwargs)
+
+
+def _build_qsearch_limit(depth: int | None) -> Optional[chess.engine.Limit]:
+    if depth is None or depth < 0:
+        return None
+    return chess.engine.Limit(depth=int(depth))
 
 
 def _parse_options(raw: Sequence[str]) -> dict[str, object]:
@@ -404,6 +428,7 @@ def _evaluate_chunk(
     engine: chess.engine.SimpleEngine,
     samples: Sequence[Sample],
     limit: chess.engine.Limit,
+    qsearch_limit: Optional[chess.engine.Limit],
     pov: str,
     cp_cap: Optional[float],
     source: str,
@@ -432,6 +457,27 @@ def _evaluate_chunk(
         cp_val = float(cp)
         if cp_cap is not None:
             cp_val = max(-cp_cap, min(cp_cap, cp_val))
+
+        q_cp_val: Optional[float] = None
+        q_delta: Optional[float] = None
+        if qsearch_limit is not None:
+            try:
+                q_info = engine.analyse(board, limit=qsearch_limit)
+            except chess.engine.EngineTerminatedError:
+                raise
+            except chess.engine.EngineError:
+                q_info = None
+            if q_info:
+                q_score = q_info.get("score")
+                if q_score is not None:
+                    q_cp = q_score.white().score(mate_score=100000)
+                    if q_cp is not None:
+                        if pov == "side" and not sample.white_to_move:
+                            q_cp = -q_cp
+                        q_cp_val = float(q_cp)
+                        if cp_cap is not None:
+                            q_cp_val = max(-cp_cap, min(cp_cap, q_cp_val))
+                        q_delta = cp_val - q_cp_val
         row = {
             "source": source,
             "game_index": sample.game_index,
@@ -439,6 +485,8 @@ def _evaluate_chunk(
             "fen": sample.fen,
             "side_to_move": "w" if sample.white_to_move else "b",
             "stockfish_cp": cp_val,
+            "qsearch_cp": q_cp_val if q_cp_val is not None else "",
+            "qsearch_delta": q_delta if q_delta is not None else "",
             "result": sample.result,
             "outcome": sample.outcome if sample.outcome is not None else "",
             "winner": sample.winner or "",
