@@ -559,6 +559,20 @@ def aggregate_two_sided(
     draws = summary1.get("draw", 0) + summary2.get("draw", 0)
     return wins, losses, draws
 
+
+def _stats_from_meta(meta: Dict[str, Any], confidence: float) -> Dict[str, Any]:
+    wins = int(meta.get("wins", 0))
+    losses = int(meta.get("losses", 0))
+    draws = int(meta.get("draws", 0))
+    stats = summarize_wld(wins, losses, draws, confidence=confidence)
+    if "score_ci_low" in meta:
+        stats["ci_low"] = float(meta.get("score_ci_low", stats["ci_low"]))
+    if "score_ci_high" in meta:
+        stats["ci_high"] = float(meta.get("score_ci_high", stats["ci_high"]))
+    stats["confidence"] = float(meta.get("score_confidence", stats["confidence"]))
+    stats["score"] = float(meta.get("score", stats["score"]))
+    return stats
+
 def _run_arena_shard(
     payload: Tuple[
         List[str],
@@ -1058,25 +1072,14 @@ def optimize_loop(args: argparse.Namespace) -> None:
             import json as _json
 
             meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-            disk_score = float(meta.get("score", best_score))
-            best_ci_low = float(meta.get("score_ci_low", best_ci_low))
-            best_ci_high = float(meta.get("score_ci_high", best_ci_high))
-            best_stats.update(
-                {
-                    "wins": int(meta.get("wins", best_stats.get("wins", 0))),
-                    "losses": int(meta.get("losses", best_stats.get("losses", 0))),
-                    "draws": int(meta.get("draws", best_stats.get("draws", 0))),
-                    "games": int(meta.get("games", best_stats.get("games", 0))),
-                    "ci_low": best_ci_low,
-                    "ci_high": best_ci_high,
-                    "confidence": float(
-                        meta.get("score_confidence", best_stats.get("confidence", 0.0))
-                    ),
-                }
-            )
+            disk_stats = _stats_from_meta(meta, confidence_level)
+            disk_score = float(disk_stats.get("score", best_score))
             if disk_score > best_score:
                 # Replace in-memory best with on-disk superior result
                 best_score = disk_score
+                best_ci_low = float(disk_stats.get("ci_low", best_ci_low))
+                best_ci_high = float(disk_stats.get("ci_high", best_ci_high))
+                best_stats = dict(disk_stats)
                 try:
                     best_data = _load_params(best_path)
                 except Exception:
@@ -1283,12 +1286,13 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 sigma = args.cma_sigma if args.cma_sigma is not None else args.noise
                 sigma = max(1e-4, sigma)
 
+                template_data = json.loads(json.dumps(best_data))
                 for i in range(popsize):
                     vec = []
                     for val in mean_vec:
                         scale = sigma * max(abs(val), 1.0)
                         vec.append(val + random.gauss(0.0, scale))
-                    cand_data = _vector_to_params(base_data, paths, vec, is_int)
+                    cand_data = _vector_to_params(template_data, paths, vec, is_int)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1392,7 +1396,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     for idx, val in enumerate(vec_vals):
                         new_mean[idx] += weights[rank] * val
                 mean_vec = new_mean
-                best_data = _vector_to_params(base_data, paths, mean_vec, is_int)
+                best_data = _vector_to_params(template_data, paths, mean_vec, is_int)
                 beam = [(top_score, best_data)]
 
             # Only persist when the candidate is strictly better than the
@@ -1524,9 +1528,19 @@ def optimize_loop(args: argparse.Namespace) -> None:
 
         if meta_path.exists():
             meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-            disk_score = float(meta.get("score", best_score))
+            stats = _stats_from_meta(meta, confidence_level)
+            disk_score = float(stats.get("score", best_score))
+            ci_low = float(stats.get("ci_low", disk_score))
+            ci_high = float(stats.get("ci_high", disk_score))
+            wins = int(stats.get("wins", 0))
+            losses = int(stats.get("losses", 0))
+            draws = int(stats.get("draws", 0))
+            games = int(stats.get("games", wins + losses + draws))
+            conf_pct = float(stats.get("confidence", confidence_level) * 100.0)
             _final_line(
-                f"{_color('🏁', 'bright_white')} Best score={disk_score:.3f}, params at {best_path}"
+                f"{_color('🏁', 'bright_white')} Best score={disk_score:.3f} "
+                f"(CI {ci_low:.3f}-{ci_high:.3f} @ {conf_pct:.1f}%), "
+                f"W/L/D={wins}/{losses}/{draws} games={games}, params at {best_path}"
             )
         else:
             _final_line(
@@ -1557,7 +1571,10 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
     parser.add_argument("--baseline-params", help="YAML params for baseline (opponent)")
     parser.add_argument(
         "--start-params",
-        help="Initial YAML params for candidate (defaults to baseline)",
+        help=(
+            "Initial YAML params for candidate (defaults to baseline). "
+            "If --output already exists (with its .best.json), that saved best is loaded instead."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -1759,7 +1776,12 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = configure_parser(
         argparse.ArgumentParser(
-            description="Self-play parameter optimizer (beam + repeats)"
+            description=(
+                "Self-play parameter optimizer (beam or CMA). "
+                "If --output already exists, the saved best params/metadata"
+                " are loaded so runs resume from the previous best instead"
+                " of the --start-params file."
+            )
         )
     )
     return parser.parse_args(argv)

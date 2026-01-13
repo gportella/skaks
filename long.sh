@@ -46,6 +46,11 @@ REF_REPEATS=${REF_REPEATS:-3}
 REF_DEPTH=${REF_DEPTH:-5}
 REF_NOISE=${REF_NOISE:-0.02}
 
+# Search strategy controls (beam or cma)
+STRATEGY=${STRATEGY:-beam}
+CMA_POPSIZE=${CMA_POPSIZE:-}
+CMA_SIGMA=${CMA_SIGMA:-}
+
 # Relaxation: per-iteration baseline decay to make acceptance gradual
 # Small positive value makes it easier to replace a stubborn best.
 BASELINE_DECAY=${BASELINE_DECAY:-0.05}
@@ -73,12 +78,10 @@ phase_uses_weights_only() {
 }
 
 # Helpers
-# Use a portable ISO-8601 timestamp compatible with macOS/BSD `date`
 timestamp() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 log() { echo "[$(timestamp)] $*" | tee -a "$LOG_DIR/self_play_long.log"; }
 
 # Build common flags
-# Common flags (kept as plain strings; we'll construct the command string later)
 COMMON_FLAGS="--engine '$ENGINE' --baseline-params '$BASELINE_PARAMS' --start-params '$START_PARAMS' --opponent '$OPPONENT'"
 ARENA_FLAGS=""
 # Only enable arena binding when running internal self-play; skip for external opponent runs.
@@ -120,7 +123,18 @@ run_phase() {
   shift
 
   for i in $(seq 1 $iterations); do
-    log "Phase=$phase_name iter=$i/$iterations games=$games repeats=$repeats depth=$depth beam=$beam noise=$noise"
+    local strategy_desc="strategy=${STRATEGY} noise=$noise"
+    if [ "$STRATEGY" = "beam" ]; then
+      strategy_desc+=" beam-size=$beam"
+    elif [ "$STRATEGY" = "cma" ]; then
+      if [ -n "${CMA_POPSIZE:-}" ]; then
+        strategy_desc+=" popsize=${CMA_POPSIZE}"
+      fi
+      if [ -n "${CMA_SIGMA:-}" ]; then
+        strategy_desc+=" sigma=${CMA_SIGMA}"
+      fi
+    fi
+    log "Phase=$phase_name iter=$i/$iterations games=$games repeats=$repeats depth=$depth $strategy_desc"
     # Build command string (use eval to allow ARENA_FLAGS expansion)
     # If running against an external opponent, pass opponent depth factor so
     # the opponent runs at ~60% of the candidate depth (handicap-like).
@@ -141,12 +155,30 @@ run_phase() {
     if [ "${OPPONENT:-}" != "${ENGINE}" ] && [ -n "${OPPONENT:-}" ]; then
       EXTERNAL_FLAG=" --external-opponent"
     fi
+    STRATEGY_FLAGS=" --strategy ${STRATEGY} --noise '$noise'"
+    case "$STRATEGY" in
+      cma)
+        if [ -n "${CMA_POPSIZE:-}" ]; then
+          STRATEGY_FLAGS+=" --cma-popsize '${CMA_POPSIZE}'"
+        fi
+        if [ -n "${CMA_SIGMA:-}" ]; then
+          STRATEGY_FLAGS+=" --cma-sigma '${CMA_SIGMA}'"
+        fi
+        ;;
+      beam)
+        STRATEGY_FLAGS+=" --beam-size '$beam'"
+        ;;
+      *)
+        log "Unknown STRATEGY=${STRATEGY}; defaulting to beam"
+        STRATEGY_FLAGS+=" --beam-size '$beam'"
+        ;;
+    esac
     if [ -n "$INCLUDE_FLAGS" ]; then
-      log "Running weights-only optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY})"
+      log "Running weights-only optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=${STRATEGY})"
     else
-      log "Running full-parameter optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY})"
+      log "Running full-parameter optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=${STRATEGY})"
     fi
-    CMD="skaks-opt param-optimize ${EXTERNAL_FLAG} $COMMON_FLAGS --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --beam-size '$beam' --noise '$noise' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS}${CONFIDENCE_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
+    CMD="skaks-opt param-optimize ${EXTERNAL_FLAG} $COMMON_FLAGS --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS}${CONFIDENCE_FLAGS}${STRATEGY_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
     eval "$CMD" 2>&1 | tee -a "$LOG_DIR/${phase_name}_iter_${i}.log"
 
     # estimate games played this iteration

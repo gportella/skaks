@@ -16,10 +16,10 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         "param-optimize",
         help="Arena-based self-play optimizer (baseline vs candidate)",
         description=(
-            "Perturb-and-test loop that reuses the arena batch runner, plays matches "
-            "against a baseline, and keeps the best YAML snapshot. Favor the "
-            "`selfplay` subcommand for the beam/CMA pipeline, but keep this around "
-            "for lightweight local experiments or external-opponent runs."
+            "Perturb-and-test loop with beam/CMA search, arena binding, and confidence "
+            "guards. This is the primary tuning entry point; rerunning with an existing "
+            "--output resumes from the saved best YAML/.best.json snapshot, so self-play "
+            "runs can be chained without resetting to the original --start-params. GPC"
         ),
     )
     return _configure_parser(parser)
