@@ -23,7 +23,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from skaks_opt import arena_runner
 from skaks_opt.dask_support import dask_client_from_args
-from skaks_opt.params import DEFAULT_PARAMS
+from skaks_opt.params import DEFAULT_PARAMS, param_set_prefixes
+from skaks_opt.pst import apply_pst_symmetry
 from skaks_opt.stats import score_to_elo, summarize_wld
 
 try:
@@ -150,7 +151,9 @@ def _save_params(data: Dict[str, Any], path: Path) -> None:
     snapshot = json.loads(json.dumps(data))
     coerced = _coerce_numeric_types(DEFAULT_PARAMS, snapshot)
     with path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(coerced, f, sort_keys=True)
+        from skaks_opt.yaml_utils import dump_yaml
+
+        dump_yaml(coerced, f, sort_keys=True)
 
 
 def _collect_numeric_leaves(
@@ -311,6 +314,9 @@ def _prepare_arena_params(
         Dict[str, Any],
         _coerce_params_for_arena(cand_params, *templates),
     )
+    if coerced_base is not None:
+        apply_pst_symmetry(coerced_base)
+    apply_pst_symmetry(coerced_cand)
     return coerced_base, coerced_cand
 
 
@@ -357,6 +363,10 @@ def run_batch(
     depth: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
+    increment: Optional[float],
+    opponent_clock: Optional[float],
+    opponent_increment: Optional[float],
+    moves_to_go: Optional[int],
     opponent_time_per_move: Optional[float] = None,
     opponent_depth_factor: Optional[float] = None,
     concurrency: int,
@@ -397,8 +407,18 @@ def run_batch(
         argv.extend(["--time-per-move", str(time_per_move)])
     elif clock is not None:
         argv.extend(["--clock", str(clock)])
+    if increment is not None:
+        argv.extend(["--increment", str(increment)])
+    if opponent_clock is not None:
+        argv.extend(["--opponent-clock", str(opponent_clock)])
+    if opponent_increment is not None:
+        argv.extend(["--opponent-increment", str(opponent_increment)])
+    if moves_to_go is not None:
+        argv.extend(["--moves-to-go", str(moves_to_go)])
     if not quiet:
         argv.append("--verbose")
+    else:
+        argv.append("--quiet")
     if disable_elo_store:
         argv.append("--no-elo-store")
 
@@ -438,6 +458,10 @@ def _run_external_shard(
     depth: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
+    increment: Optional[float],
+    opponent_clock: Optional[float],
+    opponent_increment: Optional[float],
+    moves_to_go: Optional[int],
     opponent_time_per_move: Optional[float],
     opponent_depth_factor: Optional[float],
     concurrency: int,
@@ -461,6 +485,10 @@ def _run_external_shard(
             depth=depth,
             time_per_move=time_per_move,
             clock=clock,
+            increment=increment,
+            opponent_clock=opponent_clock,
+            opponent_increment=opponent_increment,
+            moves_to_go=moves_to_go,
             opponent_time_per_move=opponent_time_per_move,
             opponent_depth_factor=opponent_depth_factor,
             concurrency=concurrency,
@@ -628,6 +656,10 @@ def evaluate_candidate(
     depth: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
+    increment: Optional[float],
+    opponent_clock: Optional[float],
+    opponent_increment: Optional[float],
+    moves_to_go: Optional[int],
     concurrency: int,
     base_label: str,
     cand_label: str,
@@ -775,6 +807,10 @@ def evaluate_candidate(
                             depth=depth,
                             time_per_move=time_per_move,
                             clock=clock,
+                            increment=increment,
+                            opponent_clock=opponent_clock,
+                            opponent_increment=opponent_increment,
+                            moves_to_go=moves_to_go,
                             opponent_time_per_move=opponent_time_per_move,
                             opponent_depth_factor=opponent_depth_factor,
                             concurrency=shard_concurrency,
@@ -807,6 +843,10 @@ def evaluate_candidate(
                     depth=depth,
                     time_per_move=time_per_move,
                     clock=clock,
+                    increment=increment,
+                    opponent_clock=opponent_clock,
+                    opponent_increment=opponent_increment,
+                    moves_to_go=moves_to_go,
                     opponent_time_per_move=opponent_time_per_move,
                     opponent_depth_factor=opponent_depth_factor,
                     concurrency=concurrency,
@@ -826,6 +866,10 @@ def evaluate_candidate(
                 depth=depth,
                 time_per_move=time_per_move,
                 clock=clock,
+                increment=increment,
+                opponent_clock=opponent_clock,
+                opponent_increment=opponent_increment,
+                moves_to_go=moves_to_go,
                 concurrency=concurrency,
                 opponent_depth_factor=None,
                 quiet=quiet,
@@ -841,6 +885,10 @@ def evaluate_candidate(
                 depth=depth,
                 time_per_move=time_per_move,
                 clock=clock,
+                increment=increment,
+                opponent_clock=opponent_clock,
+                opponent_increment=opponent_increment,
+                moves_to_go=moves_to_go,
                 concurrency=concurrency,
                 opponent_depth_factor=None,
                 quiet=quiet,
@@ -998,6 +1046,10 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 depth=args.depth,
                 time_per_move=args.time_per_move,
                 clock=args.clock,
+                increment=args.increment,
+                opponent_clock=args.opponent_clock,
+                opponent_increment=args.opponent_increment,
+                moves_to_go=args.moves_to_go,
                 concurrency=args.concurrency,
                 base_label="skaks",
                 cand_label=args.opponent,
@@ -1047,11 +1099,19 @@ def optimize_loop(args: argparse.Namespace) -> None:
         args.phase_weights_only = True
 
     include_prefixes = args.include_prefix
+    exclude_prefixes = list(args.exclude_prefix) if args.exclude_prefix else []
     if getattr(args, "phase_weights_only", False):
         include_prefixes = [
             "evaluation.phase_weights_mg",
             "evaluation.phase_weights_eg",
         ]
+    elif getattr(args, "param_set", None):
+        if args.param_set != "full":
+            include_prefixes = param_set_prefixes(args.param_set)
+        else:
+            include_prefixes = include_prefixes or param_set_prefixes("full")
+    if getattr(args, "skip_pst", False):
+        exclude_prefixes.append("evaluation.pst_")
 
     if args.output:
         best_path = Path(args.output).resolve()
@@ -1171,7 +1231,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         parent,
                         args.noise,
                         include_prefixes=include_prefixes,
-                        exclude_prefixes=args.exclude_prefix,
+                        exclude_prefixes=exclude_prefixes,
                     )
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
@@ -1222,6 +1282,10 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             depth=args.depth,
                             time_per_move=args.time_per_move,
                             clock=args.clock,
+                            increment=args.increment,
+                            opponent_clock=args.opponent_clock,
+                            opponent_increment=args.opponent_increment,
+                            moves_to_go=args.moves_to_go,
                             concurrency=args.concurrency,
                             arena_workers=args.arena_workers,
                             base_label="base",
@@ -1271,7 +1335,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 paths, mean_vec, is_int = _flatten_params(
                     best_data,
                     include_prefixes=include_prefixes,
-                    exclude_prefixes=args.exclude_prefix,
+                    exclude_prefixes=exclude_prefixes,
                 )
                 popsize = (
                     args.cma_popsize
@@ -1340,6 +1404,10 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             depth=args.depth,
                             time_per_move=args.time_per_move,
                             clock=args.clock,
+                            increment=args.increment,
+                            opponent_clock=args.opponent_clock,
+                            opponent_increment=args.opponent_increment,
+                            moves_to_go=args.moves_to_go,
                             concurrency=args.concurrency,
                             arena_workers=args.arena_workers,
                             base_label="base",
@@ -1389,7 +1457,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     vec_paths, vec_vals, _ = _flatten_params(
                         candidates[rank][1],
                         include_prefixes=include_prefixes,
-                        exclude_prefixes=args.exclude_prefix,
+                        exclude_prefixes=exclude_prefixes,
                     )
                     if vec_paths != paths:
                         continue
@@ -1615,7 +1683,23 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
     parser.add_argument("--time-per-move", type=float, help="Seconds per move")
     parser.add_argument("--clock", type=float, help="Clock time seconds")
     parser.add_argument(
+        "--increment", type=float, help="Increment seconds (requires --clock)"
+    )
+    parser.add_argument(
         "--opponent-time-per-move", type=float, help="Opponent seconds per move"
+    )
+    parser.add_argument(
+        "--opponent-clock", type=float, help="Opponent clock time seconds"
+    )
+    parser.add_argument(
+        "--opponent-increment",
+        type=float,
+        help="Opponent increment seconds (requires --opponent-clock)",
+    )
+    parser.add_argument(
+        "--moves-to-go",
+        type=int,
+        help="Approximate moves remaining to next time control",
     )
     parser.add_argument(
         "--opponent-depth-factor",
@@ -1659,6 +1743,21 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         "--weights-only",
         action="store_true",
         help="Alias for --phase-weights-only (tune only phase weight arrays)",
+    )
+    parser.add_argument(
+        "--param-set",
+        choices=["full", "phase", "offense", "defense", "pst"],
+        default="full",
+        help=(
+            "Select parameter subset to optimize: full (all evaluation params), "
+            "phase (phase weights only), offense/defense (subset of eval terms), "
+            "pst (piece-square tables only)"
+        ),
+    )
+    parser.add_argument(
+        "--skip-pst",
+        action="store_true",
+        help="Exclude PST tables from optimization",
     )
     parser.add_argument(
         "--strategy",

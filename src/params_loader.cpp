@@ -3,6 +3,8 @@
 #include "chess/evaluation_params.hpp"
 #include "chess/search_params.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <sstream>
 #include <string>
@@ -156,6 +158,120 @@ bool parse_float_array(const YAML::Node& node, const char* key, ArrayT& target,
   return true;
 }
 
+bool parse_pst_plane(const YAML::Node& node, chess::Pst& target,
+                     std::string& error) {
+  if (!node.IsSequence()) {
+    std::ostringstream oss;
+    oss << "Expected sequence for PST plane";
+    error = oss.str();
+    return false;
+  }
+  if (node.size() == target.size()) {
+    for (std::size_t i = 0; i < target.size(); ++i) {
+      if (!node[i].IsScalar()) {
+        std::ostringstream oss;
+        oss << "Non-scalar PST entry at index " << i;
+        error = oss.str();
+        return false;
+      }
+      try {
+        target[i] = node[i].as<int>();
+      } catch (const YAML::BadConversion& ex) {
+        std::ostringstream oss;
+        oss << "Invalid PST integer at index " << i << ": " << ex.what();
+        error = oss.str();
+        return false;
+      }
+    }
+    return true;
+  }
+  if (node.size() == 8) {
+    std::size_t idx = 0;
+    for (std::size_t row = 0; row < 8; ++row) {
+      const auto row_node = node[row];
+      if (!row_node.IsSequence() || row_node.size() != 8) {
+        std::ostringstream oss;
+        oss << "Expected 8 columns for PST row " << row;
+        error = oss.str();
+        return false;
+      }
+      for (std::size_t col = 0; col < 8; ++col) {
+        if (!row_node[col].IsScalar()) {
+          std::ostringstream oss;
+          oss << "Non-scalar PST entry at row " << row << " col " << col;
+          error = oss.str();
+          return false;
+        }
+        try {
+          target[idx++] = row_node[col].as<int>();
+        } catch (const YAML::BadConversion& ex) {
+          std::ostringstream oss;
+          oss << "Invalid PST integer at row " << row << " col " << col << ": "
+              << ex.what();
+          error = oss.str();
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  error = "PST plane must have 64 entries or an 8x8 grid";
+  return false;
+}
+
+bool parse_pst_tables(const YAML::Node& node, const char* key,
+                      std::array<chess::Pst, 6>& target, std::string& error) {
+  const auto child = node[key];
+  if (!child) {
+    return true;
+  }
+
+  constexpr std::array<const char*, 6> kPieceKeys = {"pawn", "knight", "bishop",
+                                                     "rook", "queen",  "king"};
+
+  auto parse_sequence = [&](const YAML::Node& seq) -> bool {
+    if (!seq.IsSequence() || seq.size() != target.size()) {
+      std::ostringstream oss;
+      oss << "Expected sequence of " << target.size() << " PST planes for '"
+          << key << "'";
+      error = oss.str();
+      return false;
+    }
+    for (std::size_t i = 0; i < target.size(); ++i) {
+      if (!parse_pst_plane(seq[i], target[i], error)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  if (child.IsSequence()) {
+    return parse_sequence(child);
+  }
+
+  if (child.IsMap()) {
+    for (std::size_t i = 0; i < kPieceKeys.size(); ++i) {
+      const auto entry = child[kPieceKeys[i]];
+      if (!entry) {
+        std::ostringstream oss;
+        oss << "Missing PST entries for '" << key << "' piece '" << kPieceKeys[i]
+            << "'";
+        error = oss.str();
+        return false;
+      }
+      if (!parse_pst_plane(entry, target[i], error)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  std::ostringstream oss;
+  oss << "Expected sequence or map for '" << key << "'";
+  error = oss.str();
+  return false;
+}
+
 bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval,
                       std::string& error) {
   auto parse_field = [&](const char* key, int& dest) -> bool {
@@ -234,10 +350,6 @@ bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval
   if (!parse_field("backward_pawn_penalty", eval.backward_pawn_penalty))
     return false;
 
-  if (!parse_double(eval_node, "eval_bias", eval.eval_bias, error))
-    return false;
-  if (!parse_double(eval_node, "eval_slope", eval.eval_slope, error))
-    return false;
   if (!parse_double(eval_node, "eval_quiet_cap", eval.eval_quiet_cap, error))
     return false;
 
@@ -252,6 +364,16 @@ bool parse_evaluation(const YAML::Node& eval_node, chess::EvaluationParams& eval
     return false;
   if (!parse_float_array(eval_node, "phase_weights_eg", eval.phase_weights_eg,
                          error))
+    return false;
+  for (auto& v : eval.phase_weights_mg) {
+    v = std::clamp(v, -1.0f, 1.0f);
+  }
+  for (auto& v : eval.phase_weights_eg) {
+    v = std::clamp(v, -1.0f, 1.0f);
+  }
+  if (!parse_pst_tables(eval_node, "pst_midgame", eval.pst_midgame, error))
+    return false;
+  if (!parse_pst_tables(eval_node, "pst_endgame", eval.pst_endgame, error))
     return false;
 
   if (!parse_pin_penalty(eval_node, "bishop_pin_penalty",

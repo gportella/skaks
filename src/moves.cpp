@@ -395,6 +395,9 @@ Undo make_move(Board& b, const Move& m) {
   undo.pst_endgame_score_before = b.pst_endgame_score;
   undo.phase_before = b.phase;
 
+  const auto& mg_tables = midgame_pst();
+  const auto& eg_tables = endgame_pst();
+
   auto update_score = [&](OccupancyType pc, int sq, bool add) {
     int sign = add ? 1 : -1;
     b.material_score += sign * piece_material_value(pc);
@@ -403,10 +406,10 @@ Undo make_move(Board& b, const Move& m) {
     const int type_index = (static_cast<int>(pc) - 1) % 6;
     const int oriented_sq = white_piece ? sq : mirror_rank(sq);
 
-    const int mg = kMidgamePst[static_cast<std::size_t>(type_index)]
-                              [static_cast<std::size_t>(oriented_sq)];
-    const int eg = kEndgamePst[static_cast<std::size_t>(type_index)]
-                              [static_cast<std::size_t>(oriented_sq)];
+    const int mg = mg_tables[static_cast<std::size_t>(type_index)]
+                            [static_cast<std::size_t>(oriented_sq)];
+    const int eg = eg_tables[static_cast<std::size_t>(type_index)]
+                            [static_cast<std::size_t>(oriented_sq)];
 
     b.pst_midgame_score += sign * (white_piece ? mg : -mg);
     b.pst_endgame_score += sign * (white_piece ? eg : -eg);

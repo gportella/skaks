@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Mapping
+
 import numpy as np
 
 from .data import Dataset
 from .params import DEFAULT_PARAMS, apply_param_updates
+from .pst import apply_pst_symmetry
 
 __all__ = ["EvalResult", "evaluate_params"]
 
@@ -42,6 +44,7 @@ def evaluate_params(
         ) from exc
 
     params = apply_param_updates(DEFAULT_PARAMS, param_updates)
+    apply_pst_symmetry(params)
 
     total_weight = 0.0
     total_abs_err = 0.0

@@ -13,9 +13,8 @@ mkdir -p "$LOG_DIR"
 
 # Engine / params
 ENGINE=${ENGINE:-skaks}
-BASELINE_PARAMS=${BASELINE_PARAMS:-besty.yaml}
-START_PARAMS=${START_PARAMS:-besty.yaml}
-# OPPONENT=${OPPONENT:-stockfish}
+BASELINE_PARAMS=${BASELINE_PARAMS:-texel_ext_all.yaml}
+START_PARAMS=${START_PARAMS:-texel_ext_all.yaml}
 OPPONENT=${OPPONENT:-sunfish}
 OPPONENT_DEPTH_FACTOR=${OPPONENT_DEPTH_FACTOR:-0.30}
 
@@ -70,7 +69,7 @@ if [ "${OPPONENT:-}" = "${ENGINE}" ] || [ -z "${OPPONENT:-}" ]; then
   if python -c 'import importlib,sys
 sys.stdout.write("1" if importlib.util.find_spec("skaks_eval") else "0")' 2>/dev/null | grep -q 1; then
     log "Detected skaks_eval: enabling arena binding"
-    ARENA_FLAGS+=(--use-arena-binding --arena-pgn moves_pgn/LumbrasGigaBase_OTB_2025.pgn --arena-min-ply 8 --arena-max-ply 40 --arena-workers "$CONCURRENCY")
+    ARENA_FLAGS+=(--use-arena-binding   --arena-min-ply 8 --arena-max-ply 40 --arena-workers "$CONCURRENCY")
   else
     log "No skaks_eval detected: using batch runner mode"
   fi
@@ -111,7 +110,7 @@ run_phase() {
     # `evaluation.phase_weights_mg` and `evaluation.phase_weights_eg`.
     INCLUDE_FLAGS=" --weights-only"
     log "Running weights-only optimizer for phase=$phase_name (weights-only mode, baseline-decay=${BASELINE_DECAY})"
-    CMD="python -m skaks_opt.cli param-optimize --external-opponent $COMMON_FLAGS --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --beam-size '$beam' --noise '$noise' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
+    CMD="skaks-opt param-optimize --external-opponent $COMMON_FLAGS --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --beam-size '$beam' --noise '$noise' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
     eval "$CMD" 2>&1 | tee -a "$LOG_DIR/${phase_name}_iter_${i}.log"
 
     # estimate games played this iteration

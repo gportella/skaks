@@ -1078,13 +1078,13 @@ def _write_scaled_params(
     eval_section = payload.setdefault("evaluation", {})
     eval_section["phase_weights_mg"] = [float(round(val, 6)) for val in mg_weights]
     eval_section["phase_weights_eg"] = [float(round(val, 6)) for val in eg_weights]
-    eval_section["eval_bias"] = float(stats["intercept"])
-    eval_section["eval_slope"] = float(stats["slope"])
     eval_section["eval_quiet_cap"] = float(stats["quiet_cap"])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(payload, handle, sort_keys=False)
+        from skaks_opt.yaml_utils import dump_yaml
+
+        dump_yaml(payload, handle, sort_keys=False)
 
     return applied
 

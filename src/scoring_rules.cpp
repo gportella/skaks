@@ -1067,16 +1067,11 @@ int evaluate_board(const Board& board) {
     return 100000; // White wins
   }
 
-  // are we really applying params here??
   const auto v = compute_eval_vector(board);
   const int raw_linear = eval_linear(v, phase_weights());
-  // are we really applying params here??
   const auto& params = evaluation_params();
-  const double slope =
-      std::abs(params.eval_slope) < 1e-9 ? 1.0 : params.eval_slope;
-  const double bias = params.eval_bias;
   const double quiet_cap = std::max(1.0, params.eval_quiet_cap);
-  const double adjusted = bias + slope * static_cast<double>(raw_linear);
+  const double adjusted = static_cast<double>(raw_linear);
   const double compressed = quiet_cap * std::tanh(adjusted / quiet_cap);
   return static_cast<int>(std::lround(compressed));
 }

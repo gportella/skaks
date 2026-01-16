@@ -47,6 +47,73 @@ void assign_array_if_present(const py::dict& src, const char* key,
   }
 }
 
+constexpr std::array<const char*, 6> kPstPieceNames = {
+    "pawn", "knight", "bishop", "rook", "queen", "king"};
+
+chess::Pst pst_from_sequence(const py::handle& obj, const char* key) {
+  if (!py::isinstance<py::sequence>(obj) || py::isinstance<py::str>(obj)) {
+    throw std::invalid_argument(std::string(key) +
+                                " must be a sequence (64 or 8x8 entries)");
+  }
+  chess::Pst table{};
+  auto seq = py::cast<py::sequence>(obj);
+  if (seq.size() == static_cast<py::ssize_t>(table.size())) {
+    for (py::ssize_t i = 0; i < seq.size(); ++i) {
+      table[static_cast<std::size_t>(i)] = py::cast<int>(seq[i]);
+    }
+    return table;
+  }
+  if (seq.size() == 8) {
+    std::size_t idx = 0;
+    for (py::ssize_t row = 0; row < 8; ++row) {
+      auto row_seq = py::cast<py::sequence>(seq[row]);
+      if (row_seq.size() != 8) {
+        throw std::invalid_argument(std::string(key) +
+                                    " rows must have 8 entries");
+      }
+      for (py::ssize_t col = 0; col < 8; ++col) {
+        table[idx++] = py::cast<int>(row_seq[col]);
+      }
+    }
+    return table;
+  }
+  throw std::invalid_argument(std::string(key) +
+                              " must have 64 entries or an 8x8 grid");
+}
+
+void assign_pst_tables_if_present(const py::dict& src, const char* key,
+                                  std::array<chess::Pst, 6>& target) {
+  if (!src.contains(key)) {
+    return;
+  }
+  py::handle handle = src[key];
+  if (py::isinstance<py::dict>(handle)) {
+    auto table = py::cast<py::dict>(handle);
+    for (std::size_t i = 0; i < kPstPieceNames.size(); ++i) {
+      if (!table.contains(kPstPieceNames[i])) {
+        throw std::invalid_argument(std::string(key) + " missing piece '" +
+                                    kPstPieceNames[i] + "'");
+      }
+      target[i] = pst_from_sequence(table[kPstPieceNames[i]], kPstPieceNames[i]);
+    }
+    return;
+  }
+  if (py::isinstance<py::sequence>(handle) && !py::isinstance<py::str>(handle)) {
+    auto seq = py::cast<py::sequence>(handle);
+    if (seq.size() != static_cast<py::ssize_t>(target.size())) {
+      throw std::invalid_argument(std::string(key) +
+                                  " must contain 6 PST planes");
+    }
+    for (py::ssize_t i = 0; i < seq.size(); ++i) {
+      target[static_cast<std::size_t>(i)] = pst_from_sequence(
+          seq[i], (std::string(key) + "[" + std::to_string(i) + "]").c_str());
+    }
+    return;
+  }
+  throw std::invalid_argument(std::string(key) +
+                              " must be a dict or sequence of PST planes");
+}
+
 struct PinPair {
   int base;
   int mobility;
@@ -132,8 +199,6 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.evaluation.isolated_pawn_penalty);
     assign_if_present(ev, "backward_pawn_penalty",
                       params.evaluation.backward_pawn_penalty);
-    assign_if_present(ev, "eval_bias", params.evaluation.eval_bias);
-    assign_if_present(ev, "eval_slope", params.evaluation.eval_slope);
     assign_if_present(ev, "eval_quiet_cap", params.evaluation.eval_quiet_cap);
     assign_array_if_present(ev, "king_attack_weights",
                             params.evaluation.king_attack_weights);
@@ -142,6 +207,10 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                             params.evaluation.phase_weights_mg);
     assign_array_if_present(ev, "phase_weights_eg",
                             params.evaluation.phase_weights_eg);
+    assign_pst_tables_if_present(ev, "pst_midgame",
+                                 params.evaluation.pst_midgame);
+    assign_pst_tables_if_present(ev, "pst_endgame",
+                                 params.evaluation.pst_endgame);
     if (ev.contains("bishop_pin_penalty")) {
       auto pair = parse_pin_pair(ev["bishop_pin_penalty"], "bishop_pin_penalty");
       params.evaluation.bishop_pin_penalty.base = pair.base;

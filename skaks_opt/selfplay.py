@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-
-import os
-import sys
 import math
 import multiprocessing as mp
+import os
 import random
+import sys
 import time
 from contextlib import contextmanager
 from copy import deepcopy
@@ -16,6 +15,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import yaml
 
 from skaks_opt.params import DEFAULT_PARAMS
+from skaks_opt.pst import apply_pst_symmetry
 
 try:
     from rich.console import Console
@@ -139,8 +139,11 @@ def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, An
 
 def _normalize_params(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if payload is None:
-        return deepcopy(DEFAULT_PARAMS)
-    return _deep_merge(DEFAULT_PARAMS, payload)
+        merged = deepcopy(DEFAULT_PARAMS)
+    else:
+        merged = _deep_merge(DEFAULT_PARAMS, payload)
+    apply_pst_symmetry(merged)
+    return merged
 
 
 def _load_params(path: Path) -> Dict[str, Any]:
@@ -151,7 +154,9 @@ def _load_params(path: Path) -> Dict[str, Any]:
 def _save_params(data: Dict[str, Any], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
-        yaml.safe_dump(data, fh, sort_keys=True)
+        from skaks_opt.yaml_utils import dump_yaml
+
+        dump_yaml(data, fh, sort_keys=True)
 
 
 def _collect_numeric_leaves(

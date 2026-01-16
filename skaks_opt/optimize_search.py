@@ -1,13 +1,13 @@
 """Optimize search speed and node reduction parameters using Optuna."""
 
-import optuna
-import yaml
-import subprocess
-import re
-import tempfile
 import random
+import re
+import subprocess
+import tempfile
 from typing import List, Optional
 
+import optuna
+import yaml
 from rich.console import Console
 
 from skaks_opt.params import DEFAULT_PARAMS, default_param_space
@@ -15,7 +15,9 @@ from skaks_opt.params import DEFAULT_PARAMS, default_param_space
 
 def run_perf_with_params(params, depth, pgn, fens):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-        yaml.dump({"search": params}, f)
+        from skaks_opt.yaml_utils import dump_yaml
+
+        dump_yaml({"search": params}, f)
         param_path = f.name
     stats = {}
     if pgn and fens:
@@ -84,7 +86,9 @@ def _build_objective(
             key = spec.name.split(".", 1)[1]
             params[key] = val
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump({"search": params}, f)
+            from skaks_opt.yaml_utils import dump_yaml
+
+            dump_yaml({"search": params}, f)
             param_path = f.name
         try:
             if pgn_path:
@@ -190,7 +194,9 @@ def run_optimize_search(args) -> None:
     }
     output_path = args.output
     with open(output_path, "w", encoding="utf-8") as f:
-        yaml.dump({"search": search_params}, f)
+        from skaks_opt.yaml_utils import dump_yaml
+
+        dump_yaml({"search": search_params}, f)
     print(f"\nBest parameter set saved to: {output_path}")
     print("\n=== Optimized parameters stats ===")
     optimized_stats = run_perf_with_params(

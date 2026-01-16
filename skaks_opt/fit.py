@@ -414,9 +414,9 @@ def run_fit(args: argparse.Namespace) -> None:
     if args.best_out:
         args.best_out.parent.mkdir(parents=True, exist_ok=True)
         with args.best_out.open("w", encoding="utf-8") as fh:
-            import yaml
+            from skaks_opt.yaml_utils import dump_yaml
 
-            yaml.safe_dump(rounded, fh)
+            dump_yaml(rounded, fh)
         print(f"wrote best params to {args.best_out}")
 
     completed = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]

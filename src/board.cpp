@@ -51,6 +51,9 @@ void initialize_incremental_scores(Board& board) {
   board.pst_endgame_score = 0;
   board.phase = 0;
 
+  const auto& mg_tables = midgame_pst();
+  const auto& eg_tables = endgame_pst();
+
   for (int sq = 0; sq < 64; ++sq) {
     const auto piece = board.pieces[static_cast<std::size_t>(sq)];
     if (piece == OccupancyType::empty)
@@ -64,10 +67,10 @@ void initialize_incremental_scores(Board& board) {
     const int type_index = (static_cast<int>(piece) - 1) % 6;
     const int oriented_sq = white_piece ? sq : mirror_rank(sq);
 
-    const int mg_entry = kMidgamePst[static_cast<std::size_t>(type_index)]
-                                    [static_cast<std::size_t>(oriented_sq)];
-    const int eg_entry = kEndgamePst[static_cast<std::size_t>(type_index)]
-                                    [static_cast<std::size_t>(oriented_sq)];
+    const int mg_entry = mg_tables[static_cast<std::size_t>(type_index)]
+                                  [static_cast<std::size_t>(oriented_sq)];
+    const int eg_entry = eg_tables[static_cast<std::size_t>(type_index)]
+                                  [static_cast<std::size_t>(oriented_sq)];
 
     board.pst_midgame_score += white_piece ? mg_entry : -mg_entry;
     board.pst_endgame_score += white_piece ? eg_entry : -eg_entry;

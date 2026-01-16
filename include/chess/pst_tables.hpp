@@ -5,9 +5,9 @@
 #include <array>
 #include <cstdint>
 
-using Pst = std::array<int, 64u>;
-
 namespace chess {
+
+using Pst = std::array<int, 64u>;
 
 inline constexpr int mirror_rank(int sq) {
   return (sq ^ 56); // flip rank for black
@@ -189,6 +189,12 @@ inline constexpr std::array<Pst, 6> kEndgamePst = kEndgamePstPeSTO;
 
 inline constexpr std::array<int, 6> kPstPhaseWeights = {0, 1, 1, 2, 4, 0};
 inline constexpr int kPstPhaseMax = 24;
+
+const std::array<Pst, 6>& midgame_pst();
+const std::array<Pst, 6>& endgame_pst();
+void set_pst_tables(const std::array<Pst, 6>& midgame,
+                    const std::array<Pst, 6>& endgame);
+void reset_pst_tables();
 
 // clang-format on
 

@@ -3,14 +3,19 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Dict, List, MutableMapping
+from typing import Any, Dict, List, MutableMapping
+
+from skaks_opt.pst import (PIECE_ORDER, default_endgame_tables,
+                           default_midgame_tables)
 
 __all__ = [
     "ParamSpec",
     "DEFAULT_PARAMS",
     "default_param_space",
     "phase_weight_param_space",
+    "pst_param_space",
     "param_space_for_mode",
+    "param_set_prefixes",
     "apply_param_updates",
 ]
 
@@ -64,6 +69,7 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "backward_pawn_penalty": 10,
         "king_attack_weights": [14, 32, 30, 44, 74, 20, 14, 32, 30, 44, 74, 20],
         "threat_base": [0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540],
+        "eval_quiet_cap": 2200,
         "bishop_pin_penalty": {"base": 12, "mobility": 2},
         "rook_pin_penalty": {"base": 6, "mobility": 1},
         "knight_pin_penalty": {"base": 15, "mobility": 0},
@@ -71,6 +77,8 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "pawn_pin_diagonal_penalty": {"base": 10, "mobility": 2},
         "phase_weights_mg": [1.0] * 17,
         "phase_weights_eg": [1.0] * 17,
+        "pst_midgame": default_midgame_tables(),
+        "pst_endgame": default_endgame_tables(),
     },
     "search": {
         "aspiration_window_initial": 800,
@@ -125,6 +133,7 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("evaluation.doubled_pawn_penalty", 0, 32),
         ParamSpec("evaluation.isolated_pawn_penalty", 0, 40),
         ParamSpec("evaluation.backward_pawn_penalty", 0, 32),
+        ParamSpec("evaluation.eval_quiet_cap", 2200, 2500, step=5),
         # Pin penalties narrowed
         ParamSpec("evaluation.bishop_pin_penalty.base", 10, 28),
         ParamSpec("evaluation.bishop_pin_penalty.mobility", 0, 6),
@@ -162,8 +171,8 @@ def _phase_weight_specs() -> List[ParamSpec]:
         specs.append(
             ParamSpec(
                 f"evaluation.phase_weights_mg[{idx}]",
-                -3.0,
-                3.0,
+                -1.0,
+                1.0,
                 step=0.05,
                 is_float=True,
             )
@@ -172,8 +181,8 @@ def _phase_weight_specs() -> List[ParamSpec]:
         specs.append(
             ParamSpec(
                 f"evaluation.phase_weights_eg[{idx}]",
-                -3.0,
-                3.0,
+                -1.0,
+                1.0,
                 step=0.05,
                 is_float=True,
             )
@@ -181,10 +190,44 @@ def _phase_weight_specs() -> List[ParamSpec]:
     return specs
 
 
+def _clamp_phase_weights(eval_section: MutableMapping, low: float = -1.0, high: float = 1.0) -> None:
+    for key in ("phase_weights_mg", "phase_weights_eg"):
+        arr = eval_section.get(key)
+        if isinstance(arr, tuple):
+            arr = list(arr)
+        if isinstance(arr, list):
+            eval_section[key] = [
+                float(max(low, min(high, float(val))))
+                for val in arr
+            ]
+
+
 def phase_weight_param_space() -> List[ParamSpec]:
     """Only tune midgame/endgame phase weights."""
 
     return _phase_weight_specs()
+
+
+def _pst_param_specs(low: int = -200, high: int = 200) -> List[ParamSpec]:
+    specs: List[ParamSpec] = []
+    for block in ("pst_midgame", "pst_endgame"):
+        for piece in PIECE_ORDER:
+            for rank in range(8):
+                for file in range(8):
+                    specs.append(
+                        ParamSpec(
+                            f"evaluation.{block}.{piece}[{rank}][{file}]",
+                            low,
+                            high,
+                        )
+                    )
+    return specs
+
+
+def pst_param_space(low: int = -200, high: int = 200) -> List[ParamSpec]:
+    """Tune every entry of the PST tables."""
+
+    return _pst_param_specs(low=low, high=high)
 
 
 # Parameter subsets for narrower Texel searches
@@ -245,18 +288,27 @@ def _base_name(spec: ParamSpec) -> str:
 
 
 def param_space_for_mode(
-    mode: str = "full", include_arrays: bool = False
+    mode: str = "full", *, include_arrays: bool = False, include_pst: bool = True
 ) -> List[ParamSpec]:
     """Return a filtered parameter space.
 
-    mode: full | phase | offense | defense
+    mode: full | phase | offense | defense | pst
     include_arrays: include king_attack_weights/threat_base when available.
     """
 
+    if mode == "pst":
+        return pst_param_space()
     if mode == "phase":
         return phase_weight_param_space()
 
     specs = default_param_space(include_arrays=include_arrays)
+
+    if not include_pst:
+        specs = [
+            spec
+            for spec in specs
+            if not _base_name(spec).startswith("evaluation.pst_")
+        ]
 
     if mode == "full":
         return specs
@@ -270,7 +322,47 @@ def param_space_for_mode(
     return filtered
 
 
+def param_set_prefixes(mode: str = "full") -> List[str]:
+    """Return dotted-prefix filters for param-optimize param sets."""
+
+    if mode == "phase":
+        return ["evaluation.phase_weights_mg", "evaluation.phase_weights_eg"]
+    if mode == "pst":
+        return ["evaluation.pst_midgame", "evaluation.pst_endgame"]
+    if mode == "offense":
+        return sorted(_OFFENSE_KEYS)
+    if mode == "defense":
+        return sorted(_DEFENSE_KEYS)
+    # full defaults to all evaluation params (exclude search)
+    return ["evaluation."]
+
+
 _SEGMENT_RE = re.compile(r"^(?P<name>[a-zA-Z0-9_]+)(?:\[(?P<idx>\d+)\])?$")
+_LEAF_RE = re.compile(r"^(?P<name>[a-zA-Z0-9_]+)(?P<indices>(\[\d+\])*)$")
+
+
+def _parse_leaf_token(token: str) -> tuple[str, List[int]]:
+    m = _LEAF_RE.match(token)
+    if not m:
+        raise ValueError(f"bad key segment: {token}")
+    indices_str = m.group("indices") or ""
+    indices = [int(idx) for idx in re.findall(r"\[(\d+)\]", indices_str)]
+    return m.group("name"), indices
+
+
+def _assign_nested_list(container: Any, indices: List[int], value: int | float, name: str) -> None:
+    ref = container
+    for depth, idx in enumerate(indices):
+        if not isinstance(ref, list):
+            raise TypeError(f"array '{name}' is not indexable")
+        if idx >= len(ref):
+            raise IndexError(f"index {idx} out of bounds for '{name}'")
+        if depth == len(indices) - 1:
+            ref[idx] = value
+            return
+        if isinstance(ref[idx], tuple):
+            ref[idx] = list(ref[idx])
+        ref = ref[idx]
 
 
 def _set_nested(target: MutableMapping, dotted: str, value: int | float) -> None:
@@ -290,29 +382,17 @@ def _set_nested(target: MutableMapping, dotted: str, value: int | float) -> None
         cur = cur[name]
 
     leaf = parts[-1]
-    m = _SEGMENT_RE.match(leaf)
-    if not m:
-        raise ValueError(f"bad key segment: {leaf}")
-    name = m.group("name")
-    idx = m.group("idx")
+    name, indices = _parse_leaf_token(leaf)
 
-    if idx is None:
+    if not indices:
         cur[name] = value
         return
 
-    idx_int = int(idx)
     if name not in cur:
-        defaults = DEFAULT_PARAMS.get(section, {}) if isinstance(section, str) else {}
-        default_arr = defaults.get(name)
-        if isinstance(default_arr, list):
-            cur[name] = list(default_arr)
-        else:
-            raise ValueError(f"array {name} missing in base params")
-    arr = list(cur[name])
-    if idx_int >= len(arr):
-        raise IndexError(f"index {idx_int} out of bounds for {name}")
-    arr[idx_int] = value
-    cur[name] = arr
+        raise ValueError(f"array {name} missing in base params")
+    if isinstance(cur[name], tuple):
+        cur[name] = list(cur[name])
+    _assign_nested_list(cur[name], indices, value, name)
 
 
 def apply_param_updates(base: Dict, updates: MutableMapping[str, int | float]) -> Dict:
@@ -338,4 +418,5 @@ def apply_param_updates(base: Dict, updates: MutableMapping[str, int | float]) -
     }
     for key, val in updates.items():
         _set_nested(merged, key, val)
+    _clamp_phase_weights(merged["evaluation"])
     return merged

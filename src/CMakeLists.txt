@@ -15,6 +15,7 @@ add_library(chess_engine_core STATIC
   polyglot.cpp
   quiescence.cpp
   params_loader.cpp
+  pst_tables.cpp
   scoring_rules.cpp
   search.cpp
   time_manager.cpp

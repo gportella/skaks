@@ -426,6 +426,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Print stdout/stderr for every game (default: only failures)",
     )
     parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress per-game output (still writes summary JSON if requested)",
+    )
+    parser.add_argument(
         "--elo-start",
         type=float,
         default=DEFAULT_ELO_START,
@@ -892,15 +897,16 @@ def run_batch(args: argparse.Namespace) -> int:
         failures = 0
         completed = 0
 
-        print(
-            f"Running {len(indices)} games "
-            f"(depth={args.depth}, limit={args.limit}, concurrency={args.concurrency})"
-        )
-        if db_path is not None:
-            print(f"Database: {db_path}")
-        else:
-            print("Database: disabled (no SQLite persistence)")
-        sys.stdout.flush()
+        if not args.quiet:
+            print(
+                f"Running {len(indices)} games "
+                f"(depth={args.depth}, limit={args.limit}, concurrency={args.concurrency})"
+            )
+            if db_path is not None:
+                print(f"Database: {db_path}")
+            else:
+                print("Database: disabled (no SQLite persistence)")
+            sys.stdout.flush()
 
         executable = sys.executable
         command = ["-m", "skaks_opt.fight", *base_args]
@@ -960,34 +966,35 @@ def run_batch(args: argparse.Namespace) -> int:
                     duration_sec = match.duration_ms / 1000.0
                     display_result = parsed_result or "?"
                     display_winner = parsed_winner or winner_label
-                    print(
-                        f"[{completed}/{len(indices)}] {status:<4} "
-                        f"game={match.index} result={display_result:<7} "
-                        f"winner={display_winner:<10} time={duration_sec:6.2f}s"
-                    )
-                    if failed and not args.verbose:
-                        stdout_preview = match.stdout.strip().splitlines()
-                        stderr_preview = match.stderr.strip().splitlines()
-                        if stdout_preview:
-                            print("  stdout snippet:")
-                            for line in stdout_preview[:5]:
-                                print(f"    {line}")
-                            if len(stdout_preview) > 5:
-                                print("    ...")
-                        if stderr_preview:
-                            print("  stderr snippet:")
-                            for line in stderr_preview[:5]:
-                                print(f"    {line}")
-                            if len(stderr_preview) > 5:
-                                print("    ...")
-                    if args.verbose:
-                        if match.stdout.strip():
-                            print("--- stdout ---")
-                            print(match.stdout.rstrip())
-                        if match.stderr.strip():
-                            print("--- stderr ---")
-                            print(match.stderr.rstrip())
-                    sys.stdout.flush()
+                    if not args.quiet:
+                        print(
+                            f"[{completed}/{len(indices)}] {status:<4} "
+                            f"game={match.index} result={display_result:<7} "
+                            f"winner={display_winner:<10} time={duration_sec:6.2f}s"
+                        )
+                        if failed and not args.verbose:
+                            stdout_preview = match.stdout.strip().splitlines()
+                            stderr_preview = match.stderr.strip().splitlines()
+                            if stdout_preview:
+                                print("  stdout snippet:")
+                                for line in stdout_preview[:5]:
+                                    print(f"    {line}")
+                                if len(stdout_preview) > 5:
+                                    print("    ...")
+                            if stderr_preview:
+                                print("  stderr snippet:")
+                                for line in stderr_preview[:5]:
+                                    print(f"    {line}")
+                                if len(stderr_preview) > 5:
+                                    print("    ...")
+                        if args.verbose:
+                            if match.stdout.strip():
+                                print("--- stdout ---")
+                                print(match.stdout.rstrip())
+                            if match.stderr.strip():
+                                print("--- stderr ---")
+                                print(match.stderr.rstrip())
+                        sys.stdout.flush()
             except KeyboardInterrupt:
                 with suppress_interrupt_signals():
                     print(
@@ -1000,13 +1007,14 @@ def run_batch(args: argparse.Namespace) -> int:
                 return 130
         process_monitor.terminate_all(timeout=0.0)
 
-        print()
-        if db_path is not None:
-            print(f"Stored results in {db_path}")
-        else:
-            print("SQLite persistence disabled (no --database provided)")
-        print(f"Summary: {summarize_counts(summary, summary_labels)}")
-        print(f"Failures: {failures} / {len(indices)}")
+        if not args.quiet:
+            print()
+            if db_path is not None:
+                print(f"Stored results in {db_path}")
+            else:
+                print("SQLite persistence disabled (no --database provided)")
+            print(f"Summary: {summarize_counts(summary, summary_labels)}")
+            print(f"Failures: {failures} / {len(indices)}")
 
         wins = summary.get(white_label, 0)
         losses = summary.get(black_label, 0)
@@ -1019,21 +1027,22 @@ def run_batch(args: argparse.Namespace) -> int:
             draws=draws,
             k_factor=args.elo_k_factor,
         )
-        if elo.games > 0:
-            print(
-                "Elo: "
-                f"start={elo.rating_before:.1f}, "
-                f"opp={elo.opponent_rating:.1f}, "
-                f"score={elo.actual_score:.1f}/{elo.games}, "
-                f"expected={elo.expected_score:.2f}, "
-                f"delta={elo.delta:+.1f}, "
-                f"new={elo.rating_after:.1f}"
-            )
-            if not args.no_elo_store:
-                store_rating(rating_path, elo.rating_after)
-                print(f"Stored Elo rating at {rating_path}")
-        else:
-            print("Elo: no completed games to rate")
+        if not args.quiet:
+            if elo.games > 0:
+                print(
+                    "Elo: "
+                    f"start={elo.rating_before:.1f}, "
+                    f"opp={elo.opponent_rating:.1f}, "
+                    f"score={elo.actual_score:.1f}/{elo.games}, "
+                    f"expected={elo.expected_score:.2f}, "
+                    f"delta={elo.delta:+.1f}, "
+                    f"new={elo.rating_after:.1f}"
+                )
+                if not args.no_elo_store:
+                    store_rating(rating_path, elo.rating_after)
+                    print(f"Stored Elo rating at {rating_path}")
+            else:
+                print("Elo: no completed games to rate")
 
         if args.summary_json:
             summary_payload = {
@@ -1065,7 +1074,8 @@ def run_batch(args: argparse.Namespace) -> int:
                     json.dumps(summary_payload, indent=2, sort_keys=True),
                     encoding="utf-8",
                 )
-                print(f"Wrote summary JSON to {args.summary_json}")
+                if not args.quiet:
+                    print(f"Wrote summary JSON to {args.summary_json}")
             except OSError as exc:
                 print(f"Failed to write summary JSON: {exc}", file=sys.stderr)
 

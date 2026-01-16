@@ -27,3 +27,156 @@ Evaluating baseline performance against external opponent...Baseline score=0.00
 /Users/ktxc111/work/repos/skaks/logs/EXPLORE_best.yaml
 (baseline-decay=0.05)
 → Wrote best params to /Users/ktxc111/work/repos/skaks/logs/EXPLORE_best.yaml
+Traceback (most recent call last):
+  File "/Users/guillem/miniconda3/bin/skaks-opt", line 7, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Users/guillem/work/repos/skaks/skaks_opt/cli.py", line 445, in main
+    run_param_optimize(args)
+    ~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/guillem/work/repos/skaks/skaks_opt/param_optimize.py", line 29, in run_param_optimize
+    _impl.optimize_loop(args)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/guillem/work/repos/skaks/skaks_opt/param_optimize_impl.py", line 961, in optimize_loop
+    base_data = _load_params(current_params)
+  File "/Users/guillem/work/repos/skaks/skaks_opt/param_optimize_impl.py", line 143, in _load_params
+    with path.open("r", encoding="utf-8") as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/guillem/miniconda3/lib/python3.13/pathlib/_local.py", line 537, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/guillem/work/repos/skaks/besty.yaml'
+Evaluating baseline performance against external opponent...Running 20 games (depth=5, limit=500, concurrency=4)
+Database: disabled (no SQLite persistence)
+[1/20] FAIL game=1 result=unknown winner=unknown    time=  9.11s
+  stdout snippet:
+    Turn 1: skaks plays d2d4
+    Final position FEN: rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.kgVgQ6gfLy", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[2/20] FAIL game=3 result=unknown winner=unknown    time=  9.11s
+  stdout snippet:
+    Turn 1: skaks plays e2e4
+    Final position FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.Z1j0lAgbeQ", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[3/20] FAIL game=4 result=unknown winner=unknown    time=  9.11s
+  stdout snippet:
+    Turn 1: skaks plays d2d4
+    Final position FEN: rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.XtaqxY22Tl", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[4/20] FAIL game=2 result=unknown winner=unknown    time=  9.12s
+  stdout snippet:
+    Turn 1: skaks plays g1f3
+    Final position FEN: rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.kN1RRmgu4P", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[5/20] FAIL game=5 result=unknown winner=unknown    time=  9.13s
+  stdout snippet:
+    Turn 1: skaks plays g1f3
+    Final position FEN: rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.TmDlbUcbDw", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[6/20] FAIL game=8 result=unknown winner=unknown    time=  9.12s
+  stdout snippet:
+    Turn 1: skaks plays g1f3
+    Final position FEN: rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.Wg238BYvQr", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[7/20] FAIL game=6 result=unknown winner=unknown    time=  9.13s
+  stdout snippet:
+    Turn 1: skaks plays g1f3
+    Final position FEN: rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.LXmX1z5G9e", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[8/20] FAIL game=7 result=unknown winner=unknown    time=  9.13s
+  stdout snippet:
+    Turn 1: skaks plays d2d4
+    Final position FEN: rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.Ad36bYdynQ", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[9/20] FAIL game=10 result=unknown winner=unknown    time=  9.13s
+  stdout snippet:
+    Turn 1: skaks plays g1f3
+    Final position FEN: rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.IcoSCErcGq", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[10/20] FAIL game=11 result=unknown winner=unknown    time=  9.13s
+  stdout snippet:
+    Turn 1: skaks plays g1f3
+    Final position FEN: rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.12198CE1HL", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[11/20] FAIL game=12 result=unknown winner=unknown    time=  9.13s
+  stdout snippet:
+    Turn 1: skaks plays e2e4
+    Final position FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.4z7GNk6Arh", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...
+[12/20] FAIL game=9 result=unknown winner=unknown    time=  9.13s
+  stdout snippet:
+    Turn 1: skaks plays g1f3
+    Final position FEN: rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1
+  stderr snippet:
+    sunfish forfeits due to exception: engine terminated unexpectedly (exit 1): Traceback (most recent call last):
+      File "/var/folders/ym/brbkjbrd7_zf1q_j3ch65j540000gn/T/tmp.qwMJHNkBcO", line 134, in <module>
+        h,A3,p,A4=[int(A)/1000 for A in M[2::2]]
+        ^^^^^^^^^
+    ValueError: not enough values to unpack (expected 4, got 1) | stdout prior: id name sunfish 2023 | uciok | readyok
+    ...

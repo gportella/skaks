@@ -1056,3 +1056,11 @@ TypeError: argument should be a str or an os.PathLike object where __fspath__ re
 
 summary_json:None
 
+[2026-01-16T13:38:37Z] External opponent configured (sunfish): skipping arena binding
+[2026-01-16T13:38:37Z] Starting long run target=1000000
+[2026-01-16T13:38:37Z] Phase=EXPLORE iter=1/100 games=20 repeats=1 depth=5 beam=12 noise=0.12
+[2026-01-16T13:38:37Z] Running weights-only optimizer for phase=EXPLORE (weights-only mode, baseline-decay=0.05)
+[2026-01-16T13:41:09Z] External opponent configured (sunfish): skipping arena binding
+[2026-01-16T13:41:09Z] Starting long run target=1000000
+[2026-01-16T13:41:09Z] Phase=EXPLORE iter=1/100 games=20 repeats=1 depth=5 beam=12 noise=0.12
+[2026-01-16T13:41:09Z] Running weights-only optimizer for phase=EXPLORE (weights-only mode, baseline-decay=0.05)

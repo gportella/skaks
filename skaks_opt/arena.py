@@ -196,6 +196,11 @@ def _configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
         help="Print stdout/stderr for every game (default: only failures)",
     )
     parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress per-game output (still writes summary JSON if requested)",
+    )
+    parser.add_argument(
         "--elo-start",
         type=float,
         default=DEFAULT_ELO_START,

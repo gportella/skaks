@@ -54,13 +54,13 @@ struct EvaluationParams {
   PinPenalty knight_pin_penalty{};
   PinPenalty pawn_pin_straight_penalty{};
   PinPenalty pawn_pin_diagonal_penalty{};
-  double eval_bias = 0.0;
-  double eval_slope = 1.0;
   double eval_quiet_cap = 800.0;
   std::array<double, static_cast<std::size_t>(OccupancyType::bK) + 1>
       reserved{}; // placeholder to preserve layout
   std::array<float, static_cast<std::size_t>(TermId::Count)> phase_weights_mg{};
   std::array<float, static_cast<std::size_t>(TermId::Count)> phase_weights_eg{};
+  std::array<Pst, 6> pst_midgame{};
+  std::array<Pst, 6> pst_endgame{};
 };
 
 inline EvaluationParams default_evaluation_params() {
@@ -98,20 +98,23 @@ inline EvaluationParams default_evaluation_params() {
   params.doubled_pawn_penalty = 12;
   params.isolated_pawn_penalty = 16;
   params.backward_pawn_penalty = 10;
-  params.king_attack_weights = {14, 32, 30, 44, 74, 20, 14, 32, 30, 44, 74, 20}; // piece types
-  params.threat_base = {0, 12, 30, 30, 45, 180, 540, 12, 30, 30, 45, 180, 540}; // occupancy types, hence 0 for empty
+  params.king_attack_weights = {14, 32, 30, 44, 74, 20,
+                                14, 32, 30, 44, 74, 20}; // piece types
+  params.threat_base = {
+      0,  12, 30, 30, 45,  180, 540,
+      12, 30, 30, 45, 180, 540}; // occupancy types, hence 0 for empty
   params.bishop_pin_penalty = {12, 2};
   params.rook_pin_penalty = {6, 1};
   params.knight_pin_penalty = {15, 0};
   params.pawn_pin_straight_penalty = {6, 2};
   params.pawn_pin_diagonal_penalty = {10, 2};
-  params.eval_bias = 0.0;
-  params.eval_slope = 1.0;
   params.eval_quiet_cap = 800.0;
   for (std::size_t i = 0; i < params.phase_weights_mg.size(); ++i) {
     params.phase_weights_mg[i] = 1.0f;
     params.phase_weights_eg[i] = 1.0f;
   }
+  params.pst_midgame = kMidgamePst;
+  params.pst_endgame = kEndgamePst;
   return params;
 }
 
@@ -126,10 +129,12 @@ inline const EvaluationParams& evaluation_params() {
 
 inline void set_evaluation_params(const EvaluationParams& params) {
   mutable_evaluation_params() = params;
+  set_pst_tables(params.pst_midgame, params.pst_endgame);
 }
 
 inline void reset_evaluation_params() {
   mutable_evaluation_params() = default_evaluation_params();
+  reset_pst_tables();
 }
 
 } // namespace chess
