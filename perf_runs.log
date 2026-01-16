@@ -320,3 +320,327 @@ Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
 [perf] case=custom iter=3/3 nodes=1457 elapsed_ms=3 nps=485666
 [perf] case=custom total_nodes=4369 total_ms=11 total_nps=397181 avg_nodes=1456 avg_ms=3
 [perf] suite=custom total_nodes=4369 total_ms=11 total_nps=397181
+=== perf snapshot 2026-01-16T21:11:21 ===
+binary: /Users/guillem/.local/bin/skaks
+threads: 0
+--- version ---
+skaks version 0.15.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=1
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=41 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=41 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=41 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=123 total_ms=0 total_nps=0 avg_nodes=41 avg_ms=0
+[perf] suite=custom total_nodes=123 total_ms=0 total_nps=0
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=1
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=133 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=133 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=133 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=399 total_ms=0 total_nps=0 avg_nodes=133 avg_ms=0
+[perf] suite=custom total_nodes=399 total_ms=0 total_nps=0
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=1
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=20 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=20 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=20 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=60 total_ms=0 total_nps=0 avg_nodes=20 avg_ms=0
+[perf] suite=custom total_nodes=60 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=2
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=176 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=176 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=176 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=528 total_ms=0 total_nps=0 avg_nodes=176 avg_ms=0
+[perf] suite=custom total_nodes=528 total_ms=0 total_nps=0
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=2
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=1515 elapsed_ms=5 nps=303000
+[perf] case=custom iter=2/3 nodes=1515 elapsed_ms=4 nps=378750
+[perf] case=custom iter=3/3 nodes=1515 elapsed_ms=4 nps=378750
+[perf] case=custom total_nodes=4545 total_ms=13 total_nps=349615 avg_nodes=1515 avg_ms=4
+[perf] suite=custom total_nodes=4545 total_ms=13 total_nps=349615
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=2
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=74 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=74 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=74 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=222 total_ms=0 total_nps=0 avg_nodes=74 avg_ms=0
+[perf] suite=custom total_nodes=222 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=3
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=314 elapsed_ms=1 nps=314000
+[perf] case=custom iter=2/3 nodes=314 elapsed_ms=1 nps=314000
+[perf] case=custom iter=3/3 nodes=314 elapsed_ms=1 nps=314000
+[perf] case=custom total_nodes=942 total_ms=3 total_nps=314000 avg_nodes=314 avg_ms=1
+[perf] suite=custom total_nodes=942 total_ms=3 total_nps=314000
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=3
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=2715 elapsed_ms=9 nps=301666
+[perf] case=custom iter=2/3 nodes=2715 elapsed_ms=8 nps=339375
+[perf] case=custom iter=3/3 nodes=2715 elapsed_ms=8 nps=339375
+[perf] case=custom total_nodes=8145 total_ms=25 total_nps=325800 avg_nodes=2715 avg_ms=8
+[perf] suite=custom total_nodes=8145 total_ms=25 total_nps=325800
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=3
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=324 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=325 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=322 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=971 total_ms=0 total_nps=0 avg_nodes=323 avg_ms=0
+[perf] suite=custom total_nodes=971 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=4
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=577 elapsed_ms=1 nps=577000
+[perf] case=custom iter=2/3 nodes=577 elapsed_ms=1 nps=577000
+[perf] case=custom iter=3/3 nodes=577 elapsed_ms=1 nps=577000
+[perf] case=custom total_nodes=1731 total_ms=3 total_nps=577000 avg_nodes=577 avg_ms=1
+[perf] suite=custom total_nodes=1731 total_ms=3 total_nps=577000
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=4
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=4798 elapsed_ms=14 nps=342714
+[perf] case=custom iter=2/3 nodes=4798 elapsed_ms=13 nps=369076
+[perf] case=custom iter=3/3 nodes=4798 elapsed_ms=14 nps=342714
+[perf] case=custom total_nodes=14394 total_ms=41 total_nps=351073 avg_nodes=4798 avg_ms=13
+[perf] suite=custom total_nodes=14394 total_ms=41 total_nps=351073
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=4
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=532 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=533 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=536 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=1601 total_ms=0 total_nps=0 avg_nodes=533 avg_ms=0
+[perf] suite=custom total_nodes=1601 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=8
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=4549 elapsed_ms=7 nps=649857
+[perf] case=custom iter=2/3 nodes=4544 elapsed_ms=7 nps=649142
+[perf] case=custom iter=3/3 nodes=4552 elapsed_ms=7 nps=650285
+[perf] case=custom total_nodes=13645 total_ms=21 total_nps=649761 avg_nodes=4548 avg_ms=7
+[perf] suite=custom total_nodes=13645 total_ms=21 total_nps=649761
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=8
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=43168 elapsed_ms=88 nps=490545
+[perf] case=custom iter=2/3 nodes=44903 elapsed_ms=89 nps=504528
+[perf] case=custom iter=3/3 nodes=43146 elapsed_ms=88 nps=490295
+[perf] case=custom total_nodes=131217 total_ms=265 total_nps=495158 avg_nodes=43739 avg_ms=88
+[perf] suite=custom total_nodes=131217 total_ms=265 total_nps=495158
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=8
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=3344 elapsed_ms=2 nps=1672000
+[perf] case=custom iter=2/3 nodes=3294 elapsed_ms=2 nps=1647000
+[perf] case=custom iter=3/3 nodes=3362 elapsed_ms=2 nps=1681000
+[perf] case=custom total_nodes=10000 total_ms=6 total_nps=1666666 avg_nodes=3333 avg_ms=2
+[perf] suite=custom total_nodes=10000 total_ms=6 total_nps=1666666
+=== perf snapshot 2026-01-16T21:28:33 ===
+binary: /Users/guillem/.local/bin/skaks
+threads: 0
+--- version ---
+skaks version 0.15.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=1
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=41 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=41 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=41 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=123 total_ms=0 total_nps=0 avg_nodes=41 avg_ms=0
+[perf] suite=custom total_nodes=123 total_ms=0 total_nps=0
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=1
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=133 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=133 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=133 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=399 total_ms=0 total_nps=0 avg_nodes=133 avg_ms=0
+[perf] suite=custom total_nodes=399 total_ms=0 total_nps=0
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=1
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=20 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=20 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=20 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=60 total_ms=0 total_nps=0 avg_nodes=20 avg_ms=0
+[perf] suite=custom total_nodes=60 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=2
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=176 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=176 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=176 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=528 total_ms=0 total_nps=0 avg_nodes=176 avg_ms=0
+[perf] suite=custom total_nodes=528 total_ms=0 total_nps=0
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=2
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=1515 elapsed_ms=4 nps=378750
+[perf] case=custom iter=2/3 nodes=1515 elapsed_ms=4 nps=378750
+[perf] case=custom iter=3/3 nodes=1515 elapsed_ms=4 nps=378750
+[perf] case=custom total_nodes=4545 total_ms=12 total_nps=378750 avg_nodes=1515 avg_ms=4
+[perf] suite=custom total_nodes=4545 total_ms=12 total_nps=378750
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=2
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=74 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=74 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=74 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=222 total_ms=0 total_nps=0 avg_nodes=74 avg_ms=0
+[perf] suite=custom total_nodes=222 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=3
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=314 elapsed_ms=1 nps=314000
+[perf] case=custom iter=2/3 nodes=314 elapsed_ms=1 nps=314000
+[perf] case=custom iter=3/3 nodes=314 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=942 total_ms=2 total_nps=471000 avg_nodes=314 avg_ms=0
+[perf] suite=custom total_nodes=942 total_ms=2 total_nps=471000
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=3
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=2715 elapsed_ms=8 nps=339375
+[perf] case=custom iter=2/3 nodes=2715 elapsed_ms=8 nps=339375
+[perf] case=custom iter=3/3 nodes=2715 elapsed_ms=8 nps=339375
+[perf] case=custom total_nodes=8145 total_ms=24 total_nps=339375 avg_nodes=2715 avg_ms=8
+[perf] suite=custom total_nodes=8145 total_ms=24 total_nps=339375
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=3
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=323 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=322 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=323 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=968 total_ms=0 total_nps=0 avg_nodes=322 avg_ms=0
+[perf] suite=custom total_nodes=968 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=4
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=577 elapsed_ms=1 nps=577000
+[perf] case=custom iter=2/3 nodes=577 elapsed_ms=1 nps=577000
+[perf] case=custom iter=3/3 nodes=577 elapsed_ms=1 nps=577000
+[perf] case=custom total_nodes=1731 total_ms=3 total_nps=577000 avg_nodes=577 avg_ms=1
+[perf] suite=custom total_nodes=1731 total_ms=3 total_nps=577000
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=4
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=4798 elapsed_ms=14 nps=342714
+[perf] case=custom iter=2/3 nodes=4798 elapsed_ms=13 nps=369076
+[perf] case=custom iter=3/3 nodes=4798 elapsed_ms=14 nps=342714
+[perf] case=custom total_nodes=14394 total_ms=41 total_nps=351073 avg_nodes=4798 avg_ms=13
+[perf] suite=custom total_nodes=14394 total_ms=41 total_nps=351073
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=4
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=535 elapsed_ms=0 nps=0
+[perf] case=custom iter=2/3 nodes=532 elapsed_ms=0 nps=0
+[perf] case=custom iter=3/3 nodes=532 elapsed_ms=0 nps=0
+[perf] case=custom total_nodes=1599 total_ms=0 total_nps=0 avg_nodes=533 avg_ms=0
+[perf] suite=custom total_nodes=1599 total_ms=0 total_nps=0
+[case] startpos
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=8
+[perf] case=custom fen="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+[perf] case=custom iter=1/3 nodes=4552 elapsed_ms=7 nps=650285
+[perf] case=custom iter=2/3 nodes=4547 elapsed_ms=7 nps=649571
+[perf] case=custom iter=3/3 nodes=4547 elapsed_ms=7 nps=649571
+[perf] case=custom total_nodes=13646 total_ms=21 total_nps=649809 avg_nodes=4548 avg_ms=7
+[perf] suite=custom total_nodes=13646 total_ms=21 total_nps=649809
+[case] balanced_midgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=8
+[perf] case=custom fen="r2q1rk1/pp1bbppp/2n1pn2/2pp4/3P1B2/2P1PN2/PP1NBPPP/R2Q1RK1 w - - 0 9"
+[perf] case=custom iter=1/3 nodes=44942 elapsed_ms=90 nps=499355
+[perf] case=custom iter=2/3 nodes=44899 elapsed_ms=91 nps=493395
+[perf] case=custom iter=3/3 nodes=44916 elapsed_ms=89 nps=504674
+[perf] case=custom total_nodes=134757 total_ms=270 total_nps=499100 avg_nodes=44919 avg_ms=90
+[perf] suite=custom total_nodes=134757 total_ms=270 total_nps=499100
+[case] simplified_endgame
+Polyglot book loaded from /Users/guillem/work/repos/skaks/book/skaks_pg_book.bin
+[perf] suite=custom cases=1 iterations=3 threads=14 depth=8
+[perf] case=custom fen="8/5k2/3p4/4p3/4P3/3P4/5K2/8 w - - 0 1"
+[perf] case=custom iter=1/3 nodes=3340 elapsed_ms=2 nps=1670000
+[perf] case=custom iter=2/3 nodes=3413 elapsed_ms=2 nps=1706500
+[perf] case=custom iter=3/3 nodes=3481 elapsed_ms=2 nps=1740500
+[perf] case=custom total_nodes=10234 total_ms=6 total_nps=1705666 avg_nodes=3411 avg_ms=2
+[perf] suite=custom total_nodes=10234 total_ms=6 total_nps=1705666

@@ -159,7 +159,8 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
     child_depth = 1;
   }
 
-  const int history_score = scratch.ordering.history_score(move);
+  const int raw_history_score = scratch.ordering.history_score(move);
+  const int history_score = std::clamp(raw_history_score, 0, 20000);
 
   int reduction = 0;
   if (quiet_like && !king_move && !castle_move && !in_check_after_move &&
@@ -858,8 +859,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       if (quiet_like) {
         store_killer_move(scratch, ply, current_move);
       }
-      update_history(scratch, current_move, depth, true);
-      record_counter(scratch, parent_move, current_move);
       if (split_raw) {
         split_raw->cancel_flag.store(true, std::memory_order_relaxed);
       }

@@ -1,5 +1,0 @@
-version=0x7af32f20
-hash=0xec102ef2
-desc_len=84
-desc=Network trained with the https://github.com/official-stockfish/nnue-pytorch trainer.
-chunk0:�D#� size=1347243843

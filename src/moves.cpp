@@ -74,12 +74,12 @@ void sort_moves(const Board& board,
       if (is_capture) {
         auto cap = static_cast<OccupancyType>(cap_raw);
         auto pc = static_cast<OccupancyType>(move_piece(m));
-        key = 1'000'000 + mvv_lva_score(cap, pc);
-        auto see_gain = static_exchange_eval(board, decode_move(m));
+        const int capture_score = mvv_lva_score(cap, pc);
+        const int see_gain = static_exchange_eval(board, decode_move(m));
         if (see_gain <= 0) {
-          key -= 10;
+          key = 80'000 + std::min(capture_score, 15'000);
         } else {
-          key += see_gain * 100;
+          key = 1'000'000 + capture_score + see_gain * 100;
         }
       } else {
         key = 100'000;

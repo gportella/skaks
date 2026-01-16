@@ -50,7 +50,7 @@ def main(argv: List[str]) -> int:
     )
     parser.add_argument(
         "--engine",
-        default="skaks",
+        default="skaks_x",
         help="Engine binary to execute when not using stockfish (default: skaks_basic)",
     )
     parser.add_argument(
