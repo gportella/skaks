@@ -13,12 +13,11 @@ mkdir -p "$LOG_DIR"
 
 # Engine / params
 ENGINE=${ENGINE:-skaks}
-BASELINE_PARAMS=${BASELINE_PARAMS:-texel_ext_all.yaml}
-START_PARAMS=${START_PARAMS:-texel_ext_all.yaml}
-OPPONENT=${OPPONENT:-sunfish}
-OPPONENT_DEPTH_FACTOR=${OPPONENT_DEPTH_FACTOR:-0.30}
+BASELINE_PARAMS=${BASELINE_PARAMS:-../fitting_models/base_params_pst.yaml}
+START_PARAMS=${START_PARAMS:-../fitting_models/texel_ext_all.yaml}
+OPPONENT=${OPPONENT:-skaks}
+OPPONENT_DEPTH_FACTOR=${OPPONENT_DEPTH_FACTOR:-1.0}
 
-# Detect arena binding availability (later checked with a single python call)
 
 # Default concurrency
 CPU_COUNT=$(getconf _NPROCESSORS_ONLN || echo 4)
@@ -35,33 +34,54 @@ fi
 # Phase configs (tweak these values for your machine)
 EXPL_ITERATIONS=${EXPL_ITERATIONS:-100}
 EXPL_BEAM=${EXPL_BEAM:-12}
-EXPL_GAMES=${EXPL_GAMES:-20}
-EXPL_REPEATS=${EXPL_REPEATS:-1}
+EXPL_GAMES=${EXPL_GAMES:-60}
+EXPL_REPEATS=${EXPL_REPEATS:-4}
 EXPL_DEPTH=${EXPL_DEPTH:-5}
-EXPL_NOISE=${EXPL_NOISE:-0.12}
+EXPL_NOISE=${EXPL_NOISE:-0.30}
 
-REF_ITERATIONS=${REF_ITERATIONS:-60}
+REF_ITERATIONS=${REF_ITERATIONS:-0}
 REF_BEAM=${REF_BEAM:-6}
 REF_GAMES=${REF_GAMES:-80}
 REF_REPEATS=${REF_REPEATS:-3}
 REF_DEPTH=${REF_DEPTH:-5}
 REF_NOISE=${REF_NOISE:-0.02}
 
+# Search strategy controls (beam or cma)
+STRATEGY=${STRATEGY:-beam}
+CMA_POPSIZE=${CMA_POPSIZE:-}
+CMA_SIGMA=${CMA_SIGMA:-}
+
 # Relaxation: per-iteration baseline decay to make acceptance gradual
 # Small positive value makes it easier to replace a stubborn best.
-BASELINE_DECAY=${BASELINE_DECAY:-0.05}
+BASELINE_DECAY=${BASELINE_DECAY:-0.010}
 
 # Acceptance tuning: allow keeping early improvements below default thresholds
 MIN_SCORE=${MIN_SCORE:-0.0}
 FORCE_ACCEPT_FIRST=${FORCE_ACCEPT_FIRST:-0}
+SCORE_CONFIDENCE=${SCORE_CONFIDENCE:-0.95}
+REQUIRE_SCORE_CONFIDENCE=${REQUIRE_SCORE_CONFIDENCE:-1}
+
+# Arena sampling (override via env vars to change PGN/min/max ply or disable PGN entirely)
+ARENA_PGN=${ARENA_PGN:-../datasets/lichess_elite_db/lichess_elite_2019-01.pgn}
+ARENA_MIN_PLY=${ARENA_MIN_PLY:-8}
+ARENA_MAX_PLY=${ARENA_MAX_PLY:-40}
+
+# Control which phases should run in weights-only mode (default: REFINE only).
+WEIGHTS_ONLY_PHASES=${WEIGHTS_ONLY_PHASES:-REFINE}
+
+phase_uses_weights_only() {
+  local phase=$1
+  case " ${WEIGHTS_ONLY_PHASES} " in
+    *" ${phase} "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 # Helpers
-# Use a portable ISO-8601 timestamp compatible with macOS/BSD `date`
 timestamp() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 log() { echo "[$(timestamp)] $*" | tee -a "$LOG_DIR/self_play_long.log"; }
 
 # Build common flags
-# Common flags (kept as plain strings; we'll construct the command string later)
 COMMON_FLAGS="--engine '$ENGINE' --baseline-params '$BASELINE_PARAMS' --start-params '$START_PARAMS' --opponent '$OPPONENT'"
 ARENA_FLAGS=""
 # Only enable arena binding when running internal self-play; skip for external opponent runs.
@@ -69,7 +89,13 @@ if [ "${OPPONENT:-}" = "${ENGINE}" ] || [ -z "${OPPONENT:-}" ]; then
   if python -c 'import importlib,sys
 sys.stdout.write("1" if importlib.util.find_spec("skaks_eval") else "0")' 2>/dev/null | grep -q 1; then
     log "Detected skaks_eval: enabling arena binding"
-    ARENA_FLAGS+=(--use-arena-binding   --arena-min-ply 8 --arena-max-ply 40 --arena-workers "$CONCURRENCY")
+    ARENA_FLAGS+=" --use-arena-binding --arena-workers '$CONCURRENCY'"
+    if [ -n "${ARENA_PGN:-}" ]; then
+      log "Arena PGN source: ${ARENA_PGN} (ply range ${ARENA_MIN_PLY}-${ARENA_MAX_PLY})"
+      ARENA_FLAGS+=" --arena-pgn '${ARENA_PGN}' --arena-min-ply ${ARENA_MIN_PLY} --arena-max-ply ${ARENA_MAX_PLY}"
+    else
+      log "Arena PGN disabled: starting from standard startpos"
+    fi
   else
     log "No skaks_eval detected: using batch runner mode"
   fi
@@ -97,7 +123,37 @@ run_phase() {
   shift
 
   for i in $(seq 1 $iterations); do
-    log "Phase=$phase_name iter=$i/$iterations games=$games repeats=$repeats depth=$depth beam=$beam noise=$noise"
+    local strategy_desc="strategy=${STRATEGY} noise=$noise"
+    if [ "$STRATEGY" = "beam" ]; then
+      strategy_desc+=" beam-size=$beam"
+    elif [ "$STRATEGY" = "cma" ]; then
+      if [ -n "${CMA_POPSIZE:-}" ]; then
+        strategy_desc+=" popsize=${CMA_POPSIZE}"
+      fi
+      if [ -n "${CMA_SIGMA:-}" ]; then
+        strategy_desc+=" sigma=${CMA_SIGMA}"
+      fi
+    elif [ "$STRATEGY" = "spsa" ]; then
+      if [ -n "${SPSA_A:-}" ]; then
+        strategy_desc+=" a=${SPSA_A}"
+      fi
+      if [ -n "${SPSA_C:-}" ]; then
+        strategy_desc+=" c=${SPSA_C}"
+      fi
+      if [ -n "${SPSA_BIG_A:-}" ]; then
+        strategy_desc+=" A=${SPSA_BIG_A}"
+      fi
+      if [ -n "${SPSA_ALPHA:-}" ]; then
+        strategy_desc+=" alpha=${SPSA_ALPHA}"
+      fi
+      if [ -n "${SPSA_GAMMA:-}" ]; then
+        strategy_desc+=" gamma=${SPSA_GAMMA}"
+      fi
+      if [ -n "${SPSA_SEED:-}" ]; then
+        strategy_desc+=" seed=${SPSA_SEED}"
+      fi
+    fi
+    log "Phase=$phase_name iter=$i/$iterations games=$games repeats=$repeats depth=$depth $strategy_desc"
     # Build command string (use eval to allow ARENA_FLAGS expansion)
     # If running against an external opponent, pass opponent depth factor so
     # the opponent runs at ~60% of the candidate depth (handicap-like).
@@ -105,12 +161,63 @@ run_phase() {
     if [ "${OPPONENT:-}" != "${ENGINE}" ] && [ -n "${OPPONENT_DEPTH_FACTOR:-}" ]; then
       EXTF=" --opponent-depth-factor ${OPPONENT_DEPTH_FACTOR}"
     fi
-    # For long runs prefer tuning only the phase weight arrays (faster, lower dim).
-    # Use the convenience alias the optimizer provides so the script focuses on
-    # `evaluation.phase_weights_mg` and `evaluation.phase_weights_eg`.
-    INCLUDE_FLAGS=" --weights-only"
-    log "Running weights-only optimizer for phase=$phase_name (weights-only mode, baseline-decay=${BASELINE_DECAY})"
-    CMD="skaks-opt param-optimize --external-opponent $COMMON_FLAGS --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --beam-size '$beam' --noise '$noise' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
+    INCLUDE_FLAGS=""
+    if phase_uses_weights_only "$phase_name"; then
+      # Limit tuning to the phase weight arrays for final polish sweeps.
+      INCLUDE_FLAGS=" --weights-only"
+    fi
+    CONFIDENCE_FLAGS=" --score-confidence '$SCORE_CONFIDENCE'"
+    if [ "${REQUIRE_SCORE_CONFIDENCE}" -ne 0 ]; then
+      CONFIDENCE_FLAGS+=" --require-score-confidence"
+    fi
+    EXTERNAL_FLAG=""
+    if [ "${OPPONENT:-}" != "${ENGINE}" ] && [ -n "${OPPONENT:-}" ]; then
+      EXTERNAL_FLAG=" --external-opponent"
+    fi
+    STRATEGY_FLAGS=" --strategy ${STRATEGY} --noise '$noise'"
+    case "$STRATEGY" in
+      cma)
+        if [ -n "${CMA_POPSIZE:-}" ]; then
+          STRATEGY_FLAGS+=" --cma-popsize '${CMA_POPSIZE}'"
+        fi
+        if [ -n "${CMA_SIGMA:-}" ]; then
+          STRATEGY_FLAGS+=" --cma-sigma '${CMA_SIGMA}'"
+        fi
+        ;;
+      spsa)
+        if [ -n "${SPSA_A:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-a '${SPSA_A}'"
+        fi
+        if [ -n "${SPSA_C:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-c '${SPSA_C}'"
+        fi
+        if [ -n "${SPSA_BIG_A:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-A '${SPSA_BIG_A}'"
+        fi
+        if [ -n "${SPSA_ALPHA:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-alpha '${SPSA_ALPHA}'"
+        fi
+        if [ -n "${SPSA_GAMMA:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-gamma '${SPSA_GAMMA}'"
+        fi
+        if [ -n "${SPSA_SEED:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-seed '${SPSA_SEED}'"
+        fi
+        ;;
+      beam)
+        STRATEGY_FLAGS+=" --beam-size '$beam'"
+        ;;
+      *)
+        log "Unknown STRATEGY=${STRATEGY}; defaulting to beam"
+        STRATEGY_FLAGS+=" --beam-size '$beam'"
+        ;;
+    esac
+    if [ -n "$INCLUDE_FLAGS" ]; then
+      log "Running weights-only optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=${STRATEGY})"
+    else
+      log "Running full-parameter optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=${STRATEGY})"
+    fi
+    CMD="skaks-opt param-optimize ${EXTERNAL_FLAG} $COMMON_FLAGS --skip-pst --param-set full  --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS}${CONFIDENCE_FLAGS}${STRATEGY_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
     eval "$CMD" 2>&1 | tee -a "$LOG_DIR/${phase_name}_iter_${i}.log"
 
     # estimate games played this iteration

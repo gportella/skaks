@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Dict, Mapping
+from typing import Any, Dict, List, Mapping
 
 import numpy as np
 
@@ -10,6 +11,44 @@ from .params import DEFAULT_PARAMS, apply_param_updates
 from .pst import apply_pst_symmetry
 
 __all__ = ["EvalResult", "evaluate_params"]
+
+
+def _coerce_numeric_types(template: Any, payload: Any) -> Any:
+    """Best-effort type alignment so ints in the template stay ints."""
+    if isinstance(payload, dict):
+        template_dict = template if isinstance(template, dict) else {}
+        return {
+            key: _coerce_numeric_types(template_dict.get(key), value)
+            for key, value in payload.items()
+        }
+
+    if isinstance(payload, list):
+        template_list = template if isinstance(template, list) else []
+        coerced: List[Any] = []
+        for idx, value in enumerate(payload):
+            tmpl = template_list[idx] if idx < len(template_list) else None
+            coerced.append(_coerce_numeric_types(tmpl, value))
+        return coerced
+
+    if template is None:
+        if isinstance(payload, float) and math.isfinite(payload):
+            rounded = float(round(payload))
+            if abs(payload - rounded) < 1e-9:
+                return int(rounded)
+        return payload
+    if isinstance(template, bool):
+        return bool(payload)
+    if isinstance(template, int):
+        if isinstance(payload, (int, bool)):
+            return int(payload)
+        if isinstance(payload, float):
+            return int(round(payload))
+        return payload
+    if isinstance(template, float):
+        if isinstance(payload, (int, float)):
+            return float(payload)
+        return payload
+    return payload
 
 
 @dataclass(frozen=True)
@@ -30,6 +69,8 @@ def evaluate_params(
     error_penalty: float = 2000.0,
     pov: str = "side",
     cp_cap: float | None = None,
+    base_params: Mapping[str, Mapping] | None = None,
+    skip_pst: bool = False,
 ) -> EvalResult:
     """Compute weighted MAE against target scores.
 
@@ -43,8 +84,10 @@ def evaluate_params(
             "skaks_eval is not installed; install bindings first"
         ) from exc
 
-    params = apply_param_updates(DEFAULT_PARAMS, param_updates)
-    apply_pst_symmetry(params)
+    params = apply_param_updates(base_params or DEFAULT_PARAMS, param_updates)
+    params = _coerce_numeric_types(DEFAULT_PARAMS, params)
+    if not skip_pst:
+        apply_pst_symmetry(params)
 
     total_weight = 0.0
     total_abs_err = 0.0

@@ -137,6 +137,25 @@ run_phase() {
       if [ -n "${CMA_SIGMA:-}" ]; then
         strategy_desc+=" sigma=${CMA_SIGMA}"
       fi
+    elif [ "$STRATEGY" = "spsa" ]; then
+      if [ -n "${SPSA_A:-}" ]; then
+        strategy_desc+=" a=${SPSA_A}"
+      fi
+      if [ -n "${SPSA_C:-}" ]; then
+        strategy_desc+=" c=${SPSA_C}"
+      fi
+      if [ -n "${SPSA_BIG_A:-}" ]; then
+        strategy_desc+=" A=${SPSA_BIG_A}"
+      fi
+      if [ -n "${SPSA_ALPHA:-}" ]; then
+        strategy_desc+=" alpha=${SPSA_ALPHA}"
+      fi
+      if [ -n "${SPSA_GAMMA:-}" ]; then
+        strategy_desc+=" gamma=${SPSA_GAMMA}"
+      fi
+      if [ -n "${SPSA_SEED:-}" ]; then
+        strategy_desc+=" seed=${SPSA_SEED}"
+      fi
     fi
     if [ "${OPPONENT:-}" != "${ENGINE}" ] && [ -n "${OPPONENT_CLOCK_SECONDS:-}" ]; then
       log "Phase=$phase_name iter=$i/$iterations games=$games repeats=$repeats clock=${CLOCK_SECONDS}s+${INCREMENT_SECONDS}s opp_clock=${OPPONENT_CLOCK_SECONDS}s+${OPPONENT_INCREMENT_SECONDS}s $strategy_desc"
@@ -174,6 +193,26 @@ run_phase() {
         fi
         if [ -n "${CMA_SIGMA:-}" ]; then
           STRATEGY_FLAGS+=" --cma-sigma '${CMA_SIGMA}'"
+        fi
+        ;;
+      spsa)
+        if [ -n "${SPSA_A:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-a '${SPSA_A}'"
+        fi
+        if [ -n "${SPSA_C:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-c '${SPSA_C}'"
+        fi
+        if [ -n "${SPSA_BIG_A:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-A '${SPSA_BIG_A}'"
+        fi
+        if [ -n "${SPSA_ALPHA:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-alpha '${SPSA_ALPHA}'"
+        fi
+        if [ -n "${SPSA_GAMMA:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-gamma '${SPSA_GAMMA}'"
+        fi
+        if [ -n "${SPSA_SEED:-}" ]; then
+          STRATEGY_FLAGS+=" --spsa-seed '${SPSA_SEED}'"
         fi
         ;;
       beam)

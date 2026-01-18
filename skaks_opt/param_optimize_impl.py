@@ -25,6 +25,7 @@ from skaks_opt import arena_runner
 from skaks_opt.dask_support import dask_client_from_args
 from skaks_opt.params import DEFAULT_PARAMS, param_set_prefixes
 from skaks_opt.pst import apply_pst_symmetry
+from skaks_opt.spsa import SPSAState
 from skaks_opt.stats import score_to_elo, summarize_wld
 
 try:
@@ -47,6 +48,8 @@ try:  # pragma: no cover - purely cosmetic
 except Exception:  # pragma: no cover
     HAS_RICH = False
     console = None
+
+COLOR_MODE = "auto"
 
 ANSI_COLORS = {
     "cyan": "\033[36m",
@@ -99,12 +102,27 @@ def _final_line(text: str) -> None:
 
 
 def _color(text: str, color: str) -> str:
+    if COLOR_MODE == "never":
+        return text
     if HAS_RICH:
         return f"[{color}]{text}[/{color}]"
-    if sys.stdout.isatty():
+    if COLOR_MODE == "always" or sys.stdout.isatty():
         prefix = ANSI_COLORS.get(color, "")
         return f"{prefix}{text}{ANSI_RESET if prefix else ''}"
     return text
+
+
+def configure_console(color_mode: str) -> None:
+    global console, COLOR_MODE
+    COLOR_MODE = color_mode
+    if not HAS_RICH:
+        return
+    if color_mode == "always":
+        console = Console(highlight=False, soft_wrap=False, force_terminal=True)
+    elif color_mode == "never":
+        console = None
+    else:
+        console = Console(highlight=False, soft_wrap=False)
 
 
 def _resolve_engine(path_str: str) -> Path:
@@ -369,6 +387,8 @@ def run_batch(
     moves_to_go: Optional[int],
     opponent_time_per_move: Optional[float] = None,
     opponent_depth_factor: Optional[float] = None,
+    engine_uci_options: Optional[Sequence[tuple[str, str]]] = None,
+    opponent_uci_options: Optional[Sequence[tuple[str, str]]] = None,
     concurrency: int,
     quiet: bool,
     disable_elo_store: bool = False,
@@ -401,6 +421,12 @@ def run_batch(
         argv.extend(["--opponent-time-per-move", str(opponent_time_per_move)])
     if opponent_depth_factor is not None:
         argv.extend(["--opponent-depth-factor", str(opponent_depth_factor)])
+    if engine_uci_options:
+        for name, value in engine_uci_options:
+            argv.extend(["--engine-uci-option", f"{name}={value}"])
+    if opponent_uci_options:
+        for name, value in opponent_uci_options:
+            argv.extend(["--opponent-uci-option", f"{name}={value}"])
     if depth is not None:
         argv.extend(["--depth", str(depth)])
     elif time_per_move is not None:
@@ -464,6 +490,8 @@ def _run_external_shard(
     moves_to_go: Optional[int],
     opponent_time_per_move: Optional[float],
     opponent_depth_factor: Optional[float],
+    engine_uci_options: Optional[Sequence[tuple[str, str]]],
+    opponent_uci_options: Optional[Sequence[tuple[str, str]]],
     concurrency: int,
     engine_label: str,
     opponent_label: str,
@@ -491,6 +519,8 @@ def _run_external_shard(
             moves_to_go=moves_to_go,
             opponent_time_per_move=opponent_time_per_move,
             opponent_depth_factor=opponent_depth_factor,
+            engine_uci_options=engine_uci_options,
+            opponent_uci_options=opponent_uci_options,
             concurrency=concurrency,
             quiet=quiet,
             disable_elo_store=True,
@@ -983,9 +1013,9 @@ def optimize_loop(args: argparse.Namespace) -> None:
         opponent_time = args.opponent_time_per_move
         base_label = "skaks"
         cand_label = args.opponent
-        # Use a lower neutral baseline (0.25) so early improvements are
+        # Use a lower neutral baseline so early improvements are
         # easier to accept when starting from un-tuned parameters.
-        base_score = 0.25
+        base_score = float(getattr(args, "initial_score", 0.25))
         baseline_data = None
         baseline_params = None
     else:
@@ -995,10 +1025,10 @@ def optimize_loop(args: argparse.Namespace) -> None:
         opponent_time = None
         base_label = "baseline"
         cand_label = "candidate"
-        # Use a lower neutral baseline score of 0.25 for internal self-play
+        # Use a lower neutral baseline score for internal self-play
         # so that early candidates that show modest improvement are accepted
         # and the optimizer can climb from a weak starting point.
-        base_score = 0.25
+        base_score = float(getattr(args, "initial_score", 0.25))
 
     base_data = _load_params(current_params)
     best_data = base_data
@@ -1125,6 +1155,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
     # that separate runs and replicates won't be overwritten by worse
     # candidates.
     meta_path = best_path.with_suffix(best_path.suffix + ".best.json")
+    best_written = False
     # Load on-disk best meta if present to initialize `best_score` and
     # `best_data` from previous runs.
     if best_path.exists() and meta_path.exists():
@@ -1170,6 +1201,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
             pass
 
     beam: List[Tuple[float, Dict[str, Any]]] = [(best_score, best_data)]
+    spsa_state: Optional[SPSAState] = None
 
     spin_cycle = itertools.cycle(SPINNER_FRAMES)
     piece_cycle = itertools.cycle(CHESS_SWARM)
@@ -1314,10 +1346,15 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             )
                         else:
                             score_block = _color(f"{score:.3f}", color)
+                        wld_block = (
+                            f"WLD={_color(str(w), 'green')}/"
+                            f"{_color(str(losses), 'magenta')}/"
+                            f"{_color(str(d), 'yellow')}"
+                        )
                         _final_line(
                             f"{_color('✓', 'green')} iter={step} cand={i + 1}/{args.beam_size} "
-                            f"score={score_block} "
-                            f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                            f"score={score_block} {wld_block} "
+                            f"elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
                         )
                         candidates.append((score, cand_data, stats, wall))
                     finally:
@@ -1331,7 +1368,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     (score, data) for score, data, _, _ in candidates[: args.beam_size]
                 ]
                 top_score, top_data, top_stats, _ = candidates[0]
-            else:  # CMA-like strategy
+            elif args.strategy == "cma":  # CMA-like strategy
                 paths, mean_vec, is_int = _flatten_params(
                     best_data,
                     include_prefixes=include_prefixes,
@@ -1436,10 +1473,15 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             )
                         else:
                             score_block = _color(f"{score:.3f}", color)
+                        wld_block = (
+                            f"WLD={_color(str(w), 'green')}/"
+                            f"{_color(str(losses), 'magenta')}/"
+                            f"{_color(str(d), 'yellow')}"
+                        )
                         _final_line(
                             f"{_color('✓', 'green')} iter={step} cand={i + 1}/{popsize} "
-                            f"score={score_block} "
-                            f"WLD={w}/{losses}/{d} elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                            f"score={score_block} {wld_block} "
+                            f"elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
                         )
                         candidates.append((score, cand_data, stats, wall))
                     finally:
@@ -1465,6 +1507,124 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         new_mean[idx] += weights[rank] * val
                 mean_vec = new_mean
                 best_data = _vector_to_params(template_data, paths, mean_vec, is_int)
+                beam = [(top_score, best_data)]
+            else:  # SPSA strategy
+                if spsa_state is None:
+                    spsa_state = SPSAState(
+                        a=float(getattr(args, "spsa_a", 0.01)),
+                        c=float(getattr(args, "spsa_c", 0.05)),
+                        A=float(getattr(args, "spsa_A", 10.0)),
+                        alpha=float(getattr(args, "spsa_alpha", 0.602)),
+                        gamma=float(getattr(args, "spsa_gamma", 0.101)),
+                        rng_seed=getattr(args, "spsa_seed", None),
+                    )
+                paths, mean_vec, is_int = _flatten_params(
+                    best_data,
+                    include_prefixes=include_prefixes,
+                    exclude_prefixes=exclude_prefixes,
+                )
+                theta_plus, theta_minus, deltas, _ = spsa_state.propose(mean_vec)
+
+                def run_spsa_eval(label: str, vec: List[float]) -> Tuple[float, Dict[str, Any], Tuple[int, int, int], float]:
+                    cand_data = _vector_to_params(best_data, paths, vec, is_int)
+                    cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
+                    _save_params(cand_data, cand_path)
+                    try:
+                        _final_line(
+                            f"[BATCH START] iter={step} cand={label} games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
+                        )
+                        sys.stdout.flush()
+                        score, (w, losses, d), wall = evaluate_candidate_repeats(
+                            repeats=args.repeats,
+                            progress_cb=None,
+                            quiet=quiet_child,
+                            use_arena=args.use_arena_binding,
+                            start_fens=start_fens,
+                            coerce_template=baseline_data
+                            if baseline_data is not None
+                            else best_data,
+                            engine=engine,
+                            baseline_params=baseline_params,
+                            candidate_params=cand_path,
+                            baseline_data=baseline_data,
+                            candidate_data=cand_data,
+                            games=args.games,
+                            depth=args.depth,
+                            time_per_move=args.time_per_move,
+                            clock=args.clock,
+                            increment=args.increment,
+                            opponent_clock=args.opponent_clock,
+                            opponent_increment=args.opponent_increment,
+                            moves_to_go=args.moves_to_go,
+                            concurrency=args.concurrency,
+                            arena_workers=args.arena_workers,
+                            base_label="base",
+                            cand_label="cand",
+                            external=external,
+                            opponent=opponent,
+                            opponent_params=opponent_params,
+                            opponent_time_per_move=opponent_time,
+                            opponent_depth_factor=args.opponent_depth_factor
+                            if hasattr(args, "opponent_depth_factor")
+                            else None,
+                            dask_client=dask_client,
+                            dask_shard_hint=dask_shard_hint,
+                        )
+                        stats = summarize_wld(
+                            w,
+                            losses,
+                            d,
+                            confidence=confidence_level,
+                        )
+                        ci_pct = int(round(stats.get("confidence", 0.0) * 100))
+                        if stats.get("confidence", 0.0) > 0:
+                            score_block = (
+                                f"{score:.3f}+/-{stats['margin']:.3f} "
+                                f"({ci_pct}% CI {stats['ci_low']:.3f}-{stats['ci_high']:.3f})"
+                            )
+                        else:
+                            score_block = f"{score:.3f}"
+                        wld_block = (
+                            f"WLD={_color(str(w), 'green')}/"
+                            f"{_color(str(losses), 'magenta')}/"
+                            f"{_color(str(d), 'yellow')}"
+                        )
+                        _final_line(
+                            f"✓ iter={step} cand={label} score={score_block} {wld_block} "
+                            f"elo~{score_to_elo(score):+.1f} time={wall:.1f}s"
+                        )
+                        return score, cand_data, stats, wall
+                    finally:
+                        try:
+                            cand_path.unlink()
+                        except OSError:
+                            pass
+
+                plus_score, plus_data, plus_stats, plus_wall = run_spsa_eval("+", theta_plus)
+                minus_score, minus_data, minus_stats, minus_wall = run_spsa_eval("-", theta_minus)
+
+                updated_vec = spsa_state.update(
+                    mean_vec,
+                    deltas,
+                    plus_score,
+                    minus_score,
+                    maximize=True,
+                )
+                best_data = _vector_to_params(best_data, paths, updated_vec, is_int)
+                if plus_score >= minus_score:
+                    top_score, top_data, top_stats, wall = (
+                        plus_score,
+                        plus_data,
+                        plus_stats,
+                        plus_wall,
+                    )
+                else:
+                    top_score, top_data, top_stats, wall = (
+                        minus_score,
+                        minus_data,
+                        minus_stats,
+                        minus_wall,
+                    )
                 beam = [(top_score, best_data)]
 
             # Only persist when the candidate is strictly better than the
@@ -1546,6 +1706,14 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 # Atomic write: write to temp then move into place.
                 tmp = best_path.with_suffix(best_path.suffix + ".tmp")
                 try:
+                    if best_path.exists():
+                        backup_path = best_path.with_name(
+                            f"{best_path.stem}.prev{best_path.suffix}"
+                        )
+                        try:
+                            best_path.replace(backup_path)
+                        except Exception:
+                            pass
                     _save_params(best_data, tmp)
                     tmp.replace(best_path)
                     meta = {
@@ -1569,10 +1737,14 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     )
                     # Also emit a greppable log line
                     _final_line(f"[NEW BEST] score={best_score:.3f} path={best_path}")
+                    best_written = True
                     # When a new best is accepted, make it the baseline for
                     # subsequent candidate evaluations in this run (so future
                     # candidates are tested against the best-known params).
-                    if not getattr(args, "external_opponent", False):
+                    if (
+                        not getattr(args, "external_opponent", False)
+                        and not getattr(args, "fixed_baseline", False)
+                    ):
                         try:
                             baseline_params = best_path
                             baseline_data = best_data
@@ -1622,8 +1794,12 @@ def optimize_loop(args: argparse.Namespace) -> None:
         _final_line(f"(baseline-decay={args.baseline_decay})")
     if args.output:
         out_path = Path(args.output).resolve()
-        _save_params(best_data, out_path)
-        _final_line(f"{_color('→', 'cyan')} Wrote best params to {out_path}")
+        if out_path != best_path:
+            _save_params(best_data, out_path)
+            _final_line(f"{_color('→', 'cyan')} Wrote best params to {out_path}")
+        elif not best_written and not out_path.exists():
+            _save_params(best_data, out_path)
+            _final_line(f"{_color('→', 'cyan')} Wrote best params to {out_path}")
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -1761,9 +1937,9 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
     )
     parser.add_argument(
         "--strategy",
-        choices=["beam", "cma"],
+        choices=["beam", "cma", "spsa"],
         default="beam",
-        help="Search strategy: beam (default) or CMA-like",
+        help="Search strategy: beam (default), CMA-like, or SPSA",
     )
     parser.add_argument(
         "--arena-pgn",
@@ -1847,16 +2023,63 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         help="Step scale for CMA-like strategy (default uses --noise)",
     )
     parser.add_argument(
+        "--spsa-a",
+        type=float,
+        default=0.01,
+        help="SPSA step size coefficient (a)",
+    )
+    parser.add_argument(
+        "--spsa-c",
+        type=float,
+        default=0.05,
+        help="SPSA perturbation size coefficient (c)",
+    )
+    parser.add_argument(
+        "--spsa-A",
+        type=float,
+        default=10.0,
+        help="SPSA stability constant (A)",
+    )
+    parser.add_argument(
+        "--spsa-alpha",
+        type=float,
+        default=0.602,
+        help="SPSA step decay exponent (alpha)",
+    )
+    parser.add_argument(
+        "--spsa-gamma",
+        type=float,
+        default=0.101,
+        help="SPSA perturbation decay exponent (gamma)",
+    )
+    parser.add_argument(
+        "--spsa-seed",
+        type=int,
+        default=None,
+        help="SPSA RNG seed (optional)",
+    )
+    parser.add_argument(
         "--min-score",
         type=float,
         default=0.0,
         help="Minimum score floor to allow accepting a candidate when current best is below this floor",
     )
     parser.add_argument(
+        "--initial-score",
+        type=float,
+        default=0.25,
+        help="Initial score used before any evaluated baseline (useful for cold starts)",
+    )
+    parser.add_argument(
         "--force-accept-first",
         type=int,
         default=0,
         help="Force-accept the first N candidate replacements (useful to seed a weak leaderboard)",
+    )
+    parser.add_argument(
+        "--fixed-baseline",
+        action="store_true",
+        help="Keep baseline params fixed during the run (do not promote new best to baseline)",
     )
     parser.add_argument(
         "--score-confidence",
@@ -1868,6 +2091,12 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         "--require-score-confidence",
         action="store_true",
         help="Require the candidate's lower confidence bound to exceed the stored best upper bound",
+    )
+    parser.add_argument(
+        "--color",
+        choices=["auto", "always", "never"],
+        default="auto",
+        help="Color output mode (auto detects TTY, always forces colors, never disables)",
     )
     return parser
 
@@ -1888,6 +2117,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    configure_console(getattr(args, "color", "auto"))
     try:
         optimize_loop(args)
     except KeyboardInterrupt:

@@ -7,8 +7,8 @@ from skaks_opt.arena_runner import (DEFAULT_DEPTH, DEFAULT_ELO_K_FACTOR,
                                     DEFAULT_ELO_OPPONENT, DEFAULT_ELO_START,
                                     DEFAULT_ELO_STORE, DEFAULT_GAMES,
                                     DEFAULT_MATCH_LIMIT, RECOMMENDED_DB_NAME,
-                                    non_negative_int, positive_float,
-                                    positive_int)
+                                    non_negative_int, parse_uci_option,
+                                    positive_float, positive_int)
 from skaks_opt.arena_runner import run_batch as _run_batch
 
 __all__ = ["add_subparser", "run_arena"]
@@ -55,6 +55,13 @@ def _configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
         help="Evaluation mode override for the reference engine (forwarded as --eval)",
     )
     parser.add_argument(
+        "--engine-uci-option",
+        action="append",
+        type=parse_uci_option,
+        default=[],
+        help="UCI option for the reference engine (repeatable, format name=value)",
+    )
+    parser.add_argument(
         "--eval",
         dest="engine_eval",
         type=str,
@@ -85,6 +92,13 @@ def _configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParse
         "--opponent-eval",
         type=str,
         help="Evaluation mode override for the opponent engine (forwarded as --eval)",
+    )
+    parser.add_argument(
+        "--opponent-uci-option",
+        action="append",
+        type=parse_uci_option,
+        default=[],
+        help="UCI option for the opponent engine (repeatable, format name=value)",
     )
     parser.add_argument(
         "--opponent-depth-factor",

@@ -8,13 +8,16 @@ from pathlib import Path
 from threading import Lock
 from typing import List
 
+import numpy as np
 import optuna
 
 from skaks_opt.data import Dataset, filter_quiet, load_csv, split_dataset
-from skaks_opt.evaluator import EvalResult, evaluate_params
+from skaks_opt.evaluator import (EvalResult, _coerce_numeric_types,
+                                 evaluate_params)
 from skaks_opt.params import (DEFAULT_PARAMS, apply_param_updates,
                               default_param_space, param_space_for_mode,
                               phase_weight_param_space)
+from skaks_opt.pst import apply_pst_symmetry
 
 try:  # Optional rich progress support
     from rich.console import Console
@@ -28,6 +31,11 @@ try:  # Optional tqdm support
     from tqdm import tqdm
 except Exception:  # pragma: no cover - optional dependency
     tqdm = None
+
+try:
+    import yaml
+except Exception:  # pragma: no cover - optional dependency
+    yaml = None
 
 __all__ = ["add_subparser", "run_fit"]
 
@@ -54,6 +62,18 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
     parser.add_argument("--batch-size", type=int, default=512, help="Eval batch size")
     parser.add_argument("--limit", type=int, help="Optional dataset row limit")
     parser.add_argument(
+        "--sample-fraction",
+        type=float,
+        default=1.0,
+        help="Randomly keep this fraction of rows during loading",
+    )
+    parser.add_argument(
+        "--sample-seed",
+        type=int,
+        default=42,
+        help="Seed for --sample-fraction",
+    )
+    parser.add_argument(
         "--val-split",
         type=float,
         default=0.0,
@@ -68,6 +88,11 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         "--phase-weights-only",
         action="store_true",
         help="Limit tuning to phase weight arrays",
+    )
+    parser.add_argument(
+        "--skip-pst",
+        action="store_true",
+        help="Skip PST symmetry application during evaluation",
     )
     parser.add_argument(
         "--param-set",
@@ -123,6 +148,11 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         help="Write best nested params to YAML",
     )
     parser.add_argument(
+        "--start-params",
+        type=Path,
+        help="Base params YAML to start from (defaults to built-in params)",
+    )
+    parser.add_argument(
         "--metrics-out",
         type=Path,
         help="Write per-trial metrics CSV",
@@ -131,6 +161,16 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         "--plot-out",
         type=Path,
         help="Write loss/RMSE plot (requires matplotlib)",
+    )
+    parser.add_argument(
+        "--regression-out",
+        type=Path,
+        help="Write regression plot (targets vs predicted cp)",
+    )
+    parser.add_argument(
+        "--regression-limit",
+        type=int,
+        help="Optional max sample count for regression plot",
     )
     parser.add_argument(
         "--quiet",
@@ -175,8 +215,128 @@ def _select_param_space(args: argparse.Namespace):
     if args.param_set == "phase":
         return phase_weight_param_space()
     if args.param_set in {"offense", "defense", "full"}:
-        return param_space_for_mode(args.param_set, include_arrays=args.include_arrays)
+        return param_space_for_mode(
+            args.param_set,
+            include_arrays=args.include_arrays,
+            include_pst=not args.skip_pst,
+        )
     return default_param_space(include_arrays=args.include_arrays)
+
+
+def _load_params(path: Path | None) -> dict:
+    if path is None:
+        return DEFAULT_PARAMS
+    if yaml is None:
+        raise RuntimeError("PyYAML is required to load --start-params")
+    with path.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    if not isinstance(data, dict):
+        raise ValueError("start-params must be a mapping")
+    return data
+
+
+def _collect_predictions(
+    dataset: Dataset,
+    params: dict,
+    *,
+    batch_size: int,
+    threads: int,
+    pov: str,
+    cp_cap: float | None,
+    limit: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    try:
+        import skaks_eval as sk
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("skaks_eval is not installed; install bindings first") from exc
+
+    targets_list: List[float] = []
+    preds_list: List[float] = []
+    collected = 0
+
+    params = _coerce_numeric_types(DEFAULT_PARAMS, params)
+    for fens, targets, _weights, side in dataset.iter_batches(batch_size):
+        result = sk.eval_fens(fens, params=params, threads=threads)
+        cp_raw = np.asarray(result["cp"], dtype=np.float64)
+        if cp_cap is not None:
+            cp_raw = np.clip(cp_raw, -cp_cap, cp_cap)
+            targets = np.clip(targets, -cp_cap, cp_cap)
+        cp = cp_raw * side if pov == "side" else cp_raw
+        errs = result["errors"]
+        for i, err in enumerate(errs):
+            if err is not None:
+                continue
+            targets_list.append(float(targets[i]))
+            preds_list.append(float(cp[i]))
+            collected += 1
+            if limit is not None and collected >= limit:
+                break
+        if limit is not None and collected >= limit:
+            break
+    return np.asarray(targets_list), np.asarray(preds_list)
+
+
+def _write_regression_plot(
+    path: Path,
+    dataset: Dataset,
+    base_params: dict,
+    fitted_params: dict,
+    *,
+    batch_size: int,
+    threads: int,
+    pov: str,
+    cp_cap: float | None,
+    limit: int | None,
+) -> None:
+    try:
+        import matplotlib.pyplot as plt  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("matplotlib is required for --regression-out") from exc
+
+    base_params = json.loads(json.dumps(base_params))
+    fitted_params = json.loads(json.dumps(fitted_params))
+    apply_pst_symmetry(base_params)
+    apply_pst_symmetry(fitted_params)
+
+    targets, base_preds = _collect_predictions(
+        dataset,
+        base_params,
+        batch_size=batch_size,
+        threads=threads,
+        pov=pov,
+        cp_cap=cp_cap,
+        limit=limit,
+    )
+    _, fitted_preds = _collect_predictions(
+        dataset,
+        fitted_params,
+        batch_size=batch_size,
+        threads=threads,
+        pov=pov,
+        cp_cap=cp_cap,
+        limit=limit,
+    )
+
+    if targets.size == 0:
+        print("no regression samples available")
+        return
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.scatter(targets, base_preds, s=8, alpha=0.35, label="baseline")
+    ax.scatter(targets, fitted_preds, s=8, alpha=0.35, label="fitted")
+    lo = float(np.min(targets))
+    hi = float(np.max(targets))
+    ax.plot([lo, hi], [lo, hi], linestyle="--", color="gray", label="y=x")
+    ax.set_xlabel("target (Stockfish cp)")
+    ax.set_ylabel("skaks predicted cp")
+    ax.set_title("Regression: target vs prediction")
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend()
+
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
 
 
 def _build_sampler(args: argparse.Namespace) -> optuna.samplers.BaseSampler:
@@ -224,7 +384,12 @@ def run_fit(args: argparse.Namespace) -> None:
 
         warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
-    dataset = load_csv(args.data, limit=args.limit)
+    dataset = load_csv(
+        args.data,
+        limit=args.limit,
+        sample_fraction=args.sample_fraction,
+        sample_seed=args.sample_seed,
+    )
     if args.require_quiet:
         dataset = filter_quiet(dataset, batch_size=args.quiet_batch)
         print(f"Filtered to {len(dataset)} quiet positions")
@@ -234,6 +399,7 @@ def run_fit(args: argparse.Namespace) -> None:
     if args.val_split and args.val_split > 0.0:
         train_ds, val_ds = split_dataset(dataset, args.val_split, seed=args.seed)
 
+    base_params = _load_params(args.start_params)
     param_space = _select_param_space(args)
     sampler = _build_sampler(args)
     pruner = _build_pruner(args)
@@ -334,6 +500,7 @@ def run_fit(args: argparse.Namespace) -> None:
             error_penalty=args.error_penalty,
             pov=args.pov,
             cp_cap=args.cp_cap,
+            base_params=base_params,
         )
         trial.set_user_attr("error_count", result.error_count)
         trial.set_user_attr("evaluated", result.evaluated)
@@ -351,6 +518,7 @@ def run_fit(args: argparse.Namespace) -> None:
                 error_penalty=args.error_penalty,
                 pov=args.pov,
                 cp_cap=args.cp_cap,
+                base_params=base_params,
             )
             trial.set_user_attr("val_mae", val_res.mae)
             trial.set_user_attr("val_mse", val_res.mse)
@@ -370,7 +538,7 @@ def run_fit(args: argparse.Namespace) -> None:
         rich_progress.stop()
 
     best = study.best_trial
-    merged = apply_param_updates(DEFAULT_PARAMS, best.params)
+    merged = apply_param_updates(base_params, best.params)
 
     def _round_params(payload):
         if isinstance(payload, dict):
@@ -428,6 +596,21 @@ def run_fit(args: argparse.Namespace) -> None:
     if args.plot_out:
         _write_plot(args.plot_out, completed)
         print(f"wrote loss plot to {args.plot_out}")
+
+    if args.regression_out:
+        plot_ds = val_ds if val_ds is not None else train_ds
+        _write_regression_plot(
+            args.regression_out,
+            plot_ds,
+            base_params,
+            merged,
+            batch_size=args.batch_size,
+            threads=args.threads,
+            pov=args.pov,
+            cp_cap=args.cp_cap,
+            limit=args.regression_limit,
+        )
+        print(f"wrote regression plot to {args.regression_out}")
 
 
 def _write_metrics_csv(path: Path, trials: List[optuna.trial.FrozenTrial]) -> None:

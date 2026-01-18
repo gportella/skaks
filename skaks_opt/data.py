@@ -62,7 +62,13 @@ def parse_side_to_move(fen: str) -> int:
     return 1 if parts[1] == "w" else -1
 
 
-def load_csv(path: Path | str, limit: int | None = None) -> Dataset:
+def load_csv(
+    path: Path | str,
+    limit: int | None = None,
+    *,
+    sample_fraction: float = 1.0,
+    sample_seed: int = 42,
+) -> Dataset:
     path = Path(path)
     if path.is_dir():
         sources = sorted(p for p in path.rglob("*.csv") if p.is_file())
@@ -75,6 +81,10 @@ def load_csv(path: Path | str, limit: int | None = None) -> Dataset:
     examples: List[Example] = []
     sides: List[int] = []
     remaining = limit
+    sample_fraction = float(sample_fraction)
+    if not (0.0 < sample_fraction <= 1.0):
+        raise ValueError("sample_fraction must be in (0, 1]")
+    rng = np.random.default_rng(sample_seed)
 
     def _load_file(csv_path: Path, remaining_limit: int | None) -> int | None:
         limit_left = remaining_limit
@@ -91,6 +101,8 @@ def load_csv(path: Path | str, limit: int | None = None) -> Dataset:
             for row in reader:
                 if limit_left is not None and limit_left <= 0:
                     return 0
+                if sample_fraction < 1.0 and rng.random() > sample_fraction:
+                    continue
                 fen = row["fen"].strip()
                 if not fen:
                     continue

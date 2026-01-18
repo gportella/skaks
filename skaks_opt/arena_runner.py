@@ -72,6 +72,7 @@ __all__ = [
     "non_negative_int",
     "positive_float",
     "positive_int",
+    "parse_uci_option",
     "run_batch",
 ]
 
@@ -170,6 +171,21 @@ def positive_float(value: str) -> float:
     if parsed <= 0.0:
         raise argparse.ArgumentTypeError("value must be a positive number")
     return parsed
+
+
+def parse_uci_option(value: str) -> Tuple[str, str]:
+    if "=" not in value:
+        raise argparse.ArgumentTypeError(
+            "UCI option must be formatted as name=value (e.g. Skill Level=0)"
+        )
+    name, raw_value = value.split("=", 1)
+    name = name.strip()
+    raw_value = raw_value.strip()
+    if not name:
+        raise argparse.ArgumentTypeError("UCI option name must be non-empty")
+    if raw_value == "":
+        raise argparse.ArgumentTypeError("UCI option value must be non-empty")
+    return name, raw_value
 
 
 @dataclass
@@ -291,6 +307,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Evaluation mode override for the reference engine (forwarded as --engine-eval)",
     )
     parser.add_argument(
+        "--engine-uci-option",
+        action="append",
+        type=parse_uci_option,
+        default=[],
+        help="UCI option for the reference engine (repeatable, format name=value)",
+    )
+    parser.add_argument(
         "--engine-label",
         type=str,
         help="Display label for the reference engine in summary/Elo (default: engine basename)",
@@ -315,6 +338,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--opponent-eval",
         type=str,
         help="Evaluation mode override for the opponent engine (forwarded as --opponent-eval)",
+    )
+    parser.add_argument(
+        "--opponent-uci-option",
+        action="append",
+        type=parse_uci_option,
+        default=[],
+        help="UCI option for the opponent engine (repeatable, format name=value)",
     )
     parser.add_argument(
         "--opponent-depth-factor",
@@ -541,6 +571,9 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         base_args.extend(["--engine-nnue", args.engine_nnue])
     if args.engine_eval:
         base_args.extend(["--engine-eval", args.engine_eval])
+    if getattr(args, "engine_uci_option", None):
+        for name, value in args.engine_uci_option:
+            base_args.extend(["--engine-uci-option", f"{name}={value}"])
     if getattr(args, "threads", None) is not None:
         base_args.extend(["--threads", str(args.threads)])
     if args.opponent:
@@ -551,6 +584,9 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
         base_args.extend(["--opponent-nnue", args.opponent_nnue])
     if args.opponent_eval:
         base_args.extend(["--opponent-eval", args.opponent_eval])
+    if getattr(args, "opponent_uci_option", None):
+        for name, value in args.opponent_uci_option:
+            base_args.extend(["--opponent-uci-option", f"{name}={value}"])
     if getattr(args, "opponent_threads", None) is not None:
         base_args.extend(["--opponent-threads", str(args.opponent_threads)])
     if args.no_handicap:
