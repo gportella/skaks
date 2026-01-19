@@ -25,6 +25,8 @@ from skaks_opt import arena_runner
 from skaks_opt.dask_support import dask_client_from_args
 from skaks_opt.params import DEFAULT_PARAMS, param_set_prefixes
 from skaks_opt.pst import apply_pst_symmetry
+from skaks_opt.replica_exchange import (ReplicaExchangeState, REXChain,
+                                        build_temperatures)
 from skaks_opt.spsa import SPSAState
 from skaks_opt.stats import score_to_elo, summarize_wld
 
@@ -367,6 +369,20 @@ def _vector_to_params(
                 val = 1  # avoid zeroed integer weights
         _set_by_path(data, path, val)
     return data
+
+
+def _clamp_phase_weights(data: Dict[str, Any], low: float = -1.0, high: float = 1.0) -> None:
+    eval_section = data.get("evaluation") if isinstance(data, dict) else None
+    if not isinstance(eval_section, dict):
+        return
+    for key in ("phase_weights_mg", "phase_weights_eg"):
+        arr = eval_section.get(key)
+        if isinstance(arr, tuple):
+            arr = list(arr)
+        if isinstance(arr, list):
+            eval_section[key] = [
+                float(max(low, min(high, float(val)))) for val in arr
+            ]
 
 
 def run_batch(
@@ -1202,6 +1218,8 @@ def optimize_loop(args: argparse.Namespace) -> None:
 
     beam: List[Tuple[float, Dict[str, Any]]] = [(best_score, best_data)]
     spsa_state: Optional[SPSAState] = None
+    rex_state: Optional[ReplicaExchangeState] = None
+    rex_chains: Optional[List[REXChain]] = None
 
     spin_cycle = itertools.cycle(SPINNER_FRAMES)
     piece_cycle = itertools.cycle(CHESS_SWARM)
@@ -1265,6 +1283,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         include_prefixes=include_prefixes,
                         exclude_prefixes=exclude_prefixes,
                     )
+                    _clamp_phase_weights(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1394,6 +1413,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         scale = sigma * max(abs(val), 1.0)
                         vec.append(val + random.gauss(0.0, scale))
                     cand_data = _vector_to_params(template_data, paths, vec, is_int)
+                    _clamp_phase_weights(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1507,6 +1527,140 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         new_mean[idx] += weights[rank] * val
                 mean_vec = new_mean
                 best_data = _vector_to_params(template_data, paths, mean_vec, is_int)
+                _clamp_phase_weights(best_data)
+                beam = [(top_score, best_data)]
+            elif args.strategy == "rex":  # Replica-exchange Monte Carlo
+                if rex_state is None or rex_chains is None:
+                    temps = None
+                    temps_arg = getattr(args, "rex_temps", None)
+                    if temps_arg:
+                        try:
+                            temps = [float(x.strip()) for x in temps_arg.split(",") if x.strip()]
+                        except Exception:
+                            temps = None
+                    if not temps:
+                        temps = build_temperatures(
+                            int(getattr(args, "rex_chains", 4)),
+                            float(getattr(args, "rex_temp_min", 0.25)),
+                            float(getattr(args, "rex_temp_max", 2.5)),
+                        )
+                    rex_state = ReplicaExchangeState(
+                        temperatures=temps,
+                        target_accept=float(getattr(args, "rex_target_accept", 0.2)),
+                        adapt_rate=float(getattr(args, "rex_adapt_rate", 0.05)),
+                        seed=getattr(args, "rex_seed", None),
+                    )
+                    rex_chains = [
+                        REXChain(params=json.loads(json.dumps(best_data)), score=float(best_score))
+                        for _ in temps
+                    ]
+
+                candidates = []
+                for idx, chain in enumerate(rex_chains):
+                    temp = float(rex_state.temperatures[idx])
+                    noise = args.noise * max(1e-6, temp)
+                    cand_data = perturb_params(
+                        chain.params,
+                        noise,
+                        include_prefixes=include_prefixes,
+                        exclude_prefixes=exclude_prefixes,
+                    )
+                    _clamp_phase_weights(cand_data)
+                    cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
+                    _save_params(cand_data, cand_path)
+                    try:
+                        _final_line(
+                            f"[BATCH START] iter={step} chain={idx + 1}/{len(rex_chains)} temp={temp:.3f} "
+                            f"games={args.games} depth={args.depth} external={external} opponent={getattr(opponent, 'name', str(opponent))}"
+                        )
+                        sys.stdout.flush()
+                        score, (w, losses, d), wall = evaluate_candidate_repeats(
+                            repeats=args.repeats,
+                            progress_cb=None,
+                            quiet=quiet_child,
+                            use_arena=args.use_arena_binding,
+                            start_fens=start_fens,
+                            coerce_template=baseline_data
+                            if baseline_data is not None
+                            else best_data,
+                            engine=engine,
+                            baseline_params=baseline_params,
+                            candidate_params=cand_path,
+                            baseline_data=baseline_data,
+                            candidate_data=cand_data,
+                            games=args.games,
+                            depth=args.depth,
+                            time_per_move=args.time_per_move,
+                            clock=args.clock,
+                            increment=args.increment,
+                            opponent_clock=args.opponent_clock,
+                            opponent_increment=args.opponent_increment,
+                            moves_to_go=args.moves_to_go,
+                            concurrency=args.concurrency,
+                            arena_workers=args.arena_workers,
+                            base_label="base",
+                            cand_label="cand",
+                            external=external,
+                            opponent=opponent,
+                            opponent_params=opponent_params,
+                            opponent_time_per_move=opponent_time,
+                            opponent_depth_factor=args.opponent_depth_factor
+                            if hasattr(args, "opponent_depth_factor")
+                            else None,
+                            dask_client=dask_client,
+                            dask_shard_hint=dask_shard_hint,
+                        )
+                        stats = summarize_wld(
+                            w,
+                            losses,
+                            d,
+                            confidence=confidence_level,
+                        )
+                        ci_pct = int(round(stats.get("confidence", 0.0) * 100))
+                        if stats.get("confidence", 0.0) > 0:
+                            score_block = (
+                                f"{score:.3f}+/-{stats['margin']:.3f} "
+                                f"({ci_pct}% CI {stats['ci_low']:.3f}-{stats['ci_high']:.3f})"
+                            )
+                        else:
+                            score_block = f"{score:.3f}"
+                        wld_block = (
+                            f"WLD={_color(str(w), 'green')}/"
+                            f"{_color(str(losses), 'magenta')}/"
+                            f"{_color(str(d), 'yellow')}"
+                        )
+                        accepted = rex_state.should_accept(idx, score, chain.score)
+                        verdict = _color("accept", "green") if accepted else _color("reject", "yellow")
+                        _final_line(
+                            f"✓ iter={step} chain={idx + 1} temp={temp:.3f} score={score_block} {wld_block} "
+                            f"elo~{score_to_elo(score):+.1f} {verdict} time={wall:.1f}s"
+                        )
+                        if accepted:
+                            chain.params = cand_data
+                            chain.score = score
+                        candidates.append((score, cand_data, stats, wall))
+                    finally:
+                        try:
+                            cand_path.unlink()
+                        except OSError:
+                            pass
+
+                if getattr(args, "rex_swap_interval", 0) and rex_state is not None:
+                    if step % int(args.rex_swap_interval) == 0:
+                        swaps = rex_state.try_swaps(rex_chains)
+                        if swaps:
+                            _final_line(
+                                f"{_color('↔', 'cyan')} rex swaps={swaps}"
+                            )
+
+                if rex_state is not None:
+                    rex_state.adapt_temperatures()
+
+                if candidates:
+                    candidates.sort(key=lambda x: x[0], reverse=True)
+                    top_score, top_data, top_stats, wall = candidates[0]
+                else:
+                    top_score, top_data, top_stats, wall = best_score, best_data, best_stats, 0.0
                 beam = [(top_score, best_data)]
             else:  # SPSA strategy
                 if spsa_state is None:
@@ -1527,6 +1681,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
 
                 def run_spsa_eval(label: str, vec: List[float]) -> Tuple[float, Dict[str, Any], Tuple[int, int, int], float]:
                     cand_data = _vector_to_params(best_data, paths, vec, is_int)
+                    _clamp_phase_weights(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1611,6 +1766,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     maximize=True,
                 )
                 best_data = _vector_to_params(best_data, paths, updated_vec, is_int)
+                _clamp_phase_weights(best_data)
                 if plus_score >= minus_score:
                     top_score, top_data, top_stats, wall = (
                         plus_score,
@@ -1937,9 +2093,9 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
     )
     parser.add_argument(
         "--strategy",
-        choices=["beam", "cma", "spsa"],
+        choices=["beam", "cma", "spsa", "rex"],
         default="beam",
-        help="Search strategy: beam (default), CMA-like, or SPSA",
+        help="Search strategy: beam (default), CMA-like, SPSA, or replica exchange",
     )
     parser.add_argument(
         "--arena-pgn",
@@ -2057,6 +2213,52 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         type=int,
         default=None,
         help="SPSA RNG seed (optional)",
+    )
+    parser.add_argument(
+        "--rex-chains",
+        type=int,
+        default=4,
+        help="Replica exchange chain count",
+    )
+    parser.add_argument(
+        "--rex-temp-min",
+        type=float,
+        default=0.25,
+        help="Minimum replica exchange temperature",
+    )
+    parser.add_argument(
+        "--rex-temp-max",
+        type=float,
+        default=2.5,
+        help="Maximum replica exchange temperature",
+    )
+    parser.add_argument(
+        "--rex-temps",
+        help="Comma-separated temperatures to override min/max schedule",
+    )
+    parser.add_argument(
+        "--rex-swap-interval",
+        type=int,
+        default=2,
+        help="Swap interval (iterations) for replica exchange",
+    )
+    parser.add_argument(
+        "--rex-target-accept",
+        type=float,
+        default=0.2,
+        help="Target acceptance rate per chain",
+    )
+    parser.add_argument(
+        "--rex-adapt-rate",
+        type=float,
+        default=0.05,
+        help="Temperature adaptation rate towards target acceptance",
+    )
+    parser.add_argument(
+        "--rex-seed",
+        type=int,
+        default=None,
+        help="Replica exchange RNG seed (optional)",
     )
     parser.add_argument(
         "--min-score",

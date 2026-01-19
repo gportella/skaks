@@ -137,6 +137,31 @@ run_phase() {
       if [ -n "${CMA_SIGMA:-}" ]; then
         strategy_desc+=" sigma=${CMA_SIGMA}"
       fi
+    elif [ "$STRATEGY" = "rex" ]; then
+      if [ -n "${REX_CHAINS:-}" ]; then
+        strategy_desc+=" chains=${REX_CHAINS}"
+      fi
+      if [ -n "${REX_TEMP_MIN:-}" ]; then
+        strategy_desc+=" tmin=${REX_TEMP_MIN}"
+      fi
+      if [ -n "${REX_TEMP_MAX:-}" ]; then
+        strategy_desc+=" tmax=${REX_TEMP_MAX}"
+      fi
+      if [ -n "${REX_TEMPS:-}" ]; then
+        strategy_desc+=" temps=${REX_TEMPS}"
+      fi
+      if [ -n "${REX_SWAP_INTERVAL:-}" ]; then
+        strategy_desc+=" swap=${REX_SWAP_INTERVAL}"
+      fi
+      if [ -n "${REX_TARGET_ACCEPT:-}" ]; then
+        strategy_desc+=" target=${REX_TARGET_ACCEPT}"
+      fi
+      if [ -n "${REX_ADAPT_RATE:-}" ]; then
+        strategy_desc+=" adapt=${REX_ADAPT_RATE}"
+      fi
+      if [ -n "${REX_SEED:-}" ]; then
+        strategy_desc+=" seed=${REX_SEED}"
+      fi
     elif [ "$STRATEGY" = "spsa" ]; then
       if [ -n "${SPSA_A:-}" ]; then
         strategy_desc+=" a=${SPSA_A}"
@@ -193,6 +218,32 @@ run_phase() {
         fi
         if [ -n "${CMA_SIGMA:-}" ]; then
           STRATEGY_FLAGS+=" --cma-sigma '${CMA_SIGMA}'"
+        fi
+        ;;
+      rex)
+        if [ -n "${REX_CHAINS:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-chains '${REX_CHAINS}'"
+        fi
+        if [ -n "${REX_TEMP_MIN:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-temp-min '${REX_TEMP_MIN}'"
+        fi
+        if [ -n "${REX_TEMP_MAX:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-temp-max '${REX_TEMP_MAX}'"
+        fi
+        if [ -n "${REX_TEMPS:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-temps '${REX_TEMPS}'"
+        fi
+        if [ -n "${REX_SWAP_INTERVAL:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-swap-interval '${REX_SWAP_INTERVAL}'"
+        fi
+        if [ -n "${REX_TARGET_ACCEPT:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-target-accept '${REX_TARGET_ACCEPT}'"
+        fi
+        if [ -n "${REX_ADAPT_RATE:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-adapt-rate '${REX_ADAPT_RATE}'"
+        fi
+        if [ -n "${REX_SEED:-}" ]; then
+          STRATEGY_FLAGS+=" --rex-seed '${REX_SEED}'"
         fi
         ;;
       spsa)

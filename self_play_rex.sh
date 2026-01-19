@@ -6,6 +6,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Phase configs (tweak these values for your machine)
+EXPL_ITERATIONS=${EXPL_ITERATIONS:-100}
+EXPL_GAMES=${EXPL_GAMES:-300}
+EXPL_REPEATS=${EXPL_REPEATS:-4}
+EXPL_DEPTH=${EXPL_DEPTH:-4}
+EXPL_NOISE=${EXPL_NOISE:-0.30}
+
 # Configurable targets
 TARGET_GAMES=${TARGET_GAMES:-1000000} # target total games to play
 LOG_DIR=${LOG_DIR:-logs}
@@ -31,34 +38,31 @@ if [ "${OPPONENT:-}" != "${ENGINE}" ]; then
   fi
 fi
 
-# Phase configs (tweak these values for your machine)
-EXPL_ITERATIONS=${EXPL_ITERATIONS:-100}
-EXPL_BEAM=${EXPL_BEAM:-12}
-EXPL_GAMES=${EXPL_GAMES:-60}
-EXPL_REPEATS=${EXPL_REPEATS:-4}
-EXPL_DEPTH=${EXPL_DEPTH:-5}
-EXPL_NOISE=${EXPL_NOISE:-0.30}
 
 REF_ITERATIONS=${REF_ITERATIONS:-0}
-REF_BEAM=${REF_BEAM:-6}
 REF_GAMES=${REF_GAMES:-80}
 REF_REPEATS=${REF_REPEATS:-3}
 REF_DEPTH=${REF_DEPTH:-5}
 REF_NOISE=${REF_NOISE:-0.02}
 
-# Search strategy controls (beam or cma)
-STRATEGY=${STRATEGY:-beam}
-CMA_POPSIZE=${CMA_POPSIZE:-}
-CMA_SIGMA=${CMA_SIGMA:-}
+# Replica exchange controls
+REX_CHAINS=${REX_CHAINS:-4}
+REX_TEMP_MIN=${REX_TEMP_MIN:-0.25}
+REX_TEMP_MAX=${REX_TEMP_MAX:-2.5}
+REX_TEMPS=${REX_TEMPS:-}
+REX_SWAP_INTERVAL=${REX_SWAP_INTERVAL:-2}
+REX_TARGET_ACCEPT=${REX_TARGET_ACCEPT:-0.2}
+REX_ADAPT_RATE=${REX_ADAPT_RATE:-0.05}
+REX_SEED=${REX_SEED:-}
 
 # Relaxation: per-iteration baseline decay to make acceptance gradual
 # Small positive value makes it easier to replace a stubborn best.
-BASELINE_DECAY=${BASELINE_DECAY:-0.010}
+BASELINE_DECAY=${BASELINE_DECAY:-0.05}
 
 # Acceptance tuning: allow keeping early improvements below default thresholds
 MIN_SCORE=${MIN_SCORE:-0.0}
 FORCE_ACCEPT_FIRST=${FORCE_ACCEPT_FIRST:-0}
-SCORE_CONFIDENCE=${SCORE_CONFIDENCE:-0.95}
+SCORE_CONFIDENCE=${SCORE_CONFIDENCE:-0.90}
 REQUIRE_SCORE_CONFIDENCE=${REQUIRE_SCORE_CONFIDENCE:-1}
 
 # Arena sampling (override via env vars to change PGN/min/max ply or disable PGN entirely)
@@ -111,8 +115,6 @@ run_phase() {
   shift
   local iterations=$1
   shift
-  local beam=$1
-  shift
   local games=$1
   shift
   local repeats=$1
@@ -123,60 +125,14 @@ run_phase() {
   shift
 
   for i in $(seq 1 $iterations); do
-    local strategy_desc="strategy=${STRATEGY} noise=$noise"
-    if [ "$STRATEGY" = "beam" ]; then
-      strategy_desc+=" beam-size=$beam"
-    elif [ "$STRATEGY" = "cma" ]; then
-      if [ -n "${CMA_POPSIZE:-}" ]; then
-        strategy_desc+=" popsize=${CMA_POPSIZE}"
-      fi
-      if [ -n "${CMA_SIGMA:-}" ]; then
-        strategy_desc+=" sigma=${CMA_SIGMA}"
-      fi
-    elif [ "$STRATEGY" = "rex" ]; then
-      if [ -n "${REX_CHAINS:-}" ]; then
-        strategy_desc+=" chains=${REX_CHAINS}"
-      fi
-      if [ -n "${REX_TEMP_MIN:-}" ]; then
-        strategy_desc+=" tmin=${REX_TEMP_MIN}"
-      fi
-      if [ -n "${REX_TEMP_MAX:-}" ]; then
-        strategy_desc+=" tmax=${REX_TEMP_MAX}"
-      fi
-      if [ -n "${REX_TEMPS:-}" ]; then
-        strategy_desc+=" temps=${REX_TEMPS}"
-      fi
-      if [ -n "${REX_SWAP_INTERVAL:-}" ]; then
-        strategy_desc+=" swap=${REX_SWAP_INTERVAL}"
-      fi
-      if [ -n "${REX_TARGET_ACCEPT:-}" ]; then
-        strategy_desc+=" target=${REX_TARGET_ACCEPT}"
-      fi
-      if [ -n "${REX_ADAPT_RATE:-}" ]; then
-        strategy_desc+=" adapt=${REX_ADAPT_RATE}"
-      fi
-      if [ -n "${REX_SEED:-}" ]; then
-        strategy_desc+=" seed=${REX_SEED}"
-      fi
-    elif [ "$STRATEGY" = "spsa" ]; then
-      if [ -n "${SPSA_A:-}" ]; then
-        strategy_desc+=" a=${SPSA_A}"
-      fi
-      if [ -n "${SPSA_C:-}" ]; then
-        strategy_desc+=" c=${SPSA_C}"
-      fi
-      if [ -n "${SPSA_BIG_A:-}" ]; then
-        strategy_desc+=" A=${SPSA_BIG_A}"
-      fi
-      if [ -n "${SPSA_ALPHA:-}" ]; then
-        strategy_desc+=" alpha=${SPSA_ALPHA}"
-      fi
-      if [ -n "${SPSA_GAMMA:-}" ]; then
-        strategy_desc+=" gamma=${SPSA_GAMMA}"
-      fi
-      if [ -n "${SPSA_SEED:-}" ]; then
-        strategy_desc+=" seed=${SPSA_SEED}"
-      fi
+    local strategy_desc="strategy=rex noise=$noise"
+    strategy_desc+=" chains=${REX_CHAINS} tmin=${REX_TEMP_MIN} tmax=${REX_TEMP_MAX}"
+    if [ -n "${REX_TEMPS:-}" ]; then
+      strategy_desc+=" temps=${REX_TEMPS}"
+    fi
+    strategy_desc+=" swap=${REX_SWAP_INTERVAL} target=${REX_TARGET_ACCEPT} adapt=${REX_ADAPT_RATE}"
+    if [ -n "${REX_SEED:-}" ]; then
+      strategy_desc+=" seed=${REX_SEED}"
     fi
     log "Phase=$phase_name iter=$i/$iterations games=$games repeats=$repeats depth=$depth $strategy_desc"
     # Build command string (use eval to allow ARENA_FLAGS expansion)
@@ -199,74 +155,23 @@ run_phase() {
     if [ "${OPPONENT:-}" != "${ENGINE}" ] && [ -n "${OPPONENT:-}" ]; then
       EXTERNAL_FLAG=" --external-opponent"
     fi
-    STRATEGY_FLAGS=" --strategy ${STRATEGY} --noise '$noise'"
-    case "$STRATEGY" in
-      cma)
-        if [ -n "${CMA_POPSIZE:-}" ]; then
-          STRATEGY_FLAGS+=" --cma-popsize '${CMA_POPSIZE}'"
-        fi
-        if [ -n "${CMA_SIGMA:-}" ]; then
-          STRATEGY_FLAGS+=" --cma-sigma '${CMA_SIGMA}'"
-        fi
-        ;;
-      rex)
-        if [ -n "${REX_CHAINS:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-chains '${REX_CHAINS}'"
-        fi
-        if [ -n "${REX_TEMP_MIN:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-temp-min '${REX_TEMP_MIN}'"
-        fi
-        if [ -n "${REX_TEMP_MAX:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-temp-max '${REX_TEMP_MAX}'"
-        fi
-        if [ -n "${REX_TEMPS:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-temps '${REX_TEMPS}'"
-        fi
-        if [ -n "${REX_SWAP_INTERVAL:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-swap-interval '${REX_SWAP_INTERVAL}'"
-        fi
-        if [ -n "${REX_TARGET_ACCEPT:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-target-accept '${REX_TARGET_ACCEPT}'"
-        fi
-        if [ -n "${REX_ADAPT_RATE:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-adapt-rate '${REX_ADAPT_RATE}'"
-        fi
-        if [ -n "${REX_SEED:-}" ]; then
-          STRATEGY_FLAGS+=" --rex-seed '${REX_SEED}'"
-        fi
-        ;;
-      spsa)
-        if [ -n "${SPSA_A:-}" ]; then
-          STRATEGY_FLAGS+=" --spsa-a '${SPSA_A}'"
-        fi
-        if [ -n "${SPSA_C:-}" ]; then
-          STRATEGY_FLAGS+=" --spsa-c '${SPSA_C}'"
-        fi
-        if [ -n "${SPSA_BIG_A:-}" ]; then
-          STRATEGY_FLAGS+=" --spsa-A '${SPSA_BIG_A}'"
-        fi
-        if [ -n "${SPSA_ALPHA:-}" ]; then
-          STRATEGY_FLAGS+=" --spsa-alpha '${SPSA_ALPHA}'"
-        fi
-        if [ -n "${SPSA_GAMMA:-}" ]; then
-          STRATEGY_FLAGS+=" --spsa-gamma '${SPSA_GAMMA}'"
-        fi
-        if [ -n "${SPSA_SEED:-}" ]; then
-          STRATEGY_FLAGS+=" --spsa-seed '${SPSA_SEED}'"
-        fi
-        ;;
-      beam)
-        STRATEGY_FLAGS+=" --beam-size '$beam'"
-        ;;
-      *)
-        log "Unknown STRATEGY=${STRATEGY}; defaulting to beam"
-        STRATEGY_FLAGS+=" --beam-size '$beam'"
-        ;;
-    esac
+    STRATEGY_FLAGS=" --strategy rex --noise '$noise'"
+    STRATEGY_FLAGS+=" --rex-chains '${REX_CHAINS}'"
+    STRATEGY_FLAGS+=" --rex-temp-min '${REX_TEMP_MIN}'"
+    STRATEGY_FLAGS+=" --rex-temp-max '${REX_TEMP_MAX}'"
+    if [ -n "${REX_TEMPS:-}" ]; then
+      STRATEGY_FLAGS+=" --rex-temps '${REX_TEMPS}'"
+    fi
+    STRATEGY_FLAGS+=" --rex-swap-interval '${REX_SWAP_INTERVAL}'"
+    STRATEGY_FLAGS+=" --rex-target-accept '${REX_TARGET_ACCEPT}'"
+    STRATEGY_FLAGS+=" --rex-adapt-rate '${REX_ADAPT_RATE}'"
+    if [ -n "${REX_SEED:-}" ]; then
+      STRATEGY_FLAGS+=" --rex-seed '${REX_SEED}'"
+    fi
     if [ -n "$INCLUDE_FLAGS" ]; then
-      log "Running weights-only optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=${STRATEGY})"
+      log "Running weights-only optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=rex)"
     else
-      log "Running full-parameter optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=${STRATEGY})"
+      log "Running full-parameter optimizer for phase=$phase_name (baseline-decay=${BASELINE_DECAY}, strategy=rex)"
     fi
     CMD="skaks-opt param-optimize ${EXTERNAL_FLAG} $COMMON_FLAGS --skip-pst --param-set full  --depth '$depth' --games '$games' --iterations 1 --repeats '$repeats' --concurrency '$CONCURRENCY' --baseline-decay '$BASELINE_DECAY' --min-score '$MIN_SCORE' --force-accept-first '$FORCE_ACCEPT_FIRST'${EXTF}${INCLUDE_FLAGS}${CONFIDENCE_FLAGS}${STRATEGY_FLAGS} $ARENA_FLAGS --output '$LOG_DIR/${phase_name}_best.yaml'"
     eval "$CMD" 2>&1 | tee -a "$LOG_DIR/${phase_name}_iter_${i}.log"
@@ -284,11 +189,11 @@ run_phase() {
 # Run exploration then refinement until target reached
 log "Starting long run target=$TARGET_GAMES"
 while [ "$TOTAL_PLAYED" -lt "$TARGET_GAMES" ]; do
-  run_phase EXPLORE $EXPL_ITERATIONS $EXPL_BEAM $EXPL_GAMES $EXPL_REPEATS $EXPL_DEPTH $EXPL_NOISE
+  run_phase EXPLORE $EXPL_ITERATIONS $EXPL_GAMES $EXPL_REPEATS $EXPL_DEPTH $EXPL_NOISE
   if [ "$TOTAL_PLAYED" -ge "$TARGET_GAMES" ]; then break; fi
   # After exploration, set START_PARAMS to the last best file
   START_PARAMS="$LOG_DIR/EXPLORE_best.yaml"
-  run_phase REFINE $REF_ITERATIONS $REF_BEAM $REF_GAMES $REF_REPEATS $REF_DEPTH $REF_NOISE
+  run_phase REFINE $REF_ITERATIONS $REF_GAMES $REF_REPEATS $REF_DEPTH $REF_NOISE
   START_PARAMS="$LOG_DIR/REFINE_best.yaml"
 done
 
