@@ -1,8 +1,12 @@
 #include "chess/engine.hpp"
 
+#include "chess/eval_mode.hpp"
 #include "chess/moves.hpp"
+#include "chess/nnue_sf.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/time_manager.hpp"
+#include "evaluate.h"
+#include "probe.h"
 
 #include <algorithm>
 #include <atomic>
@@ -30,7 +34,7 @@ void log_smp_fallback() {
 
 } // namespace
 
-Engine::Engine() : eval_config_{}, history_{} {
+Engine::Engine() : history_{} {
   clear_history();
 }
 
@@ -39,9 +43,24 @@ SearchResult Engine::search(Board& board, const SearchParameters& params) {
   return session.run(params);
 }
 
-int Engine::evaluate(const Board& board) const {
+void Engine::init_nnue() {
+  const char* big_env = std::getenv("SKAKS_NNUE_BIG");
+  const char* small_env = std::getenv("SKAKS_NNUE_SMALL");
+  const char* big = (big_env && *big_env) ? big_env : EvalFileDefaultNameBig;
+  const char* small =
+      (small_env && *small_env) ? small_env : EvalFileDefaultNameSmall;
+  Stockfish::Probe::init(big, small);
+}
+
+void Engine::set_evaluation_mode(EvaluationMode mode) {
+  evaluation_mode_ = mode;
+}
+
+int Engine::evaluate(const Board& board, EvaluationMode mode) const {
   // Placeholder: future versions will blend features based on eval_config_
-  (void)eval_config_;
+  if (mode == EvaluationMode::Stockfish) {
+    return evaluate_nnue_stockfish(board);
+  }
   return evaluate_board(board);
 }
 
@@ -70,7 +89,7 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
   }
 
   EvaluatorFn evaluator = [eng_ptr = &engine](const Board& state) {
-    return eng_ptr->evaluate(state);
+    return eng_ptr->evaluate(state, eng_ptr->evaluation_mode());
   };
 
   const int base_ply = history.ply_count;

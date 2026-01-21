@@ -91,6 +91,17 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "null_move_reduction": 3,
         "null_move_min_depth": 4,
     },
+    "search_nnue": {
+        "aspiration_window_initial": 800,
+        "aspiration_window_max": 6400,
+        "quiescence_delta_margin": 150,
+        "quiescence_max_ply": 12,
+        "quiescence_max_noisy_moves": 16,
+        "quiescence_zero_gain_skip_index": 6,
+        "quiescence_max_quiet_checks": 6,
+        "null_move_reduction": 3,
+        "null_move_min_depth": 4,
+    },
 }
 
 
@@ -146,8 +157,8 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("evaluation.pawn_pin_diagonal_penalty.base", 14, 30),
         ParamSpec("evaluation.pawn_pin_diagonal_penalty.mobility", 4, 10),
         # Search narrowed
-        ParamSpec("search.aspiration_window_initial", 1200, 2500, step=10),
-        ParamSpec("search.aspiration_window_max", 4000, 9000, step=20),
+        ParamSpec("search.aspiration_window_initial", 100, 800, step=10),
+        ParamSpec("search.aspiration_window_max", 600, 2400, step=20),
         ParamSpec("search.quiescence_delta_margin", 240, 420, step=5),
         ParamSpec("search.quiescence_max_ply", 8, 16),
         ParamSpec("search.quiescence_max_noisy_moves", 12, 30),
@@ -412,9 +423,17 @@ def apply_param_updates(base: Dict, updates: MutableMapping[str, int | float]) -
         else:
             base_search[key] = val
 
+    base_search_nnue = deepcopy(DEFAULT_PARAMS.get("search_nnue", base_search))
+    for key, val in base.get("search_nnue", {}).items():
+        if isinstance(val, dict) and isinstance(base_search_nnue.get(key), dict):
+            base_search_nnue[key] = {**base_search_nnue[key], **val}
+        else:
+            base_search_nnue[key] = val
+
     merged = {
         "evaluation": base_eval,
         "search": base_search,
+        "search_nnue": base_search_nnue,
     }
     for key, val in updates.items():
         _set_nested(merged, key, val)

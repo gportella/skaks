@@ -435,6 +435,11 @@ bool parse_search(const YAML::Node& search_node, chess::SearchParams& search,
   return true;
 }
 
+bool parse_search_nnue(const YAML::Node& search_node,
+                       chess::SearchParams& search, std::string& error) {
+  return parse_search(search_node, search, error);
+}
+
 } // namespace
 
 namespace chess {
@@ -484,6 +489,17 @@ bool load_engine_params_from_file(const std::string& path, EngineParams& params,
     if (!parse_search(search_node, working.search, error)) {
       return false;
     }
+  }
+
+  if (const auto search_nnue_node = root["search_nnue"]) {
+    if (!search_nnue_node.IsMap()) {
+      error = "'search_nnue' must be a map";
+      return false;
+    }
+    if (!parse_search_nnue(search_nnue_node, working.search_nnue, error)) {
+      return false;
+    }
+    working.use_search_nnue = true;
   }
 
   for (std::size_t i = 0; i < working.phase_weights.mg.size(); ++i) {

@@ -19,11 +19,11 @@ inline constexpr int ASPIRATION_WINDOW_INITIAL = 800;
 inline constexpr int ASPIRATION_WINDOW_MAX = 6400;
 inline constexpr int MOBILITY_SCALING = 15;
 
-inline constexpr int QUIESCENCE_DELTA_MARGIN = 150;
-inline constexpr int QUIESCENCE_MAX_PLY = 12;
-inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 16;
-inline constexpr int QUIESCENCE_ZERO_GAIN_SKIP_INDEX = 6;
-inline constexpr int QUIESCENCE_MAX_QUIET_CHECKS = 6;
+inline constexpr int QUIESCENCE_DELTA_MARGIN = 250;
+inline constexpr int QUIESCENCE_MAX_PLY = 8;
+inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 10;
+inline constexpr int QUIESCENCE_ZERO_GAIN_SKIP_INDEX = 1;
+inline constexpr int QUIESCENCE_MAX_QUIET_CHECKS = 0;
 
 inline constexpr int NULL_MOVE_REDUCTION = 3;
 inline constexpr int NULL_MOVE_MIN_DEPTH = NULL_MOVE_REDUCTION + 1;

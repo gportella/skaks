@@ -4,6 +4,7 @@
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
 #include "chess/search_params.hpp"
+#include "chess/search_stats.hpp"
 
 #include <algorithm>
 
@@ -60,6 +61,10 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
                TranspositionTable* tt, int ply) {
   ++nodes;
 
+  if (search_stats_enabled()) {
+    search_stats().quiescence_nodes.fetch_add(1, std::memory_order_relaxed);
+  }
+
   const auto& sparams = search_params();
 
   if (ply >= sparams.quiescence_max_ply) {
@@ -99,6 +104,10 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         if (tt)
           tt->store(board.position_key, 0, stand_pat,
                     TranspositionFlag::LowerBound, Move{}, ply);
+        if (search_stats_enabled()) {
+          search_stats().quiescence_stand_pat_cutoffs.fetch_add(
+              1, std::memory_order_relaxed);
+        }
         return stand_pat;
       }
       if (stand_pat > alpha) {
@@ -109,6 +118,10 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         if (tt)
           tt->store(board.position_key, 0, stand_pat,
                     TranspositionFlag::UpperBound, Move{}, ply);
+        if (search_stats_enabled()) {
+          search_stats().quiescence_stand_pat_cutoffs.fetch_add(
+              1, std::memory_order_relaxed);
+        }
         return stand_pat;
       }
       if (stand_pat < beta) {
@@ -210,6 +223,10 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       const int delta_gain = capture_gain(move);
 
       if (i >= sparams.quiescence_zero_gain_skip_index && delta_gain == 0) {
+        if (search_stats_enabled()) {
+          search_stats().quiescence_zero_gain_skips.fetch_add(
+              1, std::memory_order_relaxed);
+        }
         continue;
       }
 
@@ -220,16 +237,28 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       if (non_promo_pawn_capture) {
         const int pawn_value = piece_material_magnitude(move.moving_pc);
         if (delta_gain + sparams.quiescence_delta_margin < pawn_value) {
+          if (search_stats_enabled()) {
+            search_stats().quiescence_delta_prunes.fetch_add(
+                1, std::memory_order_relaxed);
+          }
           continue;
         }
       }
 
       if (maximizing) {
         if (stand_pat + delta_gain + sparams.quiescence_delta_margin <= alpha) {
+          if (search_stats_enabled()) {
+            search_stats().quiescence_delta_prunes.fetch_add(
+                1, std::memory_order_relaxed);
+          }
           continue;
         }
       } else {
         if (stand_pat - delta_gain - sparams.quiescence_delta_margin >= beta) {
+          if (search_stats_enabled()) {
+            search_stats().quiescence_delta_prunes.fetch_add(
+                1, std::memory_order_relaxed);
+          }
           continue;
         }
       }

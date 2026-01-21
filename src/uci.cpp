@@ -325,10 +325,10 @@ GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
     } else if (token == "ponder") {
       ponder = true;
     } else if (token == "nodes") {
-      // Node limits are not implemented; ignore the token and its value.
-      std::uint64_t dummy = 0;
-      if (stream >> dummy) {
-        continue;
+      std::uint64_t node_limit = 0;
+      if (stream >> node_limit) {
+        parsed.limits.use_nodes = true;
+        parsed.limits.node_limit = node_limit;
       }
     }
   }
@@ -374,6 +374,57 @@ void emit_book_move(const Move& move) {
   const std::string response = "bestmove " + bestmove;
   log_uci("out", response);
   std::cout << response << '\n';
+  std::cout.flush();
+}
+
+void emit_search_info_line(const SearchResult& result) {
+  const std::uint64_t elapsed_ms = std::max<std::uint64_t>(1, result.elapsed_ms);
+  const std::uint64_t nodes = result.nodes;
+  const std::uint64_t nps = (nodes * 1000ULL) / elapsed_ms;
+
+  const int reported_depth = std::max(result.searched_depth, 0);
+  const int reported_seldepth = std::max(result.selective_depth, reported_depth);
+  const int printed_depth = std::max(reported_depth, 1);
+  const int printed_sel_depth = std::max(reported_seldepth, printed_depth);
+
+  std::ostringstream info_line;
+  info_line << "info depth " << printed_depth << " seldepth "
+            << printed_sel_depth << " score ";
+  if (is_mate_score(result.score)) {
+    const int mate_moves = mate_moves_from_score(result.score);
+    info_line << "mate ";
+    if (result.score < 0) {
+      info_line << '-';
+    }
+    info_line << mate_moves;
+  } else {
+    info_line << "cp " << result.score;
+  }
+  info_line << " time " << elapsed_ms << " nodes " << nodes << " nps " << nps;
+
+  if (result.pv_length > 0 && !result.principal_variation.empty()) {
+    std::string pv_line;
+    const int pv_len = std::min(
+        result.pv_length, static_cast<int>(result.principal_variation.size()));
+    for (int idx = 0; idx < pv_len; ++idx) {
+      const Move& pv_move =
+          result.principal_variation[static_cast<std::size_t>(idx)];
+      if (pv_move.moving_pc == OccupancyType::empty) {
+        break;
+      }
+      if (!pv_line.empty()) {
+        pv_line.push_back(' ');
+      }
+      pv_line += move_to_uci(pv_move);
+    }
+    if (!pv_line.empty()) {
+      info_line << " pv " << pv_line;
+    }
+  }
+
+  const auto info_str = info_line.str();
+  log_uci("out", info_str);
+  std::cout << info_str << '\n';
   std::cout.flush();
 }
 
@@ -606,6 +657,9 @@ void run_uci_loop(Engine& engine, int default_depth,
             return;
           }
 
+          params.info_callback = [](const SearchResult& res) {
+            emit_search_info_line(res);
+          };
           SearchResult res = engine_ptr->search(*worker_board, params);
 
           std::unique_ptr<Board> board_for_output;
@@ -673,6 +727,16 @@ void run_uci_loop(Engine& engine, int default_depth,
         log_uci("out", line_out);
         std::cout << line_out << '\n';
       }
+      {
+        const char* eval_label =
+            (engine.evaluation_mode() == EvaluationMode::Stockfish) ? "nnue"
+                                                                    : "native";
+        std::ostringstream info_line;
+        info_line << "info string eval_mode=" << eval_label;
+        const std::string line_out = info_line.str();
+        log_uci("out", line_out);
+        std::cout << line_out << '\n';
+      }
       log_uci("out", "uciok");
       std::cout << "uciok" << '\n';
       std::cout.flush();
@@ -724,7 +788,7 @@ void run_uci_loop(Engine& engine, int default_depth,
         continue;
       }
       SearchParameters params{};
-      if (go_params.limits.use_time) {
+      if (go_params.limits.use_time || go_params.limits.use_nodes) {
         params.depth = static_cast<int>(MAX_PLY) - 1;
       } else {
         params.depth = std::max(go_params.depth, 1);
@@ -812,7 +876,7 @@ void run_uci_loop(Engine& engine, int default_depth,
       }
     } else if (keyword == "staticeval") {
       stop_search(true);
-      const int white_eval = engine.evaluate(board);
+      const int white_eval = engine.evaluate(board, engine.evaluation_mode());
       const int stm_eval =
           (board.side_to_move == SideToMove::White) ? white_eval : -white_eval;
       std::ostringstream oss;

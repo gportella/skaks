@@ -47,6 +47,7 @@ struct CliOptions {
   bool arena_mode = false;
   int arena_games = 20;
   TimeControlOptions time_control;
+  bool use_nnue = true;
 };
 
 struct CliParseResult {

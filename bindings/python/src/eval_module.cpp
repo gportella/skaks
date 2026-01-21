@@ -261,6 +261,29 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.search.null_move_min_depth);
   }
 
+  if (root.contains("search_nnue")) {
+    auto s = py::cast<py::dict>(root["search_nnue"]);
+    assign_if_present(s, "aspiration_window_initial",
+                      params.search_nnue.aspiration_window_initial);
+    assign_if_present(s, "aspiration_window_max",
+                      params.search_nnue.aspiration_window_max);
+    assign_if_present(s, "quiescence_delta_margin",
+                      params.search_nnue.quiescence_delta_margin);
+    assign_if_present(s, "quiescence_max_ply",
+                      params.search_nnue.quiescence_max_ply);
+    assign_if_present(s, "quiescence_max_noisy_moves",
+                      params.search_nnue.quiescence_max_noisy_moves);
+    assign_if_present(s, "quiescence_zero_gain_skip_index",
+                      params.search_nnue.quiescence_zero_gain_skip_index);
+    assign_if_present(s, "quiescence_max_quiet_checks",
+                      params.search_nnue.quiescence_max_quiet_checks);
+    assign_if_present(s, "null_move_reduction",
+                      params.search_nnue.null_move_reduction);
+    assign_if_present(s, "null_move_min_depth",
+                      params.search_nnue.null_move_min_depth);
+    params.use_search_nnue = true;
+  }
+
   return params;
 }
 
@@ -274,7 +297,7 @@ EvalOneResult eval_one(const std::string& fen) {
   try {
     chess::Board b = chess::initial_board(fen);
     chess::Engine engine;
-    res.cp = engine.evaluate(b);
+    res.cp = engine.evaluate(b, chess::EvaluationMode::Native);
   } catch (const std::exception& ex) {
     res.error = ex.what();
   }
@@ -310,7 +333,7 @@ py::dict eval_fens(const std::vector<std::string>& fens,
         for (std::size_t i = start; i < end; ++i) {
           try {
             chess::Board b = chess::initial_board(fens[i]);
-            scores[i] = engine.evaluate(b);
+            scores[i] = engine.evaluate(b, chess::EvaluationMode::Native);
             errors[i].clear();
           } catch (const std::exception& ex) {
             errors[i] = ex.what();

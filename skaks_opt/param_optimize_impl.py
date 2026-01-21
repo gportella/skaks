@@ -1159,6 +1159,18 @@ def optimize_loop(args: argparse.Namespace) -> None:
     if getattr(args, "skip_pst", False):
         exclude_prefixes.append("evaluation.pst_")
 
+    tunable = _collect_numeric_leaves(
+        best_data,
+        include_prefixes=include_prefixes,
+        exclude_prefixes=exclude_prefixes,
+    )
+    if not tunable:
+        raise SystemExit(
+            "No tunable params matched the include/exclude prefixes. "
+            "Ensure your start/baseline params file contains the requested "
+            "section (e.g. search_nnue.*) and that --include-prefix is correct."
+        )
+
     if args.output:
         best_path = Path(args.output).resolve()
     else:

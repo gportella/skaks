@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chess/board.hpp"
+#include "chess/eval_mode.hpp"
 #include "chess/history.hpp"
 #include "chess/search.hpp"
 #include "chess/transposition_table.hpp"
@@ -10,12 +11,6 @@
 
 namespace chess {
 
-struct EvaluationConfig {
-  int material_weight = 1;
-  int mobility_weight = 1;
-  int king_safety_weight = 1;
-};
-
 class Engine {
 public:
   class SearchSession;
@@ -24,7 +19,11 @@ public:
 
   [[nodiscard]] SearchResult search(Board& board,
                                     const SearchParameters& params);
-  [[nodiscard]] int evaluate(const Board& board) const;
+  [[nodiscard]] int evaluate(const Board& board, EvaluationMode mode) const;
+  void set_evaluation_mode(EvaluationMode mode);
+  [[nodiscard]] EvaluationMode evaluation_mode() const {
+    return evaluation_mode_;
+  }
 
   void set_thread_count(int count);
   [[nodiscard]] int thread_count() const {
@@ -42,8 +41,10 @@ public:
   }
   void record_position(std::uint64_t key, bool irreversible);
 
+  void init_nnue();
+
 private:
-  EvaluationConfig eval_config_;
+  EvaluationMode evaluation_mode_ = EvaluationMode::Native;
   MoveHistory history_;
   TranspositionTable tt_;
   int thread_count_ = 1;

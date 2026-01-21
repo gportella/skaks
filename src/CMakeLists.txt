@@ -1,5 +1,7 @@
 find_package(Threads REQUIRED)
 
+get_filename_component(SKAKS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+
 add_library(chess_engine_core STATIC
   attack_masks.cpp
   board.cpp
@@ -8,6 +10,7 @@ add_library(chess_engine_core STATIC
   engine.cpp
   exchange.cpp
   cli.cpp
+  nnue_sf.cpp
   moves.cpp
     move_ordering.cpp
   pins.cpp
@@ -23,6 +26,40 @@ add_library(chess_engine_core STATIC
   uci.cpp
 )
 
+add_library(sf_nnue_probe STATIC
+  ${SKAKS_ROOT}/sf_nnue/bitboard.cpp
+  ${SKAKS_ROOT}/sf_nnue/evaluate.cpp
+  ${SKAKS_ROOT}/sf_nnue/misc.cpp
+  ${SKAKS_ROOT}/sf_nnue/position.cpp
+  ${SKAKS_ROOT}/sf_nnue/probe.cpp
+  ${SKAKS_ROOT}/sf_nnue/nnue/evaluate_nnue.cpp
+  ${SKAKS_ROOT}/sf_nnue/nnue/features/half_ka_v2_hm.cpp
+)
+
+target_include_directories(sf_nnue_probe
+  PUBLIC
+    ${SKAKS_ROOT}/sf_nnue
+    ${SKAKS_ROOT}/sf_nnue/nnue
+    ${SKAKS_ROOT}/sf_nnue/nnue/features
+    ${SKAKS_ROOT}/sf_nnue/nnue/layers
+)
+
+target_compile_features(sf_nnue_probe PUBLIC cxx_std_23)
+
+chess_set_default_warnings(sf_nnue_probe)
+chess_enable_sanitizers(sf_nnue_probe)
+target_compile_options(sf_nnue_probe PRIVATE
+  -Wno-error
+  -Wno-old-style-cast
+  -Wno-sign-conversion
+  -Wno-implicit-int-conversion
+  -Wno-unused-const-variable
+)
+target_compile_definitions(sf_nnue_probe PRIVATE
+  EvalFileDefaultNameBig="${SKAKS_ROOT}/sf_nnue/nn-b1a57edbea57.nnue"
+  EvalFileDefaultNameSmall="${SKAKS_ROOT}/sf_nnue/nn-baff1ede1f90.nnue"
+)
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set_target_properties(chess_engine_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
@@ -31,6 +68,8 @@ target_include_directories(chess_engine_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
     ${SKAKS_GENERATED_INCLUDE_DIR}
+  PRIVATE
+    ${SKAKS_ROOT}/sf_nnue
 )
 
 target_include_directories(chess_engine_core SYSTEM PUBLIC
@@ -46,6 +85,8 @@ target_link_libraries(chess_engine_core
   PUBLIC
     Threads::Threads
     yaml-cpp
+  PRIVATE
+    sf_nnue_probe
 )
 
 target_link_directories(chess_engine_core PRIVATE

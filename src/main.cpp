@@ -88,9 +88,14 @@ struct ArenaSummary {
 ArenaSummary run_internal_arena(const chess::CliOptions& opts,
                                 const chess::EngineParams& base_params,
                                 const chess::EngineParams& cand_params,
+                                chess::EvaluationMode eval_mode,
                                 bool show_progress, int thread_count) {
   chess::Engine engine;
   engine.set_thread_count(std::max(thread_count, 1));
+  engine.set_evaluation_mode(eval_mode);
+  if (eval_mode == chess::EvaluationMode::Stockfish) {
+    engine.init_nnue();
+  }
   ArenaSummary summary{};
 
   const bool use_time = opts.time_control.enabled;
@@ -114,9 +119,9 @@ ArenaSummary run_internal_arena(const chess::CliOptions& opts,
                                     ? cand_white
                                     : !cand_white;
       if (cand_to_move) {
-        chess::set_engine_params(cand_params);
+        chess::set_engine_params_for_mode(cand_params, eval_mode);
       } else {
-        chess::set_engine_params(base_params);
+        chess::set_engine_params_for_mode(base_params, eval_mode);
       }
 
       chess::SearchParameters params{};
@@ -232,8 +237,6 @@ int main(int argc, char** argv) {
     }
   }
 
-  chess::set_engine_params(candidate_params);
-
   const auto resolve_thread_count = [](int requested) -> int {
     if (requested <= 0) {
       const unsigned hw = std::thread::hardware_concurrency();
@@ -249,11 +252,20 @@ int main(int argc, char** argv) {
 
   chess::Engine engine;
   engine.set_thread_count(thread_count);
+  const chess::EvaluationMode eval_mode = cli.options.use_nnue
+                                              ? chess::EvaluationMode::Stockfish
+                                              : chess::EvaluationMode::Native;
+  engine.set_evaluation_mode(eval_mode);
+  if (eval_mode == chess::EvaluationMode::Stockfish) {
+    engine.init_nnue();
+  }
+  chess::set_engine_params_for_mode(candidate_params, eval_mode);
 
   if (cli.options.arena_mode) {
     try {
-      const auto summary = run_internal_arena(
-          cli.options, baseline_params, candidate_params, true, thread_count);
+      const auto summary =
+          run_internal_arena(cli.options, baseline_params, candidate_params,
+                             eval_mode, true, thread_count);
       std::cout << "{\"score\":" << summary.score << ","
                 << "\"wins\":" << summary.wins << ","
                 << "\"losses\":" << summary.losses << ","
@@ -279,7 +291,7 @@ int main(int argc, char** argv) {
 
     const chess::EvalVector eval_vec = chess::compute_eval_vector(board);
     const int raw_linear = chess::eval_linear(eval_vec, chess::phase_weights());
-    const int white_eval = engine.evaluate(board);
+    const int white_eval = engine.evaluate(board, eval_mode);
     const int stm_eval = (board.side_to_move == chess::SideToMove::White)
                              ? white_eval
                              : -white_eval;

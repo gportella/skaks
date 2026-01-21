@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace chess {
@@ -22,24 +23,14 @@ class TimeManager;
 struct SearchLimits {
   bool use_time = false;
   bool per_move = false;
+  bool use_nodes = false;
   std::uint64_t move_time_ms = 0;
   std::uint64_t white_time_ms = 0;
   std::uint64_t black_time_ms = 0;
   std::uint64_t white_increment_ms = 0;
   std::uint64_t black_increment_ms = 0;
   std::uint32_t moves_to_go = 0;
-};
-
-struct SearchParameters {
-  int depth = 0;
-  int alpha = -INF;
-  int beta = INF;
-  int pv_count = 1;
-  const uint32_t* root_excluded_moves = nullptr;
-  std::size_t root_excluded_count = 0;
-  SearchLimits limits;
-  TimeManager* time_manager = nullptr;
-  std::atomic<bool>* abort_flag = nullptr;
+  std::uint64_t node_limit = 0;
 };
 
 struct SearchResult {
@@ -61,6 +52,19 @@ struct SearchResult {
   SearchResult(SearchResult&& other) noexcept = default;
   SearchResult& operator=(const SearchResult& other) = default;
   SearchResult& operator=(SearchResult&& other) noexcept = default;
+};
+
+struct SearchParameters {
+  int depth = 0;
+  int alpha = -INF;
+  int beta = INF;
+  int pv_count = 1;
+  const uint32_t* root_excluded_moves = nullptr;
+  std::size_t root_excluded_count = 0;
+  SearchLimits limits;
+  TimeManager* time_manager = nullptr;
+  std::atomic<bool>* abort_flag = nullptr;
+  std::function<void(const SearchResult&)> info_callback;
 };
 
 SearchResult

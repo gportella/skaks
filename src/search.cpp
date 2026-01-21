@@ -8,11 +8,13 @@
 #include "chess/scoring_rules.hpp"
 #include "chess/search_detail.hpp"
 #include "chess/search_params.hpp"
+#include "chess/search_stats.hpp"
 #include "chess/time_manager.hpp"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <cstdlib>
@@ -61,6 +63,8 @@ struct SearchScratch {
   TranspositionTable* tt = nullptr;
   MoveOrderingTables ordering;
   TimeManager* time_manager = nullptr;
+  std::uint64_t node_limit = 0;
+  bool use_nodes = false;
   std::atomic<bool>* abort_requested = nullptr;
   std::atomic<bool>* local_abort = nullptr;
   LazySmpThread* thread = nullptr;
@@ -70,6 +74,13 @@ constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
 
 inline bool should_abort_due_to_time(SearchScratch& scratch,
                                      std::uint64_t nodes) {
+  if (scratch.use_nodes && scratch.node_limit > 0 &&
+      nodes >= scratch.node_limit) {
+    if (scratch.abort_requested) {
+      scratch.abort_requested->store(true, std::memory_order_relaxed);
+    }
+    return true;
+  }
   if (scratch.abort_requested &&
       scratch.abort_requested->load(std::memory_order_relaxed)) {
     return true;
@@ -159,8 +170,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
     child_depth = 1;
   }
 
-  const int raw_history_score = scratch.ordering.history_score(move);
-  const int history_score = std::clamp(raw_history_score, 0, 20000);
+  const int history_score = scratch.ordering.history_score(move);
 
   int reduction = 0;
   if (quiet_like && !king_move && !castle_move && !in_check_after_move &&
@@ -183,9 +193,6 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
       reduction = std::min(max_reduction, reduction + 1);
     }
     if (history_score > 12000) {
-      reduction = std::max(0, reduction - 1);
-    }
-    if (history_score > 20000) {
       reduction = std::max(0, reduction - 1);
     }
   }
@@ -258,6 +265,9 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
       const bool need_retry = search_detail::should_retry_pvs(
           ctx.stm, child.score, narrow_alpha, narrow_beta);
       if (need_retry) {
+        if (search_stats_enabled()) {
+          search_stats().pvs_researches.fetch_add(1, std::memory_order_relaxed);
+        }
         child = run_search(search_depth, ctx.alpha, ctx.beta, ctx.is_pv);
         if (child.aborted) {
           undo_move(board, undo);
@@ -551,6 +561,13 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
                                const Move* parent_move,
                                const uint32_t* excluded_root_moves,
                                std::size_t excluded_root_count) {
+  if (scratch.use_nodes && scratch.node_limit > 0 &&
+      nodes >= scratch.node_limit) {
+    if (scratch.abort_requested) {
+      scratch.abort_requested->store(true, std::memory_order_relaxed);
+    }
+    return make_aborted_result();
+  }
   ++nodes;
 
   if (should_abort_due_to_time(scratch, nodes)) {
@@ -680,6 +697,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     const int score_after_null = normalize_mate_score(null_result.score, ply);
     undo_null_move(board, undo_null);
     if (score_after_null >= beta) {
+      if (search_stats_enabled()) {
+        search_stats().null_move_cutoffs.fetch_add(1, std::memory_order_relaxed);
+      }
       SearchResult cutoff{};
       cutoff.score = score_after_null;
       cutoff.outcome = SearchResult::Outcome::InProgress;
@@ -868,7 +888,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   };
 
   for (uint16_t i = 0; i < move_count; ++i) {
-    Move move = decode_move(moves[i]);
+    const uint32_t move_code = moves[i];
+    Move move = decode_move(move_code);
     const bool is_capture = move.captured_pc != OccupancyType::empty;
     const bool is_promo = move.promo_pc != OccupancyType::empty;
     const bool quiet_like = !is_capture && !is_promo;
@@ -877,8 +898,24 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     int child_depth_lmp = depth - 1;
     if (!is_pv && !parent_in_check && quiet_like && child_depth_lmp > 0 &&
         child_depth_lmp <= 3) {
-      static constexpr int lmp_limits[4] = {0, 3, 6, 10};
-      if (move_number > lmp_limits[child_depth_lmp]) {
+      static constexpr int lmp_limits[4] = {0, 3, 6, 9};
+      const int history_score = scratch.ordering.history_score(move);
+      const bool is_counter = (counter_code != 0 && move_code == counter_code);
+      bool is_killer = false;
+      if (scratch.killers && ply >= 0 && ply < MAX_PLY) {
+        const auto idx = static_cast<std::size_t>(ply);
+        const uint32_t primary = scratch.killers->primary[idx];
+        const uint32_t secondary = scratch.killers->secondary[idx];
+        is_killer = (move_code == primary) || (move_code == secondary);
+      }
+      int limit = lmp_limits[child_depth_lmp];
+      if (history_score > 10000) {
+        limit += 2;
+      }
+      if (!is_killer && !is_counter && move_number > limit) {
+        if (search_stats_enabled()) {
+          search_stats().lmp_prunes.fetch_add(1, std::memory_order_relaxed);
+        }
         continue;
       }
     }
@@ -1004,6 +1041,9 @@ SearchResult search_position(Board& board, SideToMove stm,
                              const SearchParameters& params,
                              const EvaluatorFn& evaluator, MoveHistory* history,
                              TranspositionTable* tt, int repetition_start) {
+  const bool track_info = static_cast<bool>(params.info_callback);
+  const auto search_start = track_info ? std::chrono::steady_clock::now()
+                                       : std::chrono::steady_clock::time_point{};
   int base_ply = 0;
   int start_ply = 0;
 
@@ -1029,6 +1069,8 @@ SearchResult search_position(Board& board, SideToMove stm,
   scratch.killers = &killers;
   scratch.tt = tt;
   scratch.time_manager = params.time_manager;
+  scratch.use_nodes = params.limits.use_nodes && params.limits.node_limit > 0;
+  scratch.node_limit = params.limits.node_limit;
   if (params.abort_flag) {
     scratch.abort_requested = params.abort_flag;
   } else {
@@ -1036,6 +1078,10 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
   scratch.local_abort = nullptr;
   scratch.thread = tls_lazy_thread;
+
+  if (search_stats_enabled()) {
+    reset_search_stats();
+  }
 
   double root_complexity_hint = 0.0;
   if (params.time_manager) {
@@ -1101,6 +1147,10 @@ SearchResult search_position(Board& board, SideToMove stm,
   int aspiration_window = sparams.aspiration_window_initial;
   SearchResult best_result{};
   SearchResult result{};
+
+  int last_completed_depth = 0;
+  bool stopped_by_abort = false;
+  bool stopped_by_soft_limit = false;
 
   int best_score = 0;
   for (int current_depth = 1; current_depth <= params.depth; ++current_depth) {
@@ -1271,12 +1321,25 @@ SearchResult search_position(Board& board, SideToMove stm,
     }
 
     if (abort_requested.load(std::memory_order_relaxed)) {
+      stopped_by_abort = true;
       break;
     }
 
+    if (track_info && params.info_callback) {
+      result.nodes = nodes;
+      result.elapsed_ms = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now() - search_start)
+              .count());
+      params.info_callback(result);
+    }
+
     if (scratch.time_manager && scratch.time_manager->soft_limit_reached()) {
+      stopped_by_soft_limit = true;
       break;
     }
+
+    last_completed_depth = current_depth;
   }
   if (history) {
     history->ply_count = base_ply;
@@ -1301,6 +1364,33 @@ SearchResult search_position(Board& board, SideToMove stm,
   const bool has_move = final_result.best_move.moving_pc != OccupancyType::empty;
   final_result.aborted = abort_flagged && !has_move;
 
+  if (search_stats_enabled()) {
+    const auto& stats = search_stats();
+    std::cerr << "[search-stats] q_nodes="
+              << stats.quiescence_nodes.load(std::memory_order_relaxed)
+              << " q_stand_pat_cutoffs="
+              << stats.quiescence_stand_pat_cutoffs.load(
+                     std::memory_order_relaxed)
+              << " q_zero_gain_skips="
+              << stats.quiescence_zero_gain_skips.load(std::memory_order_relaxed)
+              << " q_delta_prunes="
+              << stats.quiescence_delta_prunes.load(std::memory_order_relaxed)
+              << " null_cutoffs="
+              << stats.null_move_cutoffs.load(std::memory_order_relaxed)
+              << " lmp_prunes="
+              << stats.lmp_prunes.load(std::memory_order_relaxed)
+              << " pvs_researches="
+              << stats.pvs_researches.load(std::memory_order_relaxed) << '\n';
+    std::cerr << "[search-stop] last_depth=" << last_completed_depth
+              << " target_depth=" << params.depth
+              << " aborted=" << (stopped_by_abort ? 1 : 0)
+              << " soft_limit=" << (stopped_by_soft_limit ? 1 : 0)
+              << " time_mgr="
+              << ((scratch.time_manager && scratch.time_manager->enabled()) ? 1
+                                                                            : 0)
+              << '\n';
+  }
+
   return final_result;
 }
 
@@ -1310,6 +1400,10 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
                                       MoveHistory* history,
                                       TranspositionTable* tt,
                                       int repetition_start, int helper_threads) {
+  if (params.limits.use_nodes) {
+    return search_position(board, stm, params, evaluator, history, tt,
+                           repetition_start);
+  }
   if (helper_threads <= 0) {
     return search_position(board, stm, params, evaluator, history, tt,
                            repetition_start);
@@ -1408,6 +1502,7 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
   return result;
 }
 
+// used when no Engine is provided, uses default eval
 namespace {
 int default_evaluator(const Board& board) {
   return evaluate_board(board);

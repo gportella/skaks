@@ -42,6 +42,8 @@ CliParseResult parse_cli(int argc, char** argv) {
       ("arena", "Run built-in baseline-vs-params arena (no UCI)")
       ("arena-games", "Number of games for arena mode",
        cxxopts::value<int>()->default_value("20"))
+      ("nnue", "Enable Stockfish NNUE evaluation (default)")
+      ("no-nnue", "Disable NNUE evaluation")
       ("threads", "Search threads to use (0 = auto)",
        cxxopts::value<int>()->default_value("0"))
       ("bm,bestmove", "Print best move for the given FEN and exit")
@@ -114,6 +116,15 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.best_move = parsed.count("bestmove") > 0;
     result.options.static_eval = parsed.count("static-eval") > 0;
     result.options.eval_breakdown = parsed.count("eval-breakdown") > 0;
+
+    const bool want_nnue = parsed.count("nnue") > 0;
+    const bool want_no_nnue = parsed.count("no-nnue") > 0;
+    if (want_nnue && want_no_nnue) {
+      result.parse_error = true;
+      result.message = "--nnue cannot be combined with --no-nnue";
+      return result;
+    }
+    result.options.use_nnue = want_no_nnue ? false : true;
 
     result.options.thread_count = parsed["threads"].as<int>();
     if (result.options.thread_count < 0) {

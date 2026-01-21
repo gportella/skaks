@@ -202,10 +202,33 @@ def main():
         help="PGN file to sample initial positions from (optional)",
     )
     optimize_parser.add_argument(
+        "--pgn-min-ply",
+        type=int,
+        default=8,
+        help="Minimum ply to sample from PGN (default: %(default)s)",
+    )
+    optimize_parser.add_argument(
+        "--pgn-max-ply",
+        type=int,
+        default=40,
+        help="Maximum ply to sample from PGN (default: %(default)s)",
+    )
+    optimize_parser.add_argument(
+        "--pgn-seed",
+        type=int,
+        default=0,
+        help="Random seed for PGN sampling (default: %(default)s)",
+    )
+    optimize_parser.add_argument(
         "--depth",
         type=int,
         default=6,
         help="Search depth for skaks --perf (default: %(default)s)",
+    )
+    optimize_parser.add_argument(
+        "--search-nnue",
+        action="store_true",
+        help="Tune the search_nnue parameter block instead of search",
     )
 
     texel_parser = add_texel_subparser(subparsers)

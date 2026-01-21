@@ -3,15 +3,15 @@
 
 import argparse
 import csv
-import os
 import datetime
+import os
 import select
+import shutil
 import subprocess
 import sys
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, Dict
+from typing import Dict, Iterable, List, Optional, Tuple
 
 try:
     import chess
@@ -75,11 +75,15 @@ class Puzzle:
 
 
 class UciEngine:
-    def __init__(self, binary: str, timeout: float):
+    def __init__(self, binary: str, timeout: float, extra_args: Optional[List[str]] = None):
         self.binary = binary
+        self.eval_mode: Optional[str] = None
         env = os.environ.copy()
+        argv = [binary]
+        if extra_args:
+            argv.extend(extra_args)
         self._proc = subprocess.Popen(
-            [binary],
+            argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -120,6 +124,8 @@ class UciEngine:
     def _drain_until(self, token: str) -> None:
         while True:
             line = self._read_line()
+            if line.startswith("info string eval_mode="):
+                self.eval_mode = line.split("=", 1)[1].strip().lower() or None
             if line == token:
                 return
 
@@ -263,6 +269,10 @@ def run_suite(
     lines = []
     lines.append(f"=== perf snapshot {timestamp} ===")
     lines.append(f"binary: {engine.binary}")
+    if engine.eval_mode:
+        lines.append(f"eval_mode: {engine.eval_mode}")
+    else:
+        lines.append("eval_mode: unknown")
 
     if "skaks" in engine.binary:
         version_output = run_command([engine.binary, "-vv"]).stdout.strip()
@@ -404,6 +414,11 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Report progress every N puzzles (default: 10)",
     )
     parser.add_argument(
+        "--no-nnue",
+        action="store_true",
+        help="Disable NNUE evaluation when running skaks",
+    )
+    parser.add_argument(
         "--show-failures", action="store_true", help="Print details for failed puzzles"
     )
     return parser.parse_args(argv)
@@ -420,7 +435,10 @@ def main(argv: List[str]) -> int:
     engine_path = "stockfish" if args.stockfish else args.engine
 
     try:
-        with UciEngine(engine_path, args.timeout) as engine:
+        extra_args: List[str] = []
+        if not args.stockfish and args.no_nnue:
+            extra_args.append("--no-nnue")
+        with UciEngine(engine_path, args.timeout, extra_args=extra_args) as engine:
             solved, total, failures = run_suite(
                 puzzles, directory, engine, args.depth, args.progress_interval
             )

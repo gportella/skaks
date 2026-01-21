@@ -21,7 +21,7 @@ inline EvalResponse evaluate_fen_with_params(const std::string& fen,
     Board b = initial_board(fen);
     set_engine_params(params);
     Engine engine;
-    resp.centipawns = engine.evaluate(b);
+    resp.centipawns = engine.evaluate(b, EvaluationMode::Native);
     resp.ok = true;
     return resp;
   } catch (const std::exception& ex) {
