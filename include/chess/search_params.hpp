@@ -14,6 +14,10 @@ struct SearchParams {
   int quiescence_max_quiet_checks = QUIESCENCE_MAX_QUIET_CHECKS;
   int null_move_reduction = NULL_MOVE_REDUCTION;
   int null_move_min_depth = NULL_MOVE_MIN_DEPTH;
+  double lmr_intercept = LMR_INTERCEPT;
+  double lmr_divisor = LMR_DIVISOR;
+  double lmr_history_divisor = LMR_HISTORY_DIVISOR;
+  double lmr_pv_offset = LMR_PV_OFFSET;
 };
 
 inline SearchParams default_search_params() {

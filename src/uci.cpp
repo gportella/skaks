@@ -5,6 +5,7 @@
 #include "chess/moves.hpp"
 #include "chess/polyglot.hpp"
 #include "chess/score.hpp"
+#include "chess/search_params.hpp"
 #include "chess/types_io.hpp"
 
 #include <algorithm>
@@ -12,6 +13,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -69,6 +71,90 @@ bool info_strings_enabled() {
     }
   }
   return enabled;
+}
+
+void emit_spin_option(std::string_view name, int value, int min_value,
+                      int max_value) {
+  std::ostringstream line;
+  line << "option name " << name << " type spin default " << value << " min "
+       << min_value << " max " << max_value;
+  const std::string line_out = line.str();
+  log_uci("out", line_out);
+  std::cout << line_out << '\n';
+}
+
+void emit_string_option(std::string_view name, double value) {
+  std::ostringstream line;
+  line << "option name " << name << " type string default " << std::fixed
+       << std::setprecision(3) << value;
+  const std::string line_out = line.str();
+  log_uci("out", line_out);
+  std::cout << line_out << '\n';
+}
+
+void emit_search_param_options() {
+  const auto& sparams = search_params();
+  emit_spin_option("aspiration_window_initial",
+                   sparams.aspiration_window_initial, 50, 2000);
+  emit_spin_option("aspiration_window_max", sparams.aspiration_window_max, 200,
+                   8000);
+  emit_spin_option("quiescence_delta_margin", sparams.quiescence_delta_margin, 0,
+                   1000);
+  emit_spin_option("quiescence_max_ply", sparams.quiescence_max_ply, 0, 32);
+  emit_spin_option("quiescence_max_noisy_moves",
+                   sparams.quiescence_max_noisy_moves, 0, 64);
+  emit_spin_option("quiescence_zero_gain_skip_index",
+                   sparams.quiescence_zero_gain_skip_index, 0, 16);
+  emit_spin_option("quiescence_max_quiet_checks",
+                   sparams.quiescence_max_quiet_checks, 0, 16);
+  emit_spin_option("null_move_reduction", sparams.null_move_reduction, 0, 6);
+  emit_spin_option("null_move_min_depth", sparams.null_move_min_depth, 0, 12);
+  emit_string_option("lmr_intercept", sparams.lmr_intercept);
+  emit_string_option("lmr_divisor", sparams.lmr_divisor);
+  emit_string_option("lmr_history_divisor", sparams.lmr_history_divisor);
+  emit_string_option("lmr_pv_offset", sparams.lmr_pv_offset);
+}
+
+void apply_search_param_option(std::string_view lowered_name,
+                               std::string_view value) {
+  if (value.empty()) {
+    return;
+  }
+  auto current = search_params();
+  try {
+    if (lowered_name == "aspiration_window_initial") {
+      current.aspiration_window_initial = std::stoi(std::string(value));
+    } else if (lowered_name == "aspiration_window_max") {
+      current.aspiration_window_max = std::stoi(std::string(value));
+    } else if (lowered_name == "quiescence_delta_margin") {
+      current.quiescence_delta_margin = std::stoi(std::string(value));
+    } else if (lowered_name == "quiescence_max_ply") {
+      current.quiescence_max_ply = std::stoi(std::string(value));
+    } else if (lowered_name == "quiescence_max_noisy_moves") {
+      current.quiescence_max_noisy_moves = std::stoi(std::string(value));
+    } else if (lowered_name == "quiescence_zero_gain_skip_index") {
+      current.quiescence_zero_gain_skip_index = std::stoi(std::string(value));
+    } else if (lowered_name == "quiescence_max_quiet_checks") {
+      current.quiescence_max_quiet_checks = std::stoi(std::string(value));
+    } else if (lowered_name == "null_move_reduction") {
+      current.null_move_reduction = std::stoi(std::string(value));
+    } else if (lowered_name == "null_move_min_depth") {
+      current.null_move_min_depth = std::stoi(std::string(value));
+    } else if (lowered_name == "lmr_intercept") {
+      current.lmr_intercept = std::stod(std::string(value));
+    } else if (lowered_name == "lmr_divisor") {
+      current.lmr_divisor = std::stod(std::string(value));
+    } else if (lowered_name == "lmr_history_divisor") {
+      current.lmr_history_divisor = std::stod(std::string(value));
+    } else if (lowered_name == "lmr_pv_offset") {
+      current.lmr_pv_offset = std::stod(std::string(value));
+    } else {
+      return;
+    }
+  } catch (const std::exception&) {
+    return;
+  }
+  set_search_params(current);
 }
 
 [[noreturn]] void fatal_uci_violation(const Board& board,
@@ -259,7 +345,10 @@ struct GoParameters {
   int depth = 0;
   chess::SearchLimits limits;
   bool ponder = false;
+  bool depth_explicit = false;
 };
+
+std::atomic<int> g_info_depth_cap{0};
 
 GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
   GoParameters parsed{};
@@ -281,6 +370,7 @@ GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
       if (stream >> depth_override) {
         parsed.depth = depth_override;
         have_depth = true;
+        parsed.depth_explicit = true;
       }
     } else if (token == "movetime") {
       std::uint64_t movetime_ms = 0;
@@ -384,8 +474,13 @@ void emit_search_info_line(const SearchResult& result) {
 
   const int reported_depth = std::max(result.searched_depth, 0);
   const int reported_seldepth = std::max(result.selective_depth, reported_depth);
-  const int printed_depth = std::max(reported_depth, 1);
-  const int printed_sel_depth = std::max(reported_seldepth, printed_depth);
+  int printed_depth = std::max(reported_depth, 1);
+  int printed_sel_depth = std::max(reported_seldepth, printed_depth);
+  const int depth_cap = g_info_depth_cap.load(std::memory_order_relaxed);
+  if (depth_cap > 0) {
+    printed_depth = std::min(printed_depth, depth_cap);
+    printed_sel_depth = std::min(printed_sel_depth, depth_cap);
+  }
 
   std::ostringstream info_line;
   info_line << "info depth " << printed_depth << " seldepth "
@@ -715,8 +810,9 @@ void run_uci_loop(Engine& engine, int default_depth,
     if (keyword == "uci") {
       log_uci("out", "id name Skaks");
       std::cout << "id name Skaks" << '\n';
-      log_uci("out", "id author G Portella");
-      std::cout << "id author G Portella" << '\n';
+      log_uci("out", "id author G Portella -- NNUE by Stockfish developers");
+      std::cout << "id author G Portella -- NNUE by Stockfish developers"
+                << '\n';
       log_uci("out", "option name Ponder type check default true");
       std::cout << "option name Ponder type check default true" << '\n';
       {
@@ -737,6 +833,7 @@ void run_uci_loop(Engine& engine, int default_depth,
         log_uci("out", line_out);
         std::cout << line_out << '\n';
       }
+      emit_search_param_options();
       log_uci("out", "uciok");
       std::cout << "uciok" << '\n';
       std::cout.flush();
@@ -774,6 +871,11 @@ void run_uci_loop(Engine& engine, int default_depth,
       const int fallback_depth = default_depth > 0 ? default_depth : 4;
       const GoParameters go_params =
           parse_go_arguments(remainder, fallback_depth);
+      if (go_params.limits.use_nodes && !go_params.depth_explicit) {
+        g_info_depth_cap.store(64, std::memory_order_relaxed);
+      } else {
+        g_info_depth_cap.store(0, std::memory_order_relaxed);
+      }
       std::optional<uint32_t> book_move;
       if (opening_book != nullptr) {
         book_move = polyglot::choose_move(
@@ -789,7 +891,12 @@ void run_uci_loop(Engine& engine, int default_depth,
       }
       SearchParameters params{};
       if (go_params.limits.use_time || go_params.limits.use_nodes) {
-        params.depth = static_cast<int>(MAX_PLY) - 1;
+        if (!go_params.depth_explicit) {
+          params.depth = static_cast<int>(MAX_PLY) - 1;
+        } else {
+          params.depth = std::min(std::max(go_params.depth, 1),
+                                  static_cast<int>(MAX_PLY) - 1);
+        }
       } else {
         params.depth = std::max(go_params.depth, 1);
       }
@@ -873,6 +980,8 @@ void run_uci_loop(Engine& engine, int default_depth,
             std::cout.flush();
           }
         }
+      } else {
+        apply_search_param_option(lowered_name, value);
       }
     } else if (keyword == "staticeval") {
       stop_search(true);

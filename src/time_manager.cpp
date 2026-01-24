@@ -5,12 +5,17 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
 #include <limits>
+#include <sstream>
 
 namespace chess {
 namespace {
 constexpr std::uint64_t kMinTimeMs = 1;
 constexpr std::uint64_t kSafetyMarginMs = 5;
+constexpr std::uint64_t kStopOverheadMs = 50;
 constexpr std::uint64_t kReserveBufferMs = 40;
 constexpr std::uint32_t kIncrementProjectionMoves = 20;
 
@@ -27,6 +32,16 @@ constexpr std::array<TimeRegimeProfile, 4> kTimeRegimeProfiles{{
     {150'000, 20, 0.55, 1.15},   // Blitz: closer to increment spending
     {0, 12, 0.45, 1.05}          // Bullet: rely almost entirely on increment
 }};
+
+void trace_time_line(const std::string& line) {
+  const char* trace_file = std::getenv("SKAKS_TIME_TRACE_FILE");
+  if (trace_file && *trace_file) {
+    std::ofstream out(trace_file, std::ios::app);
+    out << line << '\n';
+    return;
+  }
+  std::cerr << line << '\n';
+}
 
 const TimeRegimeProfile& select_time_regime(std::uint64_t total_ms,
                                             std::uint64_t increment_ms) {
@@ -61,7 +76,12 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
   hard_limit_ms_ = 0;
   complexity_scale_applied_ = false;
 
+  const bool trace = std::getenv("SKAKS_TIME_TRACE") != nullptr;
+
   if (!enabled_) {
+    if (trace) {
+      trace_time_line("[time-trace] disabled");
+    }
     return;
   }
 
@@ -71,6 +91,18 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
         std::max<std::uint64_t>(cap / 10, kSafetyMarginMs);
     hard_limit_ms_ = cap;
     soft_limit_ms_ = (cap > margin) ? (cap - margin) : cap;
+    if (hard_limit_ms_ > kStopOverheadMs) {
+      hard_limit_ms_ -= kStopOverheadMs;
+    }
+    if (soft_limit_ms_ > kStopOverheadMs) {
+      soft_limit_ms_ -= kStopOverheadMs;
+    }
+    if (trace) {
+      std::ostringstream oss;
+      oss << "[time-trace] per_move cap=" << cap << " soft=" << soft_limit_ms_
+          << " hard=" << hard_limit_ms_;
+      trace_time_line(oss.str());
+    }
     return;
   }
 
@@ -82,6 +114,9 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
 
   if (total == 0 && increment == 0) {
     enabled_ = false;
+    if (trace) {
+      trace_time_line("[time-trace] disabled (no time/increment)");
+    }
     return;
   }
 
@@ -164,6 +199,19 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
   hard_limit_ms_ = std::max(hard_limit_ms_, soft_limit_ms_);
   soft_limit_ms_ = clamp_positive(soft_limit_ms_);
   hard_limit_ms_ = clamp_positive(hard_limit_ms_);
+  if (hard_limit_ms_ > kStopOverheadMs) {
+    hard_limit_ms_ -= kStopOverheadMs;
+  }
+  if (soft_limit_ms_ > kStopOverheadMs) {
+    soft_limit_ms_ -= kStopOverheadMs;
+  }
+  if (trace) {
+    std::ostringstream oss;
+    oss << "[time-trace] total=" << total << " inc=" << increment
+        << " moves_to_go=" << moves_to_go << " soft=" << soft_limit_ms_
+        << " hard=" << hard_limit_ms_;
+    trace_time_line(oss.str());
+  }
 }
 
 void TimeManager::set_complexity_hint(double hint) {

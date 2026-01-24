@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import List
 
 import chess.pgn
-import yaml
-
 import skaks_eval
+import yaml
 
 
 def load_start_fens_from_pgn(
@@ -63,6 +62,12 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Per-move time in ms (use 0 to stick with depth)",
     )
+    ap.add_argument(
+        "--nodes",
+        type=int,
+        default=0,
+        help="Node limit per move (use 0 to stick with depth)",
+    )
     ap.add_argument("--max-plies", type=int, default=160, help="Ply cap per game")
     ap.add_argument("--min-ply", type=int, default=6, help="Minimum ply to sample")
     ap.add_argument(
@@ -87,6 +92,14 @@ def main() -> None:
     )
     if not start_fens:
         raise SystemExit("No positions sampled from PGN")
+    if args.nodes > 0:
+        args.depth = 0
+        args.movetime_ms = 0
+    mode_count = sum(
+        flag > 0 for flag in (args.depth, args.movetime_ms, args.nodes)
+    )
+    if mode_count != 1:
+        raise SystemExit("Exactly one of --depth, --movetime-ms, or --nodes must be set")
     cand = yaml.safe_load(args.params.read_text(encoding="utf-8"))
     res = skaks_eval.arena(
         start_fens=start_fens,
@@ -94,6 +107,7 @@ def main() -> None:
         games=args.games,
         depth=args.depth,
         movetime_ms=args.movetime_ms,
+        node_limit=args.nodes,
         max_plies=args.max_plies,
     )
     print(json.dumps(res))

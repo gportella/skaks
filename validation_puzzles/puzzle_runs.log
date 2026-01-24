@@ -1036,3 +1036,1070 @@ Optimizations:
 [brakto_kopec.epd] Solved 3/24 puzzles at depth 6 (12.5%)
 [eigennmann_rapid_engine.epd] Solved 5/103 puzzles at depth 6 (4.9%)
 [lct_2.epd] Solved 1/35 puzzles at depth 6 (2.9%)
+=== perf snapshot 2026-01-24T09:18:27 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 6/50 puzzles at depth 5 (12.0%)
+[brakto_kopec.epd] Solved 10/24 puzzles at depth 5 (41.7%)
+[eigennmann_rapid_engine.epd] Solved 8/50 puzzles at depth 5 (16.0%)
+[lct_2.epd] Solved 9/35 puzzles at depth 5 (25.7%)
+[wacknew.epd] Solved 32/50 puzzles at depth 5 (64.0%)
+Overall solved 65/209 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:18:35 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 7/50 puzzles at depth 5 (14.0%)
+[brakto_kopec.epd] Solved 9/24 puzzles at depth 5 (37.5%)
+[eigennmann_rapid_engine.epd] Solved 8/50 puzzles at depth 5 (16.0%)
+[lct_2.epd] Solved 7/35 puzzles at depth 5 (20.0%)
+[wacknew.epd] Solved 31/50 puzzles at depth 5 (62.0%)
+Overall solved 62/209 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:18:42 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 6/50 puzzles at depth 5 (12.0%)
+[brakto_kopec.epd] Solved 11/24 puzzles at depth 5 (45.8%)
+[eigennmann_rapid_engine.epd] Solved 7/50 puzzles at depth 5 (14.0%)
+[lct_2.epd] Solved 8/35 puzzles at depth 5 (22.9%)
+[wacknew.epd] Solved 31/50 puzzles at depth 5 (62.0%)
+Overall solved 63/209 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:18:49 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 6/50 puzzles at depth 5 (12.0%)
+[brakto_kopec.epd] Solved 9/24 puzzles at depth 5 (37.5%)
+[eigennmann_rapid_engine.epd] Solved 7/50 puzzles at depth 5 (14.0%)
+[lct_2.epd] Solved 10/35 puzzles at depth 5 (28.6%)
+[wacknew.epd] Solved 31/50 puzzles at depth 5 (62.0%)
+Overall solved 63/209 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:18:56 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+=== perf snapshot 2026-01-24T09:19:53 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[brakto_kopec.epd] Solved 1/8 puzzles at depth 5 (12.5%)
+[eigennmann_rapid_engine.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[lct_2.epd] Solved 4/8 puzzles at depth 5 (50.0%)
+[wacknew.epd] Solved 5/8 puzzles at depth 5 (62.5%)
+Overall solved 14/40 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:19:55 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[brakto_kopec.epd] Solved 1/8 puzzles at depth 5 (12.5%)
+[eigennmann_rapid_engine.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[lct_2.epd] Solved 3/8 puzzles at depth 5 (37.5%)
+[wacknew.epd] Solved 5/8 puzzles at depth 5 (62.5%)
+Overall solved 13/40 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:19:56 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[brakto_kopec.epd] Solved 1/8 puzzles at depth 5 (12.5%)
+[eigennmann_rapid_engine.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[lct_2.epd] Solved 4/8 puzzles at depth 5 (50.0%)
+[wacknew.epd] Solved 5/8 puzzles at depth 5 (62.5%)
+Overall solved 14/40 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:19:58 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 1/8 puzzles at depth 5 (12.5%)
+[brakto_kopec.epd] Solved 1/8 puzzles at depth 5 (12.5%)
+[eigennmann_rapid_engine.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[lct_2.epd] Solved 4/8 puzzles at depth 5 (50.0%)
+[wacknew.epd] Solved 5/8 puzzles at depth 5 (62.5%)
+Overall solved 13/40 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:19:59 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 1/8 puzzles at depth 5 (12.5%)
+[brakto_kopec.epd] Solved 1/8 puzzles at depth 5 (12.5%)
+[eigennmann_rapid_engine.epd] Solved 2/8 puzzles at depth 5 (25.0%)
+[lct_2.epd] Solved 4/8 puzzles at depth 5 (50.0%)
+[wacknew.epd] Solved 5/8 puzzles at depth 5 (62.5%)
+Overall solved 13/40 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:04 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/10 puzzles at depth 5 (30.0%)
+[brakto_kopec.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[eigennmann_rapid_engine.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[lct_2.epd] Solved 3/10 puzzles at depth 5 (30.0%)
+[wacknew.epd] Solved 6/10 puzzles at depth 5 (60.0%)
+Overall solved 16/50 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:06 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/10 puzzles at depth 5 (30.0%)
+[brakto_kopec.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[eigennmann_rapid_engine.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[lct_2.epd] Solved 4/10 puzzles at depth 5 (40.0%)
+[wacknew.epd] Solved 6/10 puzzles at depth 5 (60.0%)
+Overall solved 17/50 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:08 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/10 puzzles at depth 5 (30.0%)
+[brakto_kopec.epd] Solved 1/10 puzzles at depth 5 (10.0%)
+[eigennmann_rapid_engine.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[lct_2.epd] Solved 4/10 puzzles at depth 5 (40.0%)
+[wacknew.epd] Solved 6/10 puzzles at depth 5 (60.0%)
+Overall solved 16/50 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:10 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/10 puzzles at depth 5 (30.0%)
+[brakto_kopec.epd] Solved 1/10 puzzles at depth 5 (10.0%)
+[eigennmann_rapid_engine.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[lct_2.epd] Solved 4/10 puzzles at depth 5 (40.0%)
+[wacknew.epd] Solved 6/10 puzzles at depth 5 (60.0%)
+Overall solved 16/50 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:11 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/10 puzzles at depth 5 (30.0%)
+[brakto_kopec.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[eigennmann_rapid_engine.epd] Solved 2/10 puzzles at depth 5 (20.0%)
+[lct_2.epd] Solved 4/10 puzzles at depth 5 (40.0%)
+[wacknew.epd] Solved 6/10 puzzles at depth 5 (60.0%)
+Overall solved 17/50 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:16 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[brakto_kopec.epd] Solved 3/12 puzzles at depth 5 (25.0%)
+[eigennmann_rapid_engine.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[lct_2.epd] Solved 4/12 puzzles at depth 5 (33.3%)
+[wacknew.epd] Solved 8/12 puzzles at depth 5 (66.7%)
+Overall solved 19/60 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:18 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/12 puzzles at depth 5 (25.0%)
+[brakto_kopec.epd] Solved 3/12 puzzles at depth 5 (25.0%)
+[eigennmann_rapid_engine.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[lct_2.epd] Solved 4/12 puzzles at depth 5 (33.3%)
+[wacknew.epd] Solved 8/12 puzzles at depth 5 (66.7%)
+Overall solved 20/60 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:20 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[brakto_kopec.epd] Solved 4/12 puzzles at depth 5 (33.3%)
+[eigennmann_rapid_engine.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[lct_2.epd] Solved 4/12 puzzles at depth 5 (33.3%)
+[wacknew.epd] Solved 8/12 puzzles at depth 5 (66.7%)
+Overall solved 20/60 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:22 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/12 puzzles at depth 5 (25.0%)
+[brakto_kopec.epd] Solved 3/12 puzzles at depth 5 (25.0%)
+[eigennmann_rapid_engine.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[lct_2.epd] Solved 5/12 puzzles at depth 5 (41.7%)
+[wacknew.epd] Solved 8/12 puzzles at depth 5 (66.7%)
+Overall solved 21/60 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:25 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[brakto_kopec.epd] Solved 3/12 puzzles at depth 5 (25.0%)
+[eigennmann_rapid_engine.epd] Solved 2/12 puzzles at depth 5 (16.7%)
+[lct_2.epd] Solved 5/12 puzzles at depth 5 (41.7%)
+[wacknew.epd] Solved 8/12 puzzles at depth 5 (66.7%)
+Overall solved 20/60 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:29 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/14 puzzles at depth 5 (14.3%)
+[brakto_kopec.epd] Solved 5/14 puzzles at depth 5 (35.7%)
+[eigennmann_rapid_engine.epd] Solved 2/14 puzzles at depth 5 (14.3%)
+[lct_2.epd] Solved 6/14 puzzles at depth 5 (42.9%)
+[wacknew.epd] Solved 10/14 puzzles at depth 5 (71.4%)
+Overall solved 25/70 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:32 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 2/14 puzzles at depth 5 (14.3%)
+[brakto_kopec.epd] Solved 4/14 puzzles at depth 5 (28.6%)
+[eigennmann_rapid_engine.epd] Solved 2/14 puzzles at depth 5 (14.3%)
+[lct_2.epd] Solved 6/14 puzzles at depth 5 (42.9%)
+[wacknew.epd] Solved 9/14 puzzles at depth 5 (64.3%)
+Overall solved 23/70 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:35 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/14 puzzles at depth 5 (21.4%)
+[brakto_kopec.epd] Solved 6/14 puzzles at depth 5 (42.9%)
+[eigennmann_rapid_engine.epd] Solved 2/14 puzzles at depth 5 (14.3%)
+[lct_2.epd] Solved 6/14 puzzles at depth 5 (42.9%)
+[wacknew.epd] Solved 9/14 puzzles at depth 5 (64.3%)
+Overall solved 26/70 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:37 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/14 puzzles at depth 5 (21.4%)
+[brakto_kopec.epd] Solved 5/14 puzzles at depth 5 (35.7%)
+[eigennmann_rapid_engine.epd] Solved 2/14 puzzles at depth 5 (14.3%)
+[lct_2.epd] Solved 6/14 puzzles at depth 5 (42.9%)
+[wacknew.epd] Solved 8/14 puzzles at depth 5 (57.1%)
+Overall solved 24/70 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:40 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/14 puzzles at depth 5 (21.4%)
+[brakto_kopec.epd] Solved 6/14 puzzles at depth 5 (42.9%)
+[eigennmann_rapid_engine.epd] Solved 2/14 puzzles at depth 5 (14.3%)
+[lct_2.epd] Solved 5/14 puzzles at depth 5 (35.7%)
+[wacknew.epd] Solved 8/14 puzzles at depth 5 (57.1%)
+Overall solved 24/70 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:47 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 5/20 puzzles at depth 5 (25.0%)
+[brakto_kopec.epd] Solved 9/20 puzzles at depth 5 (45.0%)
+[eigennmann_rapid_engine.epd] Solved 4/20 puzzles at depth 5 (20.0%)
+[lct_2.epd] Solved 6/20 puzzles at depth 5 (30.0%)
+[wacknew.epd] Solved 15/20 puzzles at depth 5 (75.0%)
+Overall solved 39/100 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:51 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 5/20 puzzles at depth 5 (25.0%)
+[brakto_kopec.epd] Solved 10/20 puzzles at depth 5 (50.0%)
+[eigennmann_rapid_engine.epd] Solved 3/20 puzzles at depth 5 (15.0%)
+[lct_2.epd] Solved 6/20 puzzles at depth 5 (30.0%)
+[wacknew.epd] Solved 14/20 puzzles at depth 5 (70.0%)
+Overall solved 38/100 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:55 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 4/20 puzzles at depth 5 (20.0%)
+[brakto_kopec.epd] Solved 9/20 puzzles at depth 5 (45.0%)
+[eigennmann_rapid_engine.epd] Solved 3/20 puzzles at depth 5 (15.0%)
+[lct_2.epd] Solved 6/20 puzzles at depth 5 (30.0%)
+[wacknew.epd] Solved 13/20 puzzles at depth 5 (65.0%)
+Overall solved 35/100 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:20:59 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 3/20 puzzles at depth 5 (15.0%)
+[brakto_kopec.epd] Solved 10/20 puzzles at depth 5 (50.0%)
+[eigennmann_rapid_engine.epd] Solved 3/20 puzzles at depth 5 (15.0%)
+[lct_2.epd] Solved 6/20 puzzles at depth 5 (30.0%)
+[wacknew.epd] Solved 15/20 puzzles at depth 5 (75.0%)
+Overall solved 37/100 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:21:03 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 4/20 puzzles at depth 5 (20.0%)
+[brakto_kopec.epd] Solved 8/20 puzzles at depth 5 (40.0%)
+[eigennmann_rapid_engine.epd] Solved 4/20 puzzles at depth 5 (20.0%)
+[lct_2.epd] Solved 6/20 puzzles at depth 5 (30.0%)
+[wacknew.epd] Solved 15/20 puzzles at depth 5 (75.0%)
+Overall solved 37/100 puzzles at depth 5
+=== perf snapshot 2026-01-24T09:21:09 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 5/24 puzzles at depth 5 (20.8%)
+[brakto_kopec.epd] Solved 10/24 puzzles at depth 5 (41.7%)
+=== perf snapshot 2026-01-24T09:21:15 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---
+=== perf snapshot 2026-01-24T09:21:26 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.15.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Classical evaluation tuned via Texel optimization
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+--- perf ---

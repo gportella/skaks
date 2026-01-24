@@ -95,7 +95,7 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
   if ((nodes & kTimeCheckMask) != 0) {
     return false;
   }
-  if (!scratch.time_manager->hard_limit_reached()) {
+  if (!scratch.time_manager->soft_limit_reached()) {
     return false;
   }
   if (scratch.abort_requested) {
@@ -173,28 +173,25 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
   const int history_score = scratch.ordering.history_score(move);
 
   int reduction = 0;
+  // LATER MOVE REDUCTION
   if (quiet_like && !king_move && !castle_move && !in_check_after_move &&
       child_depth >= 2 && move_number > 1) {
-    const int capped_depth = std::min(child_depth, 63);
-    const int capped_order = std::min(move_number, 63);
-    const double depth_factor = std::log1p(static_cast<double>(capped_depth));
-    const double order_factor = std::log1p(static_cast<double>(capped_order));
-    const double scaled = depth_factor * order_factor * 0.85;
-    const int tentative = static_cast<int>(std::round(scaled));
-    const int max_reduction = std::max(0, child_depth - 1);
-    reduction = std::clamp(tentative, 0, max_reduction);
+
+    const double depth_factor = std::log1p(std::min(child_depth, 63));
+    const double order_factor = std::log1p(std::min(move_number, 63));
+
+    const auto& sparams = search_params();
+    double scaled =
+        sparams.lmr_intercept +
+        (depth_factor * order_factor) / std::max(sparams.lmr_divisor, 0.01);
     if (ctx.is_pv) {
-      reduction = std::max(0, reduction - 1);
+      scaled -= sparams.lmr_pv_offset;
     }
-    if (history_score < 2000) {
-      reduction = std::min(max_reduction, reduction + 1);
-    }
-    if (history_score < 0) {
-      reduction = std::min(max_reduction, reduction + 1);
-    }
-    if (history_score > 12000) {
-      reduction = std::max(0, reduction - 1);
-    }
+    scaled -= static_cast<double>(history_score) /
+              std::max(sparams.lmr_history_divisor, 1.0);
+
+    const int tentative = static_cast<int>(std::round(scaled));
+    reduction = std::clamp(tentative, 0, child_depth - 1);
   }
 
   int search_depth = std::max(0, child_depth);
@@ -386,16 +383,17 @@ struct LazySmpTask {
   std::atomic<bool>* abort_flag = nullptr;
 
   static void* operator new(std::size_t size) {
-    return ::operator new(size, std::align_val_t{alignof(LazySmpTask)});
+    return ::operator new(size,
+                          static_cast<std::align_val_t>(alignof(LazySmpTask)));
   }
 
   static void operator delete(void* ptr) noexcept {
-    ::operator delete(ptr, std::align_val_t{alignof(LazySmpTask)});
+    ::operator delete(ptr, static_cast<std::align_val_t>(alignof(LazySmpTask)));
   }
 
   static void operator delete(void* ptr, std::size_t size) noexcept {
     (void)size;
-    ::operator delete(ptr, std::align_val_t{alignof(LazySmpTask)});
+    ::operator delete(ptr, static_cast<std::align_val_t>(alignof(LazySmpTask)));
   }
 };
 
@@ -407,6 +405,7 @@ struct LazySmpContext {
 
   const EvaluatorFn* evaluator = nullptr;
   TranspositionTable* tt = nullptr;
+  TimeManager* time_manager = nullptr;
   std::atomic<bool> internal_abort{false};
   std::atomic<bool>* abort_flag = nullptr;
   int helper_count = 0;
@@ -458,7 +457,7 @@ void execute_lazy_task(LazySmpTask& task, LazySmpThread& thread) {
   scratch.killers = task.has_killers ? &task.killers : nullptr;
   scratch.tt = ctx->tt;
   scratch.ordering = task.ordering;
-  scratch.time_manager = nullptr;
+  scratch.time_manager = ctx->time_manager;
   scratch.abort_requested = task.abort_flag ? task.abort_flag : ctx->abort_flag;
   scratch.local_abort = &task.split_point->cancel_flag;
   scratch.thread = &thread;
@@ -683,13 +682,17 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     }
   }
 
+  // NULL MOVE PRUNING
   if (allow_null_move(board, depth)) {
     UndoNull undo_null = make_null_move(board);
-    const int null_move_reduction = search_params().null_move_reduction;
+    int null_move_reduction = search_params().null_move_reduction;
+    if (depth <= 5) {
+      null_move_reduction = std::min(null_move_reduction, 2);
+    }
     SearchResult null_result = alphabeta_minimax(
-        board, depth - 1 - null_move_reduction, beta - 1, beta, flip_side(stm),
-        evaluator, scratch, ply + 1, repetition_start, ply_from_root + 1, false,
-        nodes, nullptr, nullptr, 0);
+        board, std::max(0, depth - 1 - null_move_reduction), beta - 1, beta,
+        flip_side(stm), evaluator, scratch, ply + 1, repetition_start,
+        ply_from_root + 1, false, nodes, nullptr, nullptr, 0);
     if (null_result.aborted) {
       undo_null_move(board, undo_null);
       return null_result;
@@ -1145,32 +1148,39 @@ SearchResult search_position(Board& board, SideToMove stm,
   const auto& sparams = search_params();
   std::uint64_t nodes = 0;
   int aspiration_window = sparams.aspiration_window_initial;
-  SearchResult best_result{};
+  SearchResult last_completed_result{};
   SearchResult result{};
 
   int last_completed_depth = 0;
   bool stopped_by_abort = false;
   bool stopped_by_soft_limit = false;
 
-  int best_score = 0;
+  int last_completed_score = 0;
   for (int current_depth = 1; current_depth <= params.depth; ++current_depth) {
+    if (scratch.time_manager && scratch.time_manager->soft_limit_reached()) {
+      stopped_by_soft_limit = true;
+      break;
+    }
     excluded_count = static_excluded_count;
     int pv_generated = 0;
+    SearchResult depth_best{};
+    int depth_best_score = 0;
+    bool depth_best_set = false;
     while (true) {
       int alpha = -INF;
       int beta = INF;
       if (current_depth == 1 ||
-          best_result.best_move.moving_pc == OccupancyType::empty) {
+          last_completed_result.best_move.moving_pc == OccupancyType::empty) {
         alpha = -INF;
         beta = INF;
       } else {
-        if (is_mate_score(best_score)) {
+        if (is_mate_score(last_completed_score)) {
           alpha = -INF;
           beta = INF;
           aspiration_window = sparams.aspiration_window_initial;
         } else {
-          const int window_low = best_score - aspiration_window;
-          const int window_high = best_score + aspiration_window;
+          const int window_low = last_completed_score - aspiration_window;
+          const int window_high = last_completed_score + aspiration_window;
           alpha = std::max(window_low, -MATE_BOUND);
           alpha = std::min(alpha, MATE_BOUND);
           beta = std::min(window_high, MATE_BOUND);
@@ -1271,9 +1281,10 @@ SearchResult search_position(Board& board, SideToMove stm,
 
       if (result.best_move.moving_pc == OccupancyType::empty ||
           !max_root_moves) {
-        if (best_result.best_move.moving_pc == OccupancyType::empty) {
-          best_result = result;
-          best_score = result.score;
+        if (!depth_best_set) {
+          depth_best = result;
+          depth_best_score = result.score;
+          depth_best_set = true;
         }
         if (iteration_fail_low || iteration_fail_high) {
           aspiration_window =
@@ -1290,12 +1301,13 @@ SearchResult search_position(Board& board, SideToMove stm,
 
       ++pv_generated;
       const bool improving =
-          best_result.best_move.moving_pc == OccupancyType::empty ? true
-          : (stm == SideToMove::White) ? (result.score > best_score)
-                                       : (result.score < best_score);
+          depth_best.best_move.moving_pc == OccupancyType::empty ? true
+          : (stm == SideToMove::White) ? (result.score > depth_best_score)
+                                       : (result.score < depth_best_score);
       if (improving) {
-        best_result = result;
-        best_score = result.score;
+        depth_best = result;
+        depth_best_score = result.score;
+        depth_best_set = true;
       }
 
       const bool can_extend = multi_pv && pv_generated < params.pv_count;
@@ -1325,6 +1337,14 @@ SearchResult search_position(Board& board, SideToMove stm,
       break;
     }
 
+    if (!result.aborted) {
+      if (depth_best_set) {
+        result = depth_best;
+      }
+      last_completed_result = result;
+      last_completed_score = result.score;
+    }
+
     if (track_info && params.info_callback) {
       result.nodes = nodes;
       result.elapsed_ms = static_cast<std::uint64_t>(
@@ -1346,8 +1366,9 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
 
   SearchResult final_result =
-      best_result.best_move.moving_pc != OccupancyType::empty ? best_result
-                                                              : result;
+      last_completed_result.best_move.moving_pc != OccupancyType::empty
+          ? last_completed_result
+          : result;
   if (final_result.best_move.moving_pc == OccupancyType::empty) {
     uint16_t fallback_count = 0;
     auto fallback_moves = generate_legal_moves(board, stm, fallback_count);
@@ -1413,6 +1434,7 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
   context.helper_count = 0;
   context.tt = tt;
   context.evaluator = &evaluator;
+  context.time_manager = params.time_manager;
   context.abort_flag =
       params.abort_flag ? params.abort_flag : &context.internal_abort;
 

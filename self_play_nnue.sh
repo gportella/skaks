@@ -1,13 +1,17 @@
 #!/bin/bash
-
-python -m skaks_opt.cli param-optimize \
+skaks-opt param-optimize \
   --engine skaks \
-  --baseline-params besty.yaml \
-  --start-params search_nnue_init.yaml \
+  --baseline-params search_nnue_baseline.yaml \
+  --start-params search_nnue_baseline.yaml \
   --include-prefix search_nnue \
   --games 20 \
   --iterations 50 \
+  --use-arena-binding \
+  --strategy spsa \
   --repeats 4 \
   --arena-workers 4 \
-  --depth 5 \
-  --output besty_search_nnue.yaml
+  --spsa-c 2 \
+  --spsa-a 0.5 \
+  --nodes 10000 \
+  --output best_search_nnue.yaml
+

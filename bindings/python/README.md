@@ -21,4 +21,4 @@ print(res["cp"])        # numpy array of ints
 print(res["errors"])    # list of None or error strings
 ```
 
-`params` can override evaluation/search fields via nested dicts matching the C++ structs; arrays must match expected lengths.
+`params` can override evaluation/search fields via nested dicts matching the C++ structs; arrays must match expected lengths. Search overrides include LMR fields (`lmr_intercept`, `lmr_divisor`, `lmr_history_divisor`, `lmr_pv_offset`) under `search` and `search_nnue`.

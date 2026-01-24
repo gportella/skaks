@@ -400,6 +400,9 @@ bool parse_search(const YAML::Node& search_node, chess::SearchParams& search,
   auto parse_field = [&](const char* key, int& dest) -> bool {
     return parse_int(search_node, key, dest, error);
   };
+  auto parse_field_double = [&](const char* key, double& dest) -> bool {
+    return parse_double(search_node, key, dest, error);
+  };
 
   if (!parse_field("aspiration_window_initial",
                    search.aspiration_window_initial))
@@ -430,6 +433,26 @@ bool parse_search(const YAML::Node& search_node, chess::SearchParams& search,
     return false;
   if (search.null_move_reduction < 0 || search.null_move_min_depth < 0) {
     error = "null-move parameters must be non-negative";
+    return false;
+  }
+  if (!parse_field_double("lmr_intercept", search.lmr_intercept))
+    return false;
+  if (!parse_field_double("lmr_divisor", search.lmr_divisor))
+    return false;
+  if (!parse_field_double("lmr_history_divisor", search.lmr_history_divisor))
+    return false;
+  if (!parse_field_double("lmr_pv_offset", search.lmr_pv_offset))
+    return false;
+  if (search.lmr_divisor <= 0.0) {
+    error = "lmr_divisor must be positive";
+    return false;
+  }
+  if (search.lmr_history_divisor <= 0.0) {
+    error = "lmr_history_divisor must be positive";
+    return false;
+  }
+  if (search.lmr_pv_offset < 0.0) {
+    error = "lmr_pv_offset must be non-negative";
     return false;
   }
   return true;

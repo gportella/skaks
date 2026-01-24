@@ -14,22 +14,21 @@ inline constexpr int CHECK_EXTENSION = 2;
 inline constexpr int MATE_BOUND = MATE_SCORE + 1024;
 inline constexpr int MATE_VALUE = INF;
 inline constexpr int MATE_THRESHOLD = MATE_VALUE - static_cast<int>(MAX_PLY);
-
-inline constexpr int ASPIRATION_WINDOW_INITIAL = 800;
-inline constexpr int ASPIRATION_WINDOW_MAX = 6400;
 inline constexpr int MOBILITY_SCALING = 15;
 
+inline constexpr int ASPIRATION_WINDOW_INITIAL = 100;
+inline constexpr int ASPIRATION_WINDOW_MAX = 1200;
 inline constexpr int QUIESCENCE_DELTA_MARGIN = 250;
 inline constexpr int QUIESCENCE_MAX_PLY = 8;
 inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 10;
 inline constexpr int QUIESCENCE_ZERO_GAIN_SKIP_INDEX = 1;
 inline constexpr int QUIESCENCE_MAX_QUIET_CHECKS = 0;
-
 inline constexpr int NULL_MOVE_REDUCTION = 3;
-inline constexpr int NULL_MOVE_MIN_DEPTH = NULL_MOVE_REDUCTION + 1;
-
-// inline constexpr int LATE_MOVE_REDUCTION_BASE = 2;
-// inline constexpr int LATE_MOVE_REDUCTION_DIVISOR = 3;
+inline constexpr int NULL_MOVE_MIN_DEPTH = NULL_MOVE_REDUCTION + 3;
+inline constexpr double LMR_INTERCEPT = 0.0;
+inline constexpr double LMR_DIVISOR = 1.5;
+inline constexpr double LMR_HISTORY_DIVISOR = 8000.0;
+inline constexpr double LMR_PV_OFFSET = 1.0;
 
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES =
     3; // max 3 pieces change per move

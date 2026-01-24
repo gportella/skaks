@@ -185,14 +185,17 @@ class UciEngine:
         fen: str,
         *,
         depth: Optional[int] = None,
+        nodes: Optional[int] = None,
         movetime_ms: Optional[int] = None,
         clock: Optional[GoClock] = None,
         moves: Optional[List[str]] = None,
     ) -> str:
-        provided = sum(1 for flag in (depth, movetime_ms, clock) if flag is not None)
+        provided = sum(
+            1 for flag in (depth, nodes, movetime_ms, clock) if flag is not None
+        )
         if provided != 1:
             raise ValueError(
-                "exactly one of depth, movetime_ms, or clock must be provided"
+                "exactly one of depth, nodes, movetime_ms, or clock must be provided"
             )
         self._send("ucinewgame")
         if moves:
@@ -207,6 +210,8 @@ class UciEngine:
                 self._send(f"position fen {fen}")
         if movetime_ms is not None:
             self._send(f"go movetime {movetime_ms}")
+        elif nodes is not None:
+            self._send(f"go nodes {nodes}")
         elif depth is not None:
             self._send(f"go depth {depth}")
         else:
@@ -348,6 +353,7 @@ def _should_suppress_info(binary: str) -> bool:
 def run_game(
     *,
     depth: Optional[int],
+    nodes: Optional[int],
     limit: int,
     time_per_move: Optional[float],
     opponent_time_per_move: Optional[float],
@@ -545,14 +551,19 @@ def run_game(
                                 root_fen, moves=moves, movetime_ms=movetime_ms
                             )
                     else:
-                        assert depth is not None
+                        assert depth is not None or nodes is not None
                         search_start = None
                         search_end = None
                         if mover_color == chess.WHITE:
-                            chosen_depth = depth
-                            best_move = engine.bestmove(
-                                root_fen, moves=moves, depth=chosen_depth
-                            )
+                            if nodes is not None:
+                                best_move = engine.bestmove(
+                                    root_fen, moves=moves, nodes=nodes
+                                )
+                            else:
+                                chosen_depth = depth
+                                best_move = engine.bestmove(
+                                    root_fen, moves=moves, depth=chosen_depth
+                                )
                         else:
                             if opponent_movetime_ms is not None:
                                 go_clock = GoClock(
@@ -565,17 +576,22 @@ def run_game(
                                     root_fen, moves=moves, clock=go_clock
                                 )
                             else:
-                                if opponent_depth_factor is not None:
-                                    chosen_depth = max(
-                                        1, int(round(depth * opponent_depth_factor))
+                                if nodes is not None:
+                                    best_move = engine.bestmove(
+                                        root_fen, moves=moves, nodes=nodes
                                     )
-                                elif depth_penalty != 0:
-                                    chosen_depth = max(depth - depth_penalty, 1)
                                 else:
-                                    chosen_depth = depth
-                                best_move = engine.bestmove(
-                                    root_fen, moves=moves, depth=chosen_depth
-                                )
+                                    if opponent_depth_factor is not None:
+                                        chosen_depth = max(
+                                            1, int(round(depth * opponent_depth_factor))
+                                        )
+                                    elif depth_penalty != 0:
+                                        chosen_depth = max(depth - depth_penalty, 1)
+                                    else:
+                                        chosen_depth = depth
+                                    best_move = engine.bestmove(
+                                        root_fen, moves=moves, depth=chosen_depth
+                                    )
                 except Exception as exc:
                     message = f"{engine_name} forfeits due to exception: {exc}"
                     print(message, file=sys.stderr)
@@ -777,6 +793,11 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Search depth in plies per move (default: 9)",
     )
     group.add_argument(
+        "--nodes",
+        type=int,
+        help="Node limit per move",
+    )
+    group.add_argument(
         "--time-per-move",
         type=_positive_float,
         help="Seconds per move for Skaks (enables time controls)",
@@ -865,12 +886,14 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         args.opponent = "stockfish"
 
     mode_count = sum(
-        flag is not None for flag in (args.depth, args.time_per_move, args.clock)
+        flag is not None for flag in (args.depth, args.nodes, args.time_per_move, args.clock)
     )
     if mode_count == 0:
         args.depth = 9
     elif mode_count > 1:
-        parser.error("choose exactly one of --depth, --time-per-move, or --clock")
+        parser.error(
+            "choose exactly one of --depth, --nodes, --time-per-move, or --clock"
+        )
 
     if args.clock is None and args.opponent_clock is not None:
         parser.error("--opponent-clock requires --clock")
@@ -893,6 +916,7 @@ def main(argv: List[str]) -> int:
     args = parse_args(argv)
     return run_game(
         depth=args.depth,
+        nodes=args.nodes,
         limit=args.limit,
         time_per_move=args.time_per_move,
         opponent_time_per_move=args.opponent_time_per_move,

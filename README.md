@@ -1,6 +1,6 @@
 # Skaks -- learning by doing 
 
-> WIP: I don't know if I'll finish this, a lot of work.
+> Uses Stockfish NNUE as I was tired of tuning my eval, no incremental eval.
 
 Simple toy chess engine, for learning and fun. 
 

@@ -8,6 +8,7 @@ Machine-readable results are obtained via arena_runner with --summary-json.
 
 import argparse
 import contextlib
+import hashlib
 import itertools
 import json
 import math
@@ -23,7 +24,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from skaks_opt import arena_runner
 from skaks_opt.dask_support import dask_client_from_args
-from skaks_opt.params import DEFAULT_PARAMS, param_set_prefixes
+from skaks_opt.params import (DEFAULT_PARAMS, default_param_space,
+                              param_set_prefixes)
 from skaks_opt.pst import apply_pst_symmetry
 from skaks_opt.replica_exchange import (ReplicaExchangeState, REXChain,
                                         build_temperatures)
@@ -248,6 +250,54 @@ def _set_by_path(data: Any, path: str, value: Any) -> None:
     ref[parts[-1]] = value
 
 
+def _merge_params(base: Any, overrides: Any) -> Any:
+    if isinstance(base, dict) and isinstance(overrides, dict):
+        merged = json.loads(json.dumps(base))
+        for key, value in overrides.items():
+            if key in merged:
+                merged[key] = _merge_params(merged[key], value)
+            else:
+                merged[key] = json.loads(json.dumps(value))
+        return merged
+    return json.loads(json.dumps(overrides))
+
+
+def _params_fingerprint(payload: Optional[Dict[str, Any]]) -> str:
+    if payload is None:
+        return "none"
+    try:
+        packed = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    except TypeError:
+        packed = json.dumps(json.loads(json.dumps(payload)), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(packed.encode("utf-8")).hexdigest()[:12]
+
+
+def _trace_search_params(label: str, payload: Optional[Dict[str, Any]], nodes: Optional[int]) -> None:
+    if payload is None:
+        _final_line(f"[ARENA TRACE PARAMS] {label}=none")
+        return
+    section = "search_nnue" if "search_nnue" in payload else "search"
+    search = payload.get(section, {}) if isinstance(payload, dict) else {}
+    if not isinstance(search, dict):
+        _final_line(f"[ARENA TRACE PARAMS] {label}={section} (invalid)")
+        return
+    def _val(key: str) -> Any:
+        return search.get(key, "?")
+    _final_line(
+        "[ARENA TRACE PARAMS] "
+        f"{label} section={section} nodes={nodes or 0} "
+        f"asp_init={_val('aspiration_window_initial')} "
+        f"asp_max={_val('aspiration_window_max')} "
+        f"q_delta={_val('quiescence_delta_margin')} "
+        f"null_r={_val('null_move_reduction')} "
+        f"null_min={_val('null_move_min_depth')} "
+        f"lmr_i={_val('lmr_intercept')} "
+        f"lmr_div={_val('lmr_divisor')} "
+        f"lmr_hist={_val('lmr_history_divisor')} "
+        f"lmr_pv={_val('lmr_pv_offset')}"
+    )
+
+
 def perturb_params(
     base: Dict[str, Any],
     noise: float,
@@ -371,6 +421,41 @@ def _vector_to_params(
     return data
 
 
+def _bounds_for_paths(paths: List[str]) -> List[Tuple[float, float]]:
+    specs = default_param_space(include_arrays=True)
+    bounds_map = {spec.name: (float(spec.low), float(spec.high)) for spec in specs}
+    bounds: List[Tuple[float, float]] = []
+    for path in paths:
+        if path in bounds_map:
+            bounds.append(bounds_map[path])
+        else:
+            bounds.append((-math.inf, math.inf))
+    return bounds
+
+
+def _clamp_vector(vec: List[float], bounds: List[Tuple[float, float]]) -> List[float]:
+    if not bounds:
+        return vec
+    clamped: List[float] = []
+    for val, (low, high) in zip(vec, bounds):
+        if low != -math.inf or high != math.inf:
+            clamped.append(min(max(val, low), high))
+        else:
+            clamped.append(val)
+    return clamped
+
+
+def _perturbation_scales(bounds: List[Tuple[float, float]]) -> List[float]:
+    scales: List[float] = []
+    for low, high in bounds:
+        if math.isfinite(low) and math.isfinite(high):
+            span = high - low
+            scales.append(span if span > 0 else 1.0)
+        else:
+            scales.append(1.0)
+    return scales
+
+
 def _clamp_phase_weights(data: Dict[str, Any], low: float = -1.0, high: float = 1.0) -> None:
     eval_section = data.get("evaluation") if isinstance(data, dict) else None
     if not isinstance(eval_section, dict):
@@ -395,6 +480,7 @@ def run_batch(
     opponent_label: str,
     games: int,
     depth: Optional[int],
+    nodes: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
     increment: Optional[float],
@@ -445,6 +531,8 @@ def run_batch(
             argv.extend(["--opponent-uci-option", f"{name}={value}"])
     if depth is not None:
         argv.extend(["--depth", str(depth)])
+    elif nodes is not None:
+        argv.extend(["--nodes", str(nodes)])
     elif time_per_move is not None:
         argv.extend(["--time-per-move", str(time_per_move)])
     elif clock is not None:
@@ -498,6 +586,7 @@ def _run_external_shard(
     opponent_params: Optional[Path],
     games: int,
     depth: Optional[int],
+    nodes: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
     increment: Optional[float],
@@ -527,6 +616,7 @@ def _run_external_shard(
             opponent_label=opponent_label,
             games=games,
             depth=depth,
+            nodes=nodes,
             time_per_move=time_per_move,
             clock=clock,
             increment=increment,
@@ -656,6 +746,7 @@ def _run_arena_shard(
         int,
         int,
         int,
+        int,
     ],
 ) -> Dict[str, int]:
     (
@@ -665,6 +756,7 @@ def _run_arena_shard(
         coerce_template,
         depth,
         movetime_ms,
+        node_limit,
         max_plies,
     ) = payload
     try:
@@ -681,6 +773,7 @@ def _run_arena_shard(
         games=len(start_fens),
         depth=depth,
         movetime_ms=movetime_ms,
+        node_limit=node_limit,
         max_plies=max_plies,
     )
     return {
@@ -700,6 +793,7 @@ def evaluate_candidate(
     coerce_template: Optional[Dict[str, Any]] = None,
     games: int,
     depth: Optional[int],
+    nodes: Optional[int],
     time_per_move: Optional[float],
     clock: Optional[float],
     increment: Optional[float],
@@ -734,6 +828,9 @@ def evaluate_candidate(
             raise ValueError(
                 "Arena binding does not support clock controls; use depth or time-per-move"
             )
+        depth_value = depth or 0
+        if nodes is not None:
+            depth_value = 0
         fen_pool = list(start_fens) if start_fens else [START_FEN]
         fen_pool = [START_FEN if fen == "start" else fen for fen in fen_pool]
         if games > len(fen_pool):
@@ -741,6 +838,21 @@ def evaluate_candidate(
             fen_pool = (fen_pool * copies)[:games]
         else:
             fen_pool = fen_pool[:games]
+
+        if os.environ.get("SKAKS_ARENA_TRACE"):
+            base_fp = _params_fingerprint(baseline_data)
+            cand_fp = _params_fingerprint(candidate_data)
+            if base_fp == cand_fp:
+                _final_line(
+                    f"[ARENA TRACE] base params == cand params (hash={base_fp})"
+                )
+            else:
+                _final_line(
+                    f"[ARENA TRACE] base={base_fp} cand={cand_fp}"
+                )
+        if os.environ.get("SKAKS_ARENA_TRACE_PARAMS"):
+            _trace_search_params("base", baseline_data, nodes)
+            _trace_search_params("cand", candidate_data, nodes)
 
         shard_target = (
             dask_shard_hint
@@ -761,8 +873,9 @@ def evaluate_candidate(
                         baseline_data,
                         candidate_data,
                         coerce_template,
-                        depth or 0,
+                        depth_value,
                         movetime_ms,
+                        nodes or 0,
                         160,
                     )
                 )
@@ -789,8 +902,9 @@ def evaluate_candidate(
                 base_params=coerced_base,
                 cand_params=coerced_cand,
                 games=games,
-                depth=depth or 0,
+                depth=depth_value,
                 movetime_ms=movetime_ms,
+                node_limit=nodes or 0,
                 max_plies=160,
             )
             wins = int(res.get("wins", 0))
@@ -806,8 +920,9 @@ def evaluate_candidate(
                         baseline_data,
                         candidate_data,
                         coerce_template,
-                        depth or 0,
+                        depth_value,
                         movetime_ms,
+                        nodes or 0,
                         160,
                     )
                 )
@@ -851,6 +966,7 @@ def evaluate_candidate(
                             opponent_params=opponent_params,
                             games=shard_games,
                             depth=depth,
+                            nodes=nodes,
                             time_per_move=time_per_move,
                             clock=clock,
                             increment=increment,
@@ -887,6 +1003,7 @@ def evaluate_candidate(
                     opponent_label=cand_label,
                     games=games,
                     depth=depth,
+                    nodes=nodes,
                     time_per_move=time_per_move,
                     clock=clock,
                     increment=increment,
@@ -910,6 +1027,7 @@ def evaluate_candidate(
                 opponent_label=cand_label,
                 games=half_games,
                 depth=depth,
+                nodes=nodes,
                 time_per_move=time_per_move,
                 clock=clock,
                 increment=increment,
@@ -929,6 +1047,7 @@ def evaluate_candidate(
                 opponent_label=base_label,
                 games=half_games,
                 depth=depth,
+                nodes=nodes,
                 time_per_move=time_per_move,
                 clock=clock,
                 increment=increment,
@@ -1090,6 +1209,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 coerce_template=baseline_data,
                 games=args.games,
                 depth=args.depth,
+                nodes=args.nodes,
                 time_per_move=args.time_per_move,
                 clock=args.clock,
                 increment=args.increment,
@@ -1240,6 +1360,12 @@ def optimize_loop(args: argparse.Namespace) -> None:
     quiet_child = not args.child_output
     baseline_data = _load_params(baseline_params) if baseline_params else None
 
+    if baseline_data is not None and current_params != baseline_params:
+        best_data = _merge_params(baseline_data, best_data)
+        base_data = best_data
+        beam = [(best_score, best_data)]
+        _save_params(best_data, best_path)
+
     start_fens: Optional[List[str]] = None
     if args.use_arena_binding and args.arena_pgn:
         try:
@@ -1281,6 +1407,11 @@ def optimize_loop(args: argparse.Namespace) -> None:
     dask_client, dask_shard_hint = dask_cm.__enter__()
     try:
         for step in range(1, args.iterations + 1):
+            iter_start_fens = start_fens
+            if start_fens:
+                iter_start_fens = list(start_fens)
+                rng = random.Random(args.arena_seed + step)
+                rng.shuffle(iter_start_fens)
             candidates: List[
                 Tuple[float, Dict[str, Any], Tuple[int, int, int], float]
             ] = []
@@ -1332,7 +1463,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             progress_cb=progress_cb,
                             quiet=quiet_child,
                             use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
+                            start_fens=iter_start_fens,
                             coerce_template=baseline_data
                             if baseline_data is not None
                             else parent,
@@ -1343,6 +1474,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             candidate_data=cand_data,
                             games=args.games,
                             depth=args.depth,
+                            nodes=args.nodes,
                             time_per_move=args.time_per_move,
                             clock=args.clock,
                             increment=args.increment,
@@ -1460,7 +1592,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             progress_cb=progress_cb,
                             quiet=quiet_child,
                             use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
+                            start_fens=iter_start_fens,
                             coerce_template=baseline_data
                             if baseline_data is not None
                             else base_data,
@@ -1471,6 +1603,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             candidate_data=cand_data,
                             games=args.games,
                             depth=args.depth,
+                            nodes=args.nodes,
                             time_per_move=args.time_per_move,
                             clock=args.clock,
                             increment=args.increment,
@@ -1591,7 +1724,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             progress_cb=None,
                             quiet=quiet_child,
                             use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
+                            start_fens=iter_start_fens,
                             coerce_template=baseline_data
                             if baseline_data is not None
                             else best_data,
@@ -1602,6 +1735,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             candidate_data=cand_data,
                             games=args.games,
                             depth=args.depth,
+                            nodes=args.nodes,
                             time_per_move=args.time_per_move,
                             clock=args.clock,
                             increment=args.increment,
@@ -1689,7 +1823,14 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     include_prefixes=include_prefixes,
                     exclude_prefixes=exclude_prefixes,
                 )
-                theta_plus, theta_minus, deltas, _ = spsa_state.propose(mean_vec)
+                bounds = _bounds_for_paths(paths)
+                theta_plus, theta_minus, deltas, c_k = spsa_state.propose(mean_vec)
+                scales = _perturbation_scales(bounds)
+                scaled_deltas = [d * s for d, s in zip(deltas, scales)]
+                theta_plus = [t + c_k * sd for t, sd in zip(mean_vec, scaled_deltas)]
+                theta_minus = [t - c_k * sd for t, sd in zip(mean_vec, scaled_deltas)]
+                theta_plus = _clamp_vector(theta_plus, bounds)
+                theta_minus = _clamp_vector(theta_minus, bounds)
 
                 def run_spsa_eval(label: str, vec: List[float]) -> Tuple[float, Dict[str, Any], Tuple[int, int, int], float]:
                     cand_data = _vector_to_params(best_data, paths, vec, is_int)
@@ -1706,7 +1847,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             progress_cb=None,
                             quiet=quiet_child,
                             use_arena=args.use_arena_binding,
-                            start_fens=start_fens,
+                            start_fens=iter_start_fens,
                             coerce_template=baseline_data
                             if baseline_data is not None
                             else best_data,
@@ -1717,6 +1858,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                             candidate_data=cand_data,
                             games=args.games,
                             depth=args.depth,
+                            nodes=args.nodes,
                             time_per_move=args.time_per_move,
                             clock=args.clock,
                             increment=args.increment,
@@ -1772,10 +1914,11 @@ def optimize_loop(args: argparse.Namespace) -> None:
 
                 updated_vec = spsa_state.update(
                     mean_vec,
-                    deltas,
+                    scaled_deltas,
                     plus_score,
                     minus_score,
                     maximize=True,
+                    bounds=bounds,
                 )
                 best_data = _vector_to_params(best_data, paths, updated_vec, is_int)
                 _clamp_phase_weights(best_data)
@@ -2024,6 +2167,7 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         help="Lognormal stddev for multiplicative noise",
     )
     parser.add_argument("--depth", type=int, help="Depth per move")
+    parser.add_argument("--nodes", type=int, help="Node limit per move")
     parser.add_argument("--time-per-move", type=float, help="Seconds per move")
     parser.add_argument("--clock", type=float, help="Clock time seconds")
     parser.add_argument(

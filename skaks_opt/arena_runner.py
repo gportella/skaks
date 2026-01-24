@@ -399,6 +399,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Depth passed to the reference engine",
     )
     timing_group.add_argument(
+        "--nodes",
+        type=positive_int,
+        help="Node limit per move for the reference engine",
+    )
+    timing_group.add_argument(
         "--time-per-move",
         type=positive_float,
         help="Seconds per move for the reference engine",
@@ -508,12 +513,15 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         parser.error("--resume requires --database")
 
     mode_count = sum(
-        flag is not None for flag in (args.depth, args.time_per_move, args.clock)
+        flag is not None
+        for flag in (args.depth, args.nodes, args.time_per_move, args.clock)
     )
     if mode_count == 0:
         args.depth = DEFAULT_DEPTH
     if mode_count > 1:
-        parser.error("choose exactly one of --depth, --time-per-move, or --clock")
+        parser.error(
+            "choose exactly one of --depth, --nodes, --time-per-move, or --clock"
+        )
 
     if args.clock is None and args.opponent_clock is not None:
         parser.error("--opponent-clock requires --clock")
@@ -541,6 +549,8 @@ def build_fight_arguments(args: argparse.Namespace) -> List[str]:
     base_args: List[str] = ["--limit", str(args.limit)]
     if args.depth is not None:
         base_args.extend(["--depth", str(args.depth)])
+    elif args.nodes is not None:
+        base_args.extend(["--nodes", str(args.nodes)])
     elif args.time_per_move is not None:
         base_args.extend(["--time-per-move", str(args.time_per_move)])
         if args.opponent_time_per_move is not None:

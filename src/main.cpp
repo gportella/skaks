@@ -61,6 +61,19 @@ bool suppress_info_strings() {
   return suppressed;
 }
 
+std::string compile_month_year() {
+  const std::string_view date = __DATE__;
+  if (date.size() < 11) {
+    return std::string(date);
+  }
+  std::string out;
+  out.reserve(8);
+  out.append(date.substr(0, 3));
+  out.push_back(' ');
+  out.append(date.substr(7, 4));
+  return out;
+}
+
 chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options);
 
 double game_outcome(chess::Board board) {
@@ -492,6 +505,8 @@ int main(int argc, char** argv) {
   }
 
   if (cli.options.use_uci) {
+    std::cout << chess::kEngineName << ' ' << chess::kEngineVersion << " ("
+              << compile_month_year() << ") G Portella" << '\n';
     std::optional<chess::UciPolyglotContext> ctx;
     if (opening_book_ready) {
       ctx = chess::UciPolyglotContext{&opening_book, opening_book_path,
