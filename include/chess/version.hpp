@@ -6,7 +6,7 @@
 namespace chess {
 
 inline constexpr std::string_view kEngineName = "skaks";
-inline constexpr std::string_view kEngineVersion = "0.15.4";
+inline constexpr std::string_view kEngineVersion = "0.16.0";
 
 inline constexpr std::array<std::string_view, 19> kOptimizationFeatures{
     "Bitboard move generation with precomputed attack masks",
@@ -25,7 +25,7 @@ inline constexpr std::array<std::string_view, 19> kOptimizationFeatures{
     "MVV-LVA and SEE for capture move ordering",
     "Threaded UCI search support, with pondering",
     "Parameter loading from external file",
-    "Classical evaluation tuned via Texel optimization",
+    "Non-incremental NNUE from Stockfish",
     "SIMD optimizations for bitboard operations and threads",
     "Extensive CLI modes for self-play, benchmarking, and profiling"};
 } // namespace chess
