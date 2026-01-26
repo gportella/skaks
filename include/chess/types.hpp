@@ -9,8 +9,23 @@ namespace chess {
 
 enum class Piece { wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK };
 constexpr std::size_t kPieceCount = static_cast<std::size_t>(Piece::bK) + 1;
-enum class OccupancyType { empty, wP, wN, wB, wR, wQ, wK, bP, bN, bB, bR, bQ, bK };
-static_assert(static_cast<int>(OccupancyType::wP) < static_cast<int>(OccupancyType::bP),
+enum class OccupancyType {
+  empty,
+  wP,
+  wN,
+  wB,
+  wR,
+  wQ,
+  wK,
+  bP,
+  bN,
+  bB,
+  bR,
+  bQ,
+  bK
+};
+static_assert(static_cast<int>(OccupancyType::wP) <
+                  static_cast<int>(OccupancyType::bP),
               "OccupancyType must list white pieces before black pieces");
 enum class PieceColor { White, Black, Both, None };
 enum class SideToMove { White, Black };
@@ -40,7 +55,8 @@ enum class Square {
 };
 // clang-format on
 
-constexpr Bitboard U64_MASK = std::numeric_limits<std::uint64_t>::max(); // 0xFFFFFFFFFFFFFFFF
+constexpr Bitboard U64_MASK =
+    std::numeric_limits<std::uint64_t>::max(); // 0xFFFFFFFFFFFFFFFF
 constexpr Bitboard FILE_A = 0x0101010101010101ULL;
 constexpr Bitboard FILE_B = FILE_A << 1;
 constexpr Bitboard FILE_G = FILE_A << 6;
@@ -57,7 +73,11 @@ constexpr Bitboard NOT_FILE_A = ~FILE_A;
 constexpr Bitboard NOT_FILE_H = ~FILE_H;
 
 constexpr bool is_white(OccupancyType occ) {
-  return static_cast<std::size_t>(occ) < static_cast<std::size_t>(OccupancyType::bP);
+  return static_cast<std::size_t>(occ) <
+         static_cast<std::size_t>(OccupancyType::bP);
+}
+inline constexpr PieceColor piece_color(OccupancyType occ) {
+  return is_white(occ) ? PieceColor::White : PieceColor::Black;
 }
 constexpr SideToMove flip_side(SideToMove side) {
   return side == SideToMove::White ? SideToMove::Black : SideToMove::White;

@@ -94,6 +94,7 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "lmr_divisor": 1.1764705882352942,
         "lmr_history_divisor": 8000.0,
         "lmr_pv_offset": 1.0,
+        "futility_margins": [0, 120, 240, 400],
     },
     "search_nnue": {
         "aspiration_window_initial": 100,
@@ -109,6 +110,7 @@ DEFAULT_PARAMS: Dict[str, Dict] = {
         "lmr_divisor": 1.1764705882352942,
         "lmr_history_divisor": 8000.0,
         "lmr_pv_offset": 1.0,
+        "futility_margins": [0, 120, 240, 400],
     },
 }
 
@@ -178,6 +180,10 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("search.lmr_divisor", 0.6, 2.5, step=0.05, is_float=True),
         ParamSpec("search.lmr_history_divisor", 2000.0, 20000.0, step=200.0, is_float=True),
         ParamSpec("search.lmr_pv_offset", 0.0, 2.5, step=0.05, is_float=True),
+        ParamSpec("search.futility_margins[0]", 0, 0, step=1),
+        ParamSpec("search.futility_margins[1]", 0, 600, step=10),
+        ParamSpec("search.futility_margins[2]", 0, 800, step=10),
+        ParamSpec("search.futility_margins[3]", 0, 1000, step=10),
         # Search NNUE (mirrors search ranges)
         ParamSpec("search_nnue.aspiration_window_initial", 50, 200, step=10),
         ParamSpec("search_nnue.aspiration_window_max", 600, 2400, step=20),
@@ -192,6 +198,10 @@ def default_param_space(include_arrays: bool = False) -> List[ParamSpec]:
         ParamSpec("search_nnue.lmr_divisor", 0.6, 2.5, step=0.05, is_float=True),
         ParamSpec("search_nnue.lmr_history_divisor", 2000.0, 20000.0, step=200.0, is_float=True),
         ParamSpec("search_nnue.lmr_pv_offset", 0.0, 2.5, step=0.05, is_float=True),
+        ParamSpec("search_nnue.futility_margins[0]", 0, 0, step=1),
+        ParamSpec("search_nnue.futility_margins[1]", 0, 600, step=10),
+        ParamSpec("search_nnue.futility_margins[2]", 0, 800, step=10),
+        ParamSpec("search_nnue.futility_margins[3]", 0, 1000, step=10),
     ]
 
     if include_arrays:

@@ -2,6 +2,8 @@
 
 #include "chess/defaults.hpp"
 
+#include <array>
+
 namespace chess {
 
 struct SearchParams {
@@ -18,6 +20,7 @@ struct SearchParams {
   double lmr_divisor = LMR_DIVISOR;
   double lmr_history_divisor = LMR_HISTORY_DIVISOR;
   double lmr_pv_offset = LMR_PV_OFFSET;
+  std::array<int, 4> futility_margins = FUTILITY_MARGINS;
 };
 
 inline SearchParams default_search_params() {

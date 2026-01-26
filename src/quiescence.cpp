@@ -71,6 +71,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     return evaluator(static_cast<const Board&>(board));
   }
 
+  // TT probe: tighten window or return cached cutoff/score
   if (tt) {
     TranspositionEntry e;
     if (tt->probe(board.position_key, e)) {
@@ -91,6 +92,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     }
   }
 
+  // Track original bounds for final TT flag selection
   const int alpha_origin = alpha;
   const int beta_origin = beta;
   const bool in_check = is_check(board, stm);
@@ -98,6 +100,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   const int stand_pat = stand_eval;
   const bool maximizing = (stm == SideToMove::White);
 
+  // Stand-pat evaluation and immediate cutoff if safe (not in check)
   if (!in_check) {
     if (maximizing) {
       if (stand_pat >= beta) {
@@ -130,6 +133,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     }
   }
 
+  // Generate candidate moves (all if in check, otherwise noisy only)
   uint16_t move_count = 0;
   std::array<uint32_t, kMaxMovementCount> moves{};
   if (in_check) {
@@ -137,6 +141,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   } else {
     moves = generate_all_moves(board, stm, move_count);
     uint16_t write_idx = 0;
+    // filter only legal captures and promotions
     for (uint16_t i = 0; i < move_count; ++i) {
       Move m = decode_move(moves[i]);
       const bool is_capture = m.captured_pc != OccupancyType::empty;
@@ -154,6 +159,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     move_count = write_idx;
   }
 
+  // Order captures/promotions for better cutoffs
   sort_moves(board, moves, move_count, 0);
 
   // Hard cap noisy moves per node when not in check to avoid explosion
@@ -161,6 +167,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     move_count = static_cast<uint16_t>(sparams.quiescence_max_noisy_moves);
   }
 
+  // If no moves, return mate/draw/stand-pat depending on check
   if (move_count == 0) {
     if (in_check) {
       const int mate = (stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE;
@@ -179,6 +186,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   bool has_best = false;
   int best_score = in_check ? (maximizing ? -INF : INF) : stand_pat;
 
+  // Apply alpha/beta updates and detect cutoffs
   auto process_score = [&](const Move& current_move, int score_value) -> bool {
     if (maximizing) {
       if (score_value >= beta) {
@@ -218,8 +226,10 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     Move move = decode_move(moves[i]);
 
     if (!in_check) {
+      // Delta and zero-gain pruning for noisy moves
       // found that the simple capture gain helps a lot in pruning
-      // more that SEE, and seems like the quality is a tad better too...
+      // more than SEE, and seems like the quality is a tad better too...
+      // we don't ignore negative gains to avoid missing tactics
       const int delta_gain = capture_gain(move);
 
       if (i >= sparams.quiescence_zero_gain_skip_index && delta_gain == 0) {
@@ -264,6 +274,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       }
     }
 
+    // Recurse on tactical move
     Undo undo = make_move(board, move);
     const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
                                  nodes, tt, ply + 1);
@@ -273,6 +284,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     }
   }
 
+  // Optional quiet-check extension after noisy moves
   if (!in_check && sparams.quiescence_max_quiet_checks > 0) {
     const int quiet_cap_raw = sparams.quiescence_max_quiet_checks;
     const uint16_t quiet_cap =
@@ -294,6 +306,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     }
   }
 
+  // Final TT store with proper bound flag
   if (tt) {
     const int normalized_best = normalize_mate_score(best_score, ply);
     TranspositionFlag flag = TranspositionFlag::Exact;

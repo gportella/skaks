@@ -37,7 +37,9 @@ void trace_search_params(const char* label, const chess::EngineParams& params,
             << " null_min=" << s.null_move_min_depth
             << " lmr_div=" << s.lmr_divisor
             << " lmr_hist=" << s.lmr_history_divisor
-            << " lmr_pv=" << s.lmr_pv_offset << '\n';
+            << " lmr_pv=" << s.lmr_pv_offset << " fut=" << s.futility_margins[1]
+            << ',' << s.futility_margins[2] << ',' << s.futility_margins[3]
+            << '\n';
   std::cout.flush();
 }
 
@@ -51,7 +53,9 @@ void trace_active_search_params(const char* label, std::uint64_t node_limit) {
             << " null_min=" << s.null_move_min_depth
             << " lmr_div=" << s.lmr_divisor
             << " lmr_hist=" << s.lmr_history_divisor
-            << " lmr_pv=" << s.lmr_pv_offset << '\n';
+            << " lmr_pv=" << s.lmr_pv_offset << " fut=" << s.futility_margins[1]
+            << ',' << s.futility_margins[2] << ',' << s.futility_margins[3]
+            << '\n';
   std::cout.flush();
 }
 
@@ -295,6 +299,8 @@ chess::EngineParams params_from_dict(const py::dict& root) {
     assign_if_present(s, "lmr_history_divisor",
                       params.search.lmr_history_divisor);
     assign_if_present(s, "lmr_pv_offset", params.search.lmr_pv_offset);
+    assign_array_if_present(s, "futility_margins",
+                            params.search.futility_margins);
   }
 
   if (root.contains("search_nnue")) {
@@ -322,6 +328,8 @@ chess::EngineParams params_from_dict(const py::dict& root) {
     assign_if_present(s, "lmr_history_divisor",
                       params.search_nnue.lmr_history_divisor);
     assign_if_present(s, "lmr_pv_offset", params.search_nnue.lmr_pv_offset);
+    assign_array_if_present(s, "futility_margins",
+                            params.search_nnue.futility_margins);
     params.use_search_nnue = true;
   }
 
@@ -455,6 +463,13 @@ struct ArenaResult {
   int draws = 0;
   int games = 0;
   double score = 0.0;
+};
+
+struct ArenaPerfResult {
+  ArenaResult results;
+  std::uint64_t total_nodes = 0;
+  std::uint64_t total_ms = 0;
+  std::uint64_t total_plies = 0;
 };
 
 double game_outcome(chess::Board board) {
@@ -874,6 +889,194 @@ ArenaResult arena_selfplay_clock(const std::vector<std::string>& start_fens,
   res.score = (total > 0) ? (res.wins + 0.5 * res.draws) / total : 0.0;
   return res;
 }
+
+ArenaPerfResult
+arena_selfplay_clock_perf(const std::vector<std::string>& start_fens,
+                          const std::optional<py::dict>& base_params_dict,
+                          const std::optional<py::dict>& cand_params_dict,
+                          int games, int depth, int movetime_ms, int max_plies,
+                          std::uint64_t node_limit, std::uint64_t wtime,
+                          std::uint64_t btime, std::uint64_t increment,
+                          int moves_to_go) {
+  if (games <= 0) {
+    throw std::invalid_argument("games must be positive");
+  }
+  if (start_fens.empty()) {
+    throw std::invalid_argument("start_fens must not be empty");
+  }
+  if ((wtime == 0 && btime == 0)) {
+    const bool use_depth = depth > 0;
+    const bool use_movetime = movetime_ms > 0;
+    const bool use_nodes = node_limit > 0;
+    const int mode_count = static_cast<int>(use_depth) +
+                           static_cast<int>(use_movetime) +
+                           static_cast<int>(use_nodes);
+    if (mode_count != 1) {
+      throw std::invalid_argument(
+          "exactly one of depth, movetime_ms, or node_limit must be set");
+    }
+  } else if (node_limit > 0) {
+    throw std::invalid_argument("node_limit cannot be combined with clock");
+  }
+  if (max_plies <= 0) {
+    throw std::invalid_argument("max_plies must be positive");
+  }
+
+  chess::EngineParams base_params = base_params_dict
+                                        ? params_from_dict(*base_params_dict)
+                                        : chess::default_engine_params();
+  chess::EngineParams cand_params =
+      cand_params_dict ? params_from_dict(*cand_params_dict) : base_params;
+  const bool base_nnue = base_params.use_search_nnue;
+  const bool cand_nnue = cand_params.use_search_nnue;
+  if (base_nnue || cand_nnue) {
+    chess::Engine engine_init;
+    engine_init.init_nnue();
+  }
+  const bool trace_params = std::getenv("SKAKS_ARENA_TRACE_PARAMS") != nullptr;
+  if (trace_params) {
+    trace_search_params("base", base_params, base_nnue, node_limit);
+    trace_search_params("cand", cand_params, cand_nnue, node_limit);
+  }
+
+  ArenaPerfResult out{};
+  chess::Engine engine;
+  bool logged_base = false;
+  bool logged_cand = false;
+
+  for (int game_idx = 0; game_idx < games; ++game_idx) {
+    const auto& fen =
+        start_fens[static_cast<std::size_t>(game_idx) % start_fens.size()];
+    chess::Board board = chess::initial_board(fen);
+    engine.reset_history(board);
+
+    const bool cand_white = (game_idx % 2 == 0);
+    int plies_played = 0;
+    std::uint64_t wtime_left = wtime;
+    std::uint64_t btime_left = btime;
+    int moves_left = moves_to_go;
+
+    while (plies_played < max_plies) {
+      // Periodically check for Python signals (KeyboardInterrupt)
+      if (plies_played % 4 == 0) {
+        py::gil_scoped_acquire gil;
+        if (PyErr_CheckSignals() != 0) {
+          throw py::error_already_set();
+        }
+      }
+      const bool cand_to_move = (board.side_to_move == chess::SideToMove::White)
+                                    ? cand_white
+                                    : !cand_white;
+      if (cand_to_move) {
+        const auto mode = cand_nnue ? chess::EvaluationMode::Stockfish
+                                    : chess::EvaluationMode::Native;
+        engine.set_evaluation_mode(mode);
+        chess::set_engine_params_for_mode(cand_params, mode);
+        if (trace_params && !logged_cand) {
+          trace_active_search_params("cand", node_limit);
+          logged_cand = true;
+        }
+      } else {
+        const auto mode = base_nnue ? chess::EvaluationMode::Stockfish
+                                    : chess::EvaluationMode::Native;
+        engine.set_evaluation_mode(mode);
+        chess::set_engine_params_for_mode(base_params, mode);
+        if (trace_params && !logged_base) {
+          trace_active_search_params("base", node_limit);
+          logged_base = true;
+        }
+      }
+
+      chess::SearchParameters search_params{};
+      chess::SearchLimits limits{};
+      if (wtime > 0 || btime > 0) {
+        if (wtime_left == 0 && btime_left == 0) {
+          search_params.depth = 1;
+        } else {
+          limits.use_time = true;
+          limits.per_move = false;
+          limits.white_time_ms = wtime_left;
+          limits.black_time_ms = btime_left;
+          limits.white_increment_ms = increment;
+          limits.black_increment_ms = increment;
+          limits.moves_to_go = moves_left;
+          search_params.limits = limits;
+          search_params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        }
+      } else if (movetime_ms > 0) {
+        search_params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        limits.use_time = true;
+        limits.per_move = true;
+        limits.move_time_ms = static_cast<std::uint64_t>(movetime_ms);
+        search_params.limits = limits;
+      } else if (node_limit > 0) {
+        search_params.depth = static_cast<int>(chess::MAX_PLY) - 1;
+        limits.use_nodes = true;
+        limits.node_limit = node_limit;
+        search_params.limits = limits;
+      } else {
+        search_params.depth = depth;
+      }
+      search_params.alpha = -10000;
+      search_params.beta = 10000;
+
+      auto before = std::chrono::steady_clock::now();
+      auto search_result = engine.search(board, search_params);
+      auto after = std::chrono::steady_clock::now();
+      std::uint64_t elapsed =
+          std::chrono::duration_cast<std::chrono::milliseconds>(after - before)
+              .count();
+
+      const bool has_move =
+          search_result.best_move.moving_pc != chess::OccupancyType::empty;
+      if (!has_move) {
+        break;
+      }
+
+      out.total_nodes += search_result.nodes;
+      out.total_ms += elapsed;
+      out.total_plies += 1;
+
+      if (wtime > 0 || btime > 0) {
+        if (board.side_to_move == chess::SideToMove::White) {
+          wtime_left =
+              (wtime_left > elapsed ? wtime_left - elapsed : 0) + increment;
+        } else {
+          btime_left =
+              (btime_left > elapsed ? btime_left - elapsed : 0) + increment;
+        }
+        if (moves_left > 1)
+          moves_left--;
+      }
+
+      const bool irreversible =
+          chess::move_is_irreversible(search_result.best_move);
+      chess::make_move(board, search_result.best_move);
+      engine.record_position(board.position_key, irreversible);
+      ++plies_played;
+
+      if (board.is_terminal()) {
+        break;
+      }
+    }
+
+    const double outcome = game_outcome(board);
+    const double cand_outcome = cand_white ? outcome : (1.0 - outcome);
+    if (cand_outcome > 0.5) {
+      out.results.wins += 1;
+    } else if (cand_outcome < 0.5) {
+      out.results.losses += 1;
+    } else {
+      out.results.draws += 1;
+    }
+    out.results.games += 1;
+  }
+
+  const int total = out.results.wins + out.results.losses + out.results.draws;
+  out.results.score =
+      (total > 0) ? (out.results.wins + 0.5 * out.results.draws) / total : 0.0;
+  return out;
+}
 } // namespace
 
 PYBIND11_MODULE(skaks_eval, m) {
@@ -941,4 +1144,40 @@ PYBIND11_MODULE(skaks_eval, m) {
       " built-in params unless base_params is provided; cand_params overrides"
       " the candidate (fallbacks to baseline). Exactly one of depth or"
       " movetime_ms or node_limit or clock must be positive.");
+
+  m.def(
+      "arena_perf",
+      [](const std::vector<std::string>& start_fens,
+         const std::optional<py::dict>& base_params,
+         const std::optional<py::dict>& cand_params, int games, int depth,
+         int movetime_ms, int max_plies, std::uint64_t node_limit,
+         std::uint64_t wtime, std::uint64_t btime, std::uint64_t increment,
+         int moves_to_go) {
+        auto res = arena_selfplay_clock_perf(
+            start_fens, base_params, cand_params, games, depth, movetime_ms,
+            max_plies, node_limit, wtime, btime, increment, moves_to_go);
+        const auto total_ms = res.total_ms;
+        const auto total_nodes = res.total_nodes;
+        const auto total_plies = res.total_plies;
+        const auto nps =
+            total_ms > 0 ? (total_nodes * 1000ULL) / total_ms : 0ULL;
+        const auto avg_nodes =
+            total_plies > 0 ? total_nodes / total_plies : 0ULL;
+        const auto avg_ms = total_plies > 0 ? total_ms / total_plies : 0ULL;
+        return py::dict(
+            "score"_a = res.results.score, "wins"_a = res.results.wins,
+            "losses"_a = res.results.losses, "draws"_a = res.results.draws,
+            "games"_a = res.results.games, "total_nodes"_a = total_nodes,
+            "total_ms"_a = total_ms, "total_plies"_a = total_plies,
+            "nps"_a = nps, "avg_nodes_per_ply"_a = avg_nodes,
+            "avg_ms_per_ply"_a = avg_ms);
+      },
+      py::arg("start_fens"), py::arg("base_params") = std::nullopt,
+      py::arg("cand_params") = std::nullopt, py::arg("games") = 20,
+      py::arg("depth") = 4, py::arg("movetime_ms") = 0,
+      py::arg("max_plies") = 160, py::arg("node_limit") = 0,
+      py::arg("wtime") = 0, py::arg("btime") = 0, py::arg("increment") = 0,
+      py::arg("moves_to_go") = 40,
+      "Run arena self-play with perf stats (nodes/time per ply). Params match "
+      "arena(), plus returns total_nodes/total_ms/nps.");
 }

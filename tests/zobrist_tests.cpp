@@ -1,5 +1,6 @@
 #include "chess/board.hpp"
 #include "chess/moves.hpp"
+#include "chess/types_io.hpp"
 #include "chess/zobrist.hpp"
 
 #include <gtest/gtest.h>
@@ -59,6 +60,36 @@ TEST(ZobristTests, RandomWalkMaintainsKey) {
 
     EXPECT_EQ(board.position_key, compute_position_key(board))
         << "FEN: " << board_to_fen(board);
+  }
+}
+
+TEST(ZobristTests, IncrementalUpdateMatchesRecompute) {
+  Board board = initial_board("");
+  std::mt19937 rng(4242);
+
+  for (int depth = 0; depth < 64; ++depth) {
+    uint16_t move_count = 0;
+    auto moves = generate_legal_moves(board, board.side_to_move, move_count);
+    if (move_count == 0) {
+      break;
+    }
+
+    std::uniform_int_distribution<int> dist(0, move_count - 1);
+    Move move = decode_move(moves[static_cast<std::size_t>(dist(rng))]);
+
+    Board copy = board;
+    Undo undo = make_move(copy, move);
+    const auto recomputed = compute_position_key(copy);
+    const bool ep_hash_after =
+        (copy.en_passant >= 0 && ep_capture_available(copy));
+
+    copy.position_key = undo.position_key_before;
+    update_key_for_move(copy, undo, to_mask(copy.castling_rights),
+                        undo.ep_hash_before, ep_hash_after);
+
+    EXPECT_EQ(copy.position_key, recomputed) << "FEN: " << board_to_fen(copy);
+
+    board = copy;
   }
 }
 

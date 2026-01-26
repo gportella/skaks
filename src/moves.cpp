@@ -5,6 +5,7 @@
 #include "chess/casteling.hpp"
 #include "chess/exchange.hpp"
 #include "chess/history.hpp"
+#include "chess/move_ordering.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/pst_tables.hpp"
 #include "chess/scoring_rules.hpp"
@@ -24,8 +25,6 @@ struct MoveKey {
   uint16_t order; // original emission order for deterministic ties
 };
 
-namespace {
-
 inline int killer_priority(uint32_t code, const KillerTable* killers, int ply) {
   if (killers == nullptr || ply < 0 || ply >= MAX_PLY) {
     return 0;
@@ -42,8 +41,6 @@ inline int killer_priority(uint32_t code, const KillerTable* killers, int ply) {
   return 0;
 }
 
-} // namespace
-
 inline int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
   static const int scores[13] = {0,   100, 320, 330, 500, 900,  20000,
                                  100, 320, 330, 500, 900, 20000};
@@ -58,7 +55,9 @@ void sort_moves(const Board& board,
                 uint16_t move_count, uint32_t tt_code,
                 const KillerTable* killers,
                 const std::array<std::array<int, 64>, 64>* history_heuristic,
-                int ply, uint32_t counter_move_code) {
+                int ply, uint32_t counter_move_code,
+                const ContinuationHistoryTable* continuation_heuristic,
+                const Move* parent_move) {
   std::array<MoveKey, kMaxMovementCount> keys;
 
   for (uint16_t i = 0; i < move_count; ++i) {
@@ -89,6 +88,10 @@ void sort_moves(const Board& board,
           const auto from = static_cast<std::size_t>(move_from(m));
           const auto to = static_cast<std::size_t>(move_to(m));
           key += (*history_heuristic)[from][to];
+        }
+        if (continuation_heuristic != nullptr && parent_move != nullptr &&
+            parent_move->moving_pc != OccupancyType::empty) {
+          key += continuation_heuristic->score(*parent_move, decode_move(m));
         }
         if (counter_move_code != 0 && m == counter_move_code) {
           key += 30'000;
@@ -209,6 +212,7 @@ UndoSEE make_see_move(Board& b, const Move& m) {
     const auto captured_index = static_cast<std::size_t>(undo.captured_pc) - 1;
     undo.captured_bb_before = b.pieces_bb[captured_index];
     clear_bit(b.pieces_bb[captured_index], m.to);
+    clear_bit(b.occupancy[enemy_index], m.to);
   }
 
   if (m.promo_pc != OccupancyType::empty) {
@@ -280,11 +284,14 @@ UndoSEE make_see_move(Board& b, const Move& m) {
 
   // Update bitboards for mover (promotion handled separately)
   clear_bit(b.pieces_bb[moving_bb_index], m.from);
+  clear_bit(b.occupancy[mover_index], m.from);
   if (m.promo_pc == OccupancyType::empty) {
     set_bit(b.pieces_bb[moving_bb_index], m.to);
+    set_bit(b.occupancy[mover_index], m.to);
   } else {
     const auto promo_index = static_cast<std::size_t>(m.promo_pc) - 1;
     set_bit(b.pieces_bb[promo_index], m.to);
+    set_bit(b.occupancy[mover_index], m.to);
   }
 
   // Update mailbox representation
@@ -296,10 +303,6 @@ UndoSEE make_see_move(Board& b, const Move& m) {
       (m.promo_pc != OccupancyType::empty) ? m.promo_pc : m.moving_pc;
   b.pieces[to_idx] = placed_piece;
 
-  b.occupancy[to_index(PieceColor::White)] =
-      calculate_occupancy(b, PieceColor::White);
-  b.occupancy[to_index(PieceColor::Black)] =
-      calculate_occupancy(b, PieceColor::Black);
   b.occupancy[to_index(PieceColor::Both)] =
       b.occupancy[to_index(PieceColor::White)] |
       b.occupancy[to_index(PieceColor::Black)];
@@ -390,11 +393,19 @@ Undo make_move(Board& b, const Move& m) {
   undo.ep_hash_before = (b.en_passant >= 0 && ep_capture_available(b));
 
   // Incremental score updates
+  // TODO: remove because we have NNUE now, remove HCE
   undo.material_score_before = b.material_score;
   undo.pst_midgame_score_before = b.pst_midgame_score;
   undo.pst_endgame_score_before = b.pst_endgame_score;
   undo.phase_before = b.phase;
 
+  const auto mover_index = to_index(b.side_to_move);
+  const auto enemy_index = to_index(flip_side(b.side_to_move));
+  const Square from_sq = static_cast<Square>(m.from);
+  const Square to_sq = static_cast<Square>(m.to);
+  const auto from_idx = to_index(m.from);
+  const auto to_idx = to_index(m.to);
+  const auto captured_idx = to_index(undo.captured_sq);
   const auto& mg_tables = midgame_pst();
   const auto& eg_tables = endgame_pst();
 
@@ -441,14 +452,6 @@ Undo make_move(Board& b, const Move& m) {
     update_score(rook, static_cast<int>(to_index(rook_to)), true);
   }
 
-  const auto mover_index = to_index(b.side_to_move);
-  const auto enemy_index = to_index(flip_side(b.side_to_move));
-  const Square from_sq = static_cast<Square>(m.from);
-  const Square to_sq = static_cast<Square>(m.to);
-  const auto from_idx = to_index(m.from);
-  const auto to_idx = to_index(m.to);
-  const auto captured_idx = to_index(undo.captured_sq);
-
   b.pieces[from_idx] = OccupancyType::empty;
   if (undo.was_en_passant) {
     b.pieces[captured_idx] = OccupancyType::empty;
@@ -459,6 +462,7 @@ Undo make_move(Board& b, const Move& m) {
           ? m.promo_pc
           : m.moving_pc;
 
+  // TODO: move bitboards updates to functions
   auto update_piece_square = [](PieceList& list, Square from, Square to) {
     for (std::uint8_t i = 0; i < list.count; ++i) {
       if (list.squares[i] == from) {
@@ -505,13 +509,16 @@ Undo make_move(Board& b, const Move& m) {
         b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1];
     undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
 
-    // bitboard updates
+    // bitboard updates, including occupancy updates
     // remove bit from the captured piece, remove from the "from" square, add to
     // the "to" square
     clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1],
               undo.captured_sq);
+    clear_bit(b.occupancy[enemy_index], undo.captured_sq);
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
+    clear_bit(b.occupancy[mover_index], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.to);
+    set_bit(b.occupancy[mover_index], m.to);
 
     remove_piece_square(b.rook_list[enemy_index],
                         static_cast<Square>(undo.captured_sq));
@@ -539,21 +546,29 @@ Undo make_move(Board& b, const Move& m) {
                                                    : OccupancyType::bR) -
                     1]; // Assuming rook is involved
 
-    // bitboard updates
+    // bitboard updates, including occupancy updates
     // remove king and rook from their original squares, add to their new squares
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
+    clear_bit(b.occupancy[mover_index], m.from);
     clear_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
                                                          : OccupancyType::bR) -
                           1],
               flag_is_castle(m.flags) ? king_rook : queen_rook);
+    clear_bit(b.occupancy[mover_index],
+              flag_is_castle(m.flags) ? king_rook : queen_rook);
 
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1],
+            flag_is_castle(m.flags) ? king_target : queen_target);
+    set_bit(b.occupancy[mover_index],
             flag_is_castle(m.flags) ? king_target : queen_target);
     set_bit(b.pieces_bb[static_cast<std::size_t>(white ? OccupancyType::wR
                                                        : OccupancyType::bR) -
                         1],
             flag_is_castle(m.flags) ? (rook_kingside_target)
                                     : (rook_queenside_target));
+    set_bit(b.occupancy[mover_index], flag_is_castle(m.flags)
+                                          ? (rook_kingside_target)
+                                          : (rook_queenside_target));
 
     const Square rook_from = flag_is_castle(m.flags) ? king_rook : queen_rook;
     const Square rook_to =
@@ -574,8 +589,9 @@ Undo make_move(Board& b, const Move& m) {
     undo.pieces_bb[1] = b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1];
 
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
+    clear_bit(b.occupancy[mover_index], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1], m.to);
-
+    set_bit(b.occupancy[mover_index], m.to);
     remove_piece_square(b.pawn_list[mover_index], from_sq);
     if (m.promo_pc == OccupancyType::wR || m.promo_pc == OccupancyType::bR) {
       add_piece_square(b.rook_list[mover_index], to_sq);
@@ -593,9 +609,11 @@ Undo make_move(Board& b, const Move& m) {
     // bitboard updates
     clear_bit(b.pieces_bb[static_cast<std::size_t>(undo.captured_pc) - 1],
               undo.captured_sq);
+    clear_bit(b.occupancy[enemy_index], undo.captured_sq);
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
+    clear_bit(b.occupancy[mover_index], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.promo_pc) - 1], m.to);
-
+    set_bit(b.occupancy[mover_index], m.to);
     remove_piece_square(b.pawn_list[mover_index], from_sq);
     remove_piece_square(b.rook_list[enemy_index],
                         static_cast<Square>(undo.captured_sq));
@@ -614,22 +632,16 @@ Undo make_move(Board& b, const Move& m) {
       add_piece_square(b.rook_list[mover_index], to_sq);
     }
   }
-  //
+  // quiet move
   else {
-    // quite move
     undo.pieces_bb[0] = b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1];
     // bitboard updates
     clear_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.from);
+    clear_bit(b.occupancy[mover_index], m.from);
     set_bit(b.pieces_bb[static_cast<std::size_t>(m.moving_pc) - 1], m.to);
-
-    b.occupancy[mover_index] &= ~bit_mask(m.from);
-    b.occupancy[mover_index] |= bit_mask(m.to);
+    set_bit(b.occupancy[mover_index], m.to);
   }
 
-  b.occupancy[to_index(PieceColor::White)] =
-      calculate_occupancy(b, PieceColor::White);
-  b.occupancy[to_index(PieceColor::Black)] =
-      calculate_occupancy(b, PieceColor::Black);
   b.occupancy[to_index(PieceColor::Both)] =
       b.occupancy[to_index(PieceColor::White)] |
       b.occupancy[to_index(PieceColor::Black)];
@@ -646,12 +658,13 @@ Undo make_move(Board& b, const Move& m) {
     b.en_passant = mid;
     b.ep_square = bb_of(mid);
   }
-  update_castling_rights(b, m);
+  const int castle_mask_after = update_castling_rights(b, m);
 
   // Switch side to move
   b.side_to_move = flip_side(b.side_to_move);
-  // Recompute Zobrist from scratch for correctness (slightly slower but safer)
-  b.position_key = compute_position_key(b);
+  const bool ep_hash_after = (b.en_passant >= 0 && ep_capture_available(b));
+  update_key_for_move(b, undo, castle_mask_after, undo.ep_hash_before,
+                      ep_hash_after);
 
 #ifndef NDEBUG
   {

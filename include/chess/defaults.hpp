@@ -29,6 +29,7 @@ inline constexpr double LMR_INTERCEPT = 0.0;
 inline constexpr double LMR_DIVISOR = 1.5;
 inline constexpr double LMR_HISTORY_DIVISOR = 8000.0;
 inline constexpr double LMR_PV_OFFSET = 1.0;
+inline constexpr std::array<int, 4> FUTILITY_MARGINS{0, 120, 240, 400};
 
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES =
     3; // max 3 pieces change per move
@@ -39,5 +40,5 @@ inline constexpr std::uint8_t kBoardSize = 64;
 inline constexpr std::uint16_t kMaxMovementCount = 256;
 inline constexpr std::string_view kStartFEN{
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"};
-// "rnbqkbnr/ppp1ppp1/7p/3p4/1P2P4/8/2P1PPPP/RNBQKBNR w KQkq - 0 1"};
 } // namespace chess
+// namespace chess

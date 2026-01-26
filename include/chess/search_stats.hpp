@@ -14,6 +14,8 @@ struct SearchStats {
   std::atomic<std::uint64_t> null_move_cutoffs{0};
   std::atomic<std::uint64_t> lmp_prunes{0};
   std::atomic<std::uint64_t> pvs_researches{0};
+  std::atomic<std::uint64_t> see_prunes{0};
+  std::atomic<std::uint64_t> futility_prunes{0};
 };
 
 inline bool search_stats_enabled() {
@@ -38,6 +40,8 @@ inline void reset_search_stats() {
   stats.null_move_cutoffs.store(0, std::memory_order_relaxed);
   stats.lmp_prunes.store(0, std::memory_order_relaxed);
   stats.pvs_researches.store(0, std::memory_order_relaxed);
+  stats.see_prunes.store(0, std::memory_order_relaxed);
+  stats.futility_prunes.store(0, std::memory_order_relaxed);
 }
 
 } // namespace chess

@@ -57,6 +57,69 @@ void HistoryTable::maybe_decay() {
   }
 }
 
+void ContinuationHistoryTable::clear() {
+  for (auto& piece_slice : entries_) {
+    for (auto& row : piece_slice) {
+      row.fill(0);
+    }
+  }
+  max_value_ = 0;
+}
+
+void ContinuationHistoryTable::apply_delta(const Move& parent_move,
+                                           const Move& move, int delta) {
+  const auto piece_index = static_cast<std::size_t>(parent_move.moving_pc);
+  if (piece_index == 0 || piece_index >= entries_.size()) {
+    return;
+  }
+  const auto parent_to = static_cast<std::size_t>(parent_move.to);
+  const auto move_to = static_cast<std::size_t>(move.to);
+  int& entry = entries_[piece_index][parent_to][move_to];
+  entry = std::clamp(entry + delta, 0, kHistoryMax);
+  max_value_ = std::max(max_value_, entry);
+}
+
+void ContinuationHistoryTable::update(const Move& parent_move, const Move& move,
+                                      int depth, bool success) {
+  if (!is_quiet_move(move) || depth <= 0) {
+    return;
+  }
+  if (parent_move.moving_pc == OccupancyType::empty) {
+    return;
+  }
+  const int delta = depth * depth;
+  apply_delta(parent_move, move, success ? delta : -delta);
+}
+
+int ContinuationHistoryTable::score(const Move& parent_move,
+                                    const Move& move) const {
+  if (!is_quiet_move(move)) {
+    return 0;
+  }
+  const auto piece_index = static_cast<std::size_t>(parent_move.moving_pc);
+  if (piece_index == 0 || piece_index >= entries_.size()) {
+    return 0;
+  }
+  const auto parent_to = static_cast<std::size_t>(parent_move.to);
+  const auto move_to = static_cast<std::size_t>(move.to);
+  return entries_[piece_index][parent_to][move_to];
+}
+
+void ContinuationHistoryTable::maybe_decay() {
+  if (max_value_ < kHistoryDecayTrigger) {
+    return;
+  }
+  max_value_ = 0;
+  for (auto& piece_slice : entries_) {
+    for (auto& row : piece_slice) {
+      for (auto& value : row) {
+        value /= kHistoryDecayFactor;
+        max_value_ = std::max(max_value_, value);
+      }
+    }
+  }
+}
+
 void CounterMoveTable::clear() {
   for (auto& row : entries_) {
     row.fill(0);
@@ -72,9 +135,9 @@ void CounterMoveTable::store(const Move& previous, const Move& reply) {
     return;
   }
   const auto to_index = static_cast<std::size_t>(previous.to);
-  entries_[piece_index][to_index] = encode_move(reply.from, reply.to,
-                                                reply.moving_pc, reply.captured_pc,
-                                                reply.promo_pc, reply.flags);
+  entries_[piece_index][to_index] =
+      encode_move(reply.from, reply.to, reply.moving_pc, reply.captured_pc,
+                  reply.promo_pc, reply.flags);
 }
 
 uint32_t CounterMoveTable::lookup(const Move& previous) const {
@@ -88,10 +151,12 @@ uint32_t CounterMoveTable::lookup(const Move& previous) const {
 
 void MoveOrderingTables::reset() {
   history_.clear();
+  continuation_.clear();
   counter_.clear();
 }
 
-void MoveOrderingTables::record_history(const Move& move, int depth, bool success) {
+void MoveOrderingTables::record_history(const Move& move, int depth,
+                                        bool success) {
   history_.update(move, depth, success);
 }
 
@@ -101,6 +166,21 @@ int MoveOrderingTables::history_score(const Move& move) const {
 
 const HistoryTable::Matrix* MoveOrderingTables::history_matrix() const {
   return &history_.matrix();
+}
+
+void MoveOrderingTables::record_continuation(const Move& parent_move,
+                                             const Move& move, int depth,
+                                             bool success) {
+  continuation_.update(parent_move, move, depth, success);
+}
+
+int MoveOrderingTables::continuation_score(const Move& parent_move,
+                                           const Move& move) const {
+  return continuation_.score(parent_move, move);
+}
+
+const ContinuationHistoryTable* MoveOrderingTables::continuation_table() const {
+  return &continuation_;
 }
 
 void MoveOrderingTables::record_counter(const Move& parent_move,
@@ -123,6 +203,7 @@ uint32_t MoveOrderingTables::counter_move(const Move& parent_move) const {
 
 void MoveOrderingTables::maybe_decay_history() {
   history_.maybe_decay();
+  continuation_.maybe_decay();
 }
 
 } // namespace chess

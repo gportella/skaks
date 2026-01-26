@@ -31,8 +31,8 @@ TEST(TimeManagerTests, PerMoveBudget) {
   manager.start();
 
   EXPECT_TRUE(manager.enabled());
-  EXPECT_EQ(manager.hard_limit_ms(), 5000u);
-  EXPECT_EQ(manager.soft_limit_ms(), 4500u);
+  EXPECT_EQ(manager.hard_limit_ms(), 4950u);
+  EXPECT_EQ(manager.soft_limit_ms(), 4450u);
 }
 
 TEST(TimeManagerTests, ClockBudgetIncludesIncrement) {

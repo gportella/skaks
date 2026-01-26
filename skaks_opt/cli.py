@@ -21,6 +21,8 @@ from skaks_opt.fit import run_fit
 from skaks_opt.param_optimize import \
   add_subparser as add_param_optimize_subparser
 from skaks_opt.param_optimize import run_param_optimize
+from skaks_opt.perf_pgn import add_subparser as add_perf_pgn_subparser
+from skaks_opt.perf_pgn import run_perf_pgn
 from skaks_opt.selfplay import SelfPlayConfig, run_selfplay
 from skaks_opt.texel import add_subparser as add_texel_subparser
 from skaks_opt.texel import run_texel
@@ -261,6 +263,11 @@ def main():
         subparsers, "eval-stats", eval_stats_parser, CATEGORY_DATA_ANALYSIS
     )
 
+    perf_pgn_parser = add_perf_pgn_subparser(subparsers)
+    _register_category(
+        subparsers, "perf-pgn", perf_pgn_parser, CATEGORY_DATA_ANALYSIS
+    )
+
     # Helper tools ---------------------------------------------------------
     monitor_help = "Track ongoing scan_out results"
     monitor_parser = subparsers.add_parser(
@@ -464,6 +471,8 @@ def main():
         run_fit(args)
     elif args.command == "eval-stats":
         run_eval_stats(args)
+    elif args.command == "perf-pgn":
+        run_perf_pgn(args)
     elif args.command == "param-optimize":
         run_param_optimize(args)
     elif args.command == "selfplay":

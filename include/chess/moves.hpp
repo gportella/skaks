@@ -10,6 +10,8 @@
 
 namespace chess {
 
+class ContinuationHistoryTable;
+
 constexpr uint8_t kFlagEnPassant = 1u << 0;
 constexpr uint8_t kFlagDoublePush = 1u << 1;
 constexpr uint8_t kFlagCastle = 1u << 2;
@@ -197,5 +199,7 @@ void sort_moves(
     uint16_t move_count, uint32_t tt_code = 0,
     const KillerTable* killers = nullptr,
     const std::array<std::array<int, 64>, 64>* history_heuristic = nullptr,
-    int ply = -1, uint32_t counter_move_code = 0);
+    int ply = -1, uint32_t counter_move_code = 0,
+    const ContinuationHistoryTable* continuation_heuristic = nullptr,
+    const Move* parent_move = nullptr);
 } // namespace chess

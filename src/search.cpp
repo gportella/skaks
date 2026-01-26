@@ -1,6 +1,7 @@
 #include "chess/search.hpp"
 
 #include "chess/complexity.hpp"
+#include "chess/exchange.hpp"
 #include "chess/move_ordering.hpp"
 #include "chess/moves.hpp"
 #include "chess/quiescence.hpp"
@@ -524,6 +525,14 @@ inline void record_counter(SearchScratch& scratch, const Move* parent,
   scratch.ordering.record_counter(*parent, reply);
 }
 
+inline void record_continuation(SearchScratch& scratch, const Move* parent,
+                                const Move& move, int depth, bool success) {
+  if (!parent) {
+    return;
+  }
+  scratch.ordering.record_continuation(*parent, move, depth, success);
+}
+
 inline void store_killer_move(SearchScratch& scratch, int ply,
                               const Move& move) {
   if (scratch.killers == nullptr || ply < 0 || ply >= MAX_PLY) {
@@ -576,6 +585,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   MoveHistory* history = scratch.history;
   TranspositionTable* tt = scratch.tt;
 
+  // Check for root move exclusions, which could be used to
+  // implement multi-PV search by excluding already searched moves
+  // currently not used at all, added for future use
   const bool apply_root_exclusions = excluded_root_moves != nullptr &&
                                      excluded_root_count > 0 &&
                                      ply_from_root == 0;
@@ -602,6 +614,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     return is_excluded_code(encoded);
   };
 
+  // check for repetitions
   if (history) {
     if (ply < MAX_PLY) {
       history->key_history[static_cast<std::size_t>(ply)] = board.position_key;
@@ -629,9 +642,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     }
   }
 
-  int alpha_base = alpha;
-  int beta_base = beta;
-
+  // TRANSPOSITION TABLE PROBE, check if we have a cached move stored
   TranspositionEntry cached_entry;
   bool has_cached_move = false;
   Move cached_move{};
@@ -683,6 +694,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   }
 
   // NULL MOVE PRUNING
+  // Ahead of main search loop to see if we can prune immediately,
+  // ie. can this side pass and still be >= beta
   if (allow_null_move(board, depth)) {
     UndoNull undo_null = make_null_move(board);
     int null_move_reduction = search_params().null_move_reduction;
@@ -710,10 +723,13 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       return cutoff;
     }
   }
-  alpha_base = alpha;
-  beta_base = beta;
+
+  // capture the TT-adjusted window for later fail-low/high classification
+  int alpha_base = alpha;
+  int beta_base = beta;
 
   bool do_quiescence = true;
+  // QUIESCENCE SEARCH
   if (depth == 0) {
 
     int qs_raw = 0;
@@ -743,6 +759,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   }
 
   uint16_t move_count = 0;
+  // GENERATE LEGAL MOVES, filtering excluded root moves if any and
+  // then sorting them
   auto moves = generate_legal_moves(board, stm, move_count);
 
   if (apply_root_exclusions) {
@@ -757,6 +775,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     move_count = write_idx;
   }
 
+  // out of moves: check for checkmate or stalemate
   if (move_count == 0) {
     if (is_check(board, stm)) {
       const int mate_score = normalize_mate_score(
@@ -788,17 +807,22 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     if (is_excluded_move(cached_move)) {
       has_cached_move = false;
     } else {
+      // we'll encode it for sorting, same format as generated moves
       tt_code = encode_move(cached_move.from, cached_move.to,
                             cached_move.moving_pc, cached_move.captured_pc,
                             cached_move.promo_pc, cached_move.flags);
     }
   }
+  // get history matrix pointer for sorting
   const auto* history_matrix = scratch.ordering.history_matrix();
   const uint32_t counter_code =
       parent_move ? scratch.ordering.counter_move(*parent_move) : 0;
-  sort_moves(board, moves, move_count, tt_code, scratch.killers, history_matrix,
-             ply, counter_code);
 
+  sort_moves(board, moves, move_count, tt_code, scratch.killers, history_matrix,
+             ply, counter_code, scratch.ordering.continuation_table(),
+             parent_move);
+
+  // MAIN SEARCH LOOP, after move generation and ordering
   SearchResult best{};
   best.score = (stm == SideToMove::White) ? -INF : INF;
   best.outcome = SearchResult::Outcome::InProgress;
@@ -806,7 +830,11 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
   const bool parent_in_check = is_check(board, stm);
   int moves_tried = 0;
+  bool static_eval_ready = false;
+  int static_eval = 0;
+  int static_eval_normalized = 0;
 
+  // Prepare move evaluation context for SMP tasks and main loop
   MoveEvaluationContext move_ctx{};
   move_ctx.depth = depth;
   move_ctx.is_pv = is_pv;
@@ -824,8 +852,12 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       smp_ctx && smp_ctx->helper_count > 0 && smp_thread && smp_thread->id == 0;
   std::shared_ptr<LazySmpSplitPoint> split_point;
   LazySmpSplitPoint* split_raw = nullptr;
+  // done setting up SMP split point and tasks
+
   bool cutoff_triggered = false;
 
+  // Lambda to apply the result of a move evaluation, whether from
+  // the main thread or from an SMP helper
   auto apply_result = [&](const Move& current_move,
                           const SearchResult& child_result,
                           int score_value) -> bool {
@@ -855,12 +887,14 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       best.pv_length = static_cast<int>(best.principal_variation.size());
       update_history(scratch, current_move, depth, true);
       record_counter(scratch, parent_move, current_move);
+      record_continuation(scratch, parent_move, current_move, depth, true);
     } else {
       const bool fail_low = (stm == SideToMove::White)
                                 ? (score_value <= alpha_base)
                                 : (score_value >= beta_base);
       if (fail_low) {
         update_history(scratch, current_move, depth, false);
+        record_continuation(scratch, parent_move, current_move, depth, false);
       }
     }
 
@@ -890,6 +924,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     return cutoff_now;
   };
 
+  // Iterate over all generated moves
   for (uint16_t i = 0; i < move_count; ++i) {
     const uint32_t move_code = moves[i];
     Move move = decode_move(move_code);
@@ -899,6 +934,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
     const int move_number = moves_tried + 1;
     int child_depth_lmp = depth - 1;
+    // LATE MOVE PRUNING, avoid searching very late quiet moves
+    // except in PV nodes or when in check
     if (!is_pv && !parent_in_check && quiet_like && child_depth_lmp > 0 &&
         child_depth_lmp <= 3) {
       static constexpr int lmp_limits[4] = {0, 3, 6, 9};
@@ -922,12 +959,46 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         continue;
       }
     }
+    // Skip captures with negative SEE in non-PV nodes,
+    // not in check and not TT move
+    if (is_capture && !is_pv && !parent_in_check &&
+        (!has_cached_move || move_code != tt_code)) {
+      const int see = static_exchange_eval(board, move);
+      if (see < 0) {
+        if (search_stats_enabled()) {
+          search_stats().see_prunes.fetch_add(1, std::memory_order_relaxed);
+        }
+        continue;
+      }
+    }
+    // futility pruning for quiet moves in non-PV nodes
+    // conditions for futility pruning
+    if (!is_pv && quiet_like && child_depth_lmp <= 3 && child_depth_lmp > 0 &&
+        !parent_in_check) {
+      if (!static_eval_ready) {
+        static_eval = evaluator(static_cast<const Board&>(board));
+        static_eval_normalized = normalize_mate_score(static_eval, ply);
+        static_eval_ready = true;
+      }
+      const auto margin =
+          search_params()
+              .futility_margins[static_cast<std::size_t>(child_depth_lmp)];
+      const int adjusted_eval = static_eval_normalized + margin;
+      if ((stm == SideToMove::White && adjusted_eval <= alpha) ||
+          (stm == SideToMove::Black && adjusted_eval >= beta)) {
+        if (search_stats_enabled()) {
+          search_stats().futility_prunes.fetch_add(1, std::memory_order_relaxed);
+        }
+        continue;
+      }
+    }
 
     moves_tried = move_number;
 
     const bool can_split =
         smp_supported && depth >= smp_ctx->min_split_depth && move_number > 1;
 
+    // SPLIT POINT CREATION AND TASK ENQUEUEING for SMP
     if (can_split) {
       if (!split_point) {
         split_point = std::make_shared<LazySmpSplitPoint>();
@@ -970,8 +1041,11 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     move_ctx.beta = beta;
     move_ctx.allow_pvs = true;
 
+    // ACTUAL MOVE EVALUATION IN THE MAIN THREAD
+    // recursive call to alphabeta_minimax happens inside evaluate_move()
     MoveEvaluationResult eval =
         evaluate_move(board, move, move_ctx, scratch, nodes, evaluator);
+
     if (eval.aborted) {
       if (split_raw) {
         split_raw->cancel_flag.store(true, std::memory_order_relaxed);
@@ -981,8 +1055,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
     const bool cutoff_now = apply_result(move, eval.child, eval.score);
 
+    // Collect results from SMP if done // any, don't block
     if (split_point) {
       LazySmpResult ready{};
+      // no-blocking collection of available results
       while (split_point->try_pop(ready)) {
         nodes += ready.nodes;
         if (ready.aborted) {
@@ -1001,6 +1077,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     }
   }
 
+  // FINAL COLLECTION OF SMP RESULTS, blocking until all are in
   if (split_point) {
     LazySmpResult ready{};
     while (split_point->wait_pop(ready)) {
@@ -1020,6 +1097,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     return best;
   }
 
+  // STORE TO TRANSPOSITION TABLE THE RESULT OF THIS NODE's SEARCH
   if (tt) {
     const int normalized_best = normalize_mate_score(best.score, ply);
     best.score = normalized_best;
@@ -1040,6 +1118,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
 } // namespace
 
+// Main search function, entry point
+// Sets up the search scratch space and parameters
+// and calls alphabeta_minimax to perform the actual search
 SearchResult search_position(Board& board, SideToMove stm,
                              const SearchParameters& params,
                              const EvaluatorFn& evaluator, MoveHistory* history,
@@ -1050,6 +1131,7 @@ SearchResult search_position(Board& board, SideToMove stm,
   int base_ply = 0;
   int start_ply = 0;
 
+  // setup history if provided, initialize position key at current ply
   if (history) {
     if (history->ply_count == 0) {
       history->key_history[0] = board.position_key;
@@ -1096,6 +1178,7 @@ SearchResult search_position(Board& board, SideToMove stm,
   int max_root_moves = 0;
   uint16_t move_count = 0;
 
+  // maybe early out: threefold repetition, before we start searching
   if (history) {
     const int repeat_begin = std::max(0, std::min(repetition_start, start_ply));
     int repeats = 0;
@@ -1116,6 +1199,7 @@ SearchResult search_position(Board& board, SideToMove stm,
     }
   }
 
+  // maybe early out: no legal moves
   generate_legal_moves(board, stm, move_count);
   if (move_count == 0) {
     const bool side_in_check = is_check(board, stm);
@@ -1156,6 +1240,9 @@ SearchResult search_position(Board& board, SideToMove stm,
   bool stopped_by_soft_limit = false;
 
   int last_completed_score = 0;
+
+  // ITERATIVE DEEPENING LOOP
+  // depth means remaining depth to search
   for (int current_depth = 1; current_depth <= params.depth; ++current_depth) {
     if (scratch.time_manager && scratch.time_manager->soft_limit_reached()) {
       stopped_by_soft_limit = true;
@@ -1169,6 +1256,7 @@ SearchResult search_position(Board& board, SideToMove stm,
     while (true) {
       int alpha = -INF;
       int beta = INF;
+      // set up aspiration window based on last completed search
       if (current_depth == 1 ||
           last_completed_result.best_move.moving_pc == OccupancyType::empty) {
         alpha = -INF;
@@ -1204,6 +1292,8 @@ SearchResult search_position(Board& board, SideToMove stm,
       while (true) {
         ++attempts;
         const bool is_pv = true;
+        // call the actual search function via alphabeta_minimax
+        // this will recurse down the tree and return the result
         result = alphabeta_minimax(
             board, current_depth, alpha, beta, stm, evaluator, scratch,
             start_ply, repetition_start, 0, is_pv, nodes, nullptr,
@@ -1214,6 +1304,9 @@ SearchResult search_position(Board& board, SideToMove stm,
           abort_requested.store(true, std::memory_order_relaxed);
           break;
         }
+        // check aspiration window results,
+        // First check for fail-low, then fail-high
+        // if outside the window we need wider window search
         if (result.score <= alpha) {
           iteration_fail_low = true;
           if (!forced_full_window && attempts >= kMaxAspirationAttempts) {
@@ -1279,6 +1372,7 @@ SearchResult search_position(Board& board, SideToMove stm,
         break;
       }
 
+      // stop aspiration if no best move found or max root moves reached
       if (result.best_move.moving_pc == OccupancyType::empty ||
           !max_root_moves) {
         if (!depth_best_set) {
@@ -1310,6 +1404,8 @@ SearchResult search_position(Board& board, SideToMove stm,
         depth_best_set = true;
       }
 
+      // check if we can extend the PV search to generate more lines
+      // typically not going to be used
       const bool can_extend = multi_pv && pv_generated < params.pv_count;
       if (can_extend && excluded_count < excluded_moves.size()) {
         excluded_moves[excluded_count++] =
@@ -1415,6 +1511,9 @@ SearchResult search_position(Board& board, SideToMove stm,
   return final_result;
 }
 
+// Parallel search entry point
+// Sets up the lazy SMP context and spawns helper threads
+// before calling the main search function
 SearchResult search_position_parallel(Board& board, SideToMove stm,
                                       const SearchParameters& params,
                                       const EvaluatorFn& evaluator,

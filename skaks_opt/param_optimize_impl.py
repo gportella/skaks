@@ -470,6 +470,34 @@ def _clamp_phase_weights(data: Dict[str, Any], low: float = -1.0, high: float = 
             ]
 
 
+def _clamp_futility_margins(data: Dict[str, Any]) -> None:
+    if not isinstance(data, dict):
+        return
+    for section_name in ("search", "search_nnue"):
+        section = data.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        margins = section.get("futility_margins")
+        if isinstance(margins, tuple):
+            margins = list(margins)
+        if not isinstance(margins, list) or len(margins) < 4:
+            continue
+        margins[0] = 0
+        prev = 0
+        for idx in range(1, len(margins)):
+            val = margins[idx]
+            try:
+                val = int(round(float(val)))
+            except (TypeError, ValueError):
+                val = prev
+            val = max(0, val)
+            if val < prev:
+                val = prev
+            margins[idx] = val
+            prev = val
+        section["futility_margins"] = margins
+
+
 def run_batch(
     *,
     engine: Path,
@@ -1427,6 +1455,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         exclude_prefixes=exclude_prefixes,
                     )
                     _clamp_phase_weights(cand_data)
+                    _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1558,6 +1587,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         vec.append(val + random.gauss(0.0, scale))
                     cand_data = _vector_to_params(template_data, paths, vec, is_int)
                     _clamp_phase_weights(cand_data)
+                    _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1673,6 +1703,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 mean_vec = new_mean
                 best_data = _vector_to_params(template_data, paths, mean_vec, is_int)
                 _clamp_phase_weights(best_data)
+                _clamp_futility_margins(best_data)
                 beam = [(top_score, best_data)]
             elif args.strategy == "rex":  # Replica-exchange Monte Carlo
                 if rex_state is None or rex_chains is None:
@@ -1711,6 +1742,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         exclude_prefixes=exclude_prefixes,
                     )
                     _clamp_phase_weights(cand_data)
+                    _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1835,6 +1867,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 def run_spsa_eval(label: str, vec: List[float]) -> Tuple[float, Dict[str, Any], Tuple[int, int, int], float]:
                     cand_data = _vector_to_params(best_data, paths, vec, is_int)
                     _clamp_phase_weights(cand_data)
+                    _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
                     try:
@@ -1922,6 +1955,7 @@ def optimize_loop(args: argparse.Namespace) -> None:
                 )
                 best_data = _vector_to_params(best_data, paths, updated_vec, is_int)
                 _clamp_phase_weights(best_data)
+                _clamp_futility_margins(best_data)
                 if plus_score >= minus_score:
                     top_score, top_data, top_stats, wall = (
                         plus_score,
