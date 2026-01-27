@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "chess/engine.hpp"
 
 #include "chess/eval_mode.hpp"
@@ -56,9 +57,12 @@ void Engine::set_evaluation_mode(EvaluationMode mode) {
   evaluation_mode_ = mode;
 }
 
-int Engine::evaluate(const Board& board, EvaluationMode mode) const {
-  // Placeholder: future versions will blend features based on eval_config_
+int Engine::evaluate(const Board& board, EvaluationMode mode,
+                     NnueAdapter* adapter) const {
   if (mode == EvaluationMode::Stockfish) {
+    if (adapter) {
+      return evaluate_nnue_stockfish_incremental(*adapter);
+    }
     return evaluate_nnue_stockfish(board);
   }
   return evaluate_board(board);
@@ -75,6 +79,24 @@ Engine::SearchSession Engine::create_session(Board& board) {
 Engine::SearchSession::SearchSession(Engine& engine, Board& board)
     : engine_(&engine), board_(&board) {}
 
+/**
+ * @brief Runs a complete search session for the current position.
+ *
+ * Orchestrates history initialization, evaluator binding, time management,
+ * and dispatches either single-threaded or parallel search. Handles SMP
+ * fallback when parallel search fails or aborts, aggregates node counts,
+ * tracks elapsed time, and restores history state before returning the
+ * SearchResult.
+ *
+ * Used by:
+ * - Engine::search() entry point (CLI/UCI/self-play flows)
+ * - Python bindings (via Engine::search)
+ * - perf runner (create_session + run)
+ *
+ * @param params Search parameters and limits to use for this session.
+ * @return The search result including best move, nodes searched, and elapsed
+ * time.
+ */
 SearchResult Engine::SearchSession::run(const SearchParameters& params) {
   auto& engine = *engine_;
   auto& board = *board_;
@@ -88,8 +110,9 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
     history.key_history[idx] = board.position_key;
   }
 
-  EvaluatorFn evaluator = [eng_ptr = &engine](const Board& state) {
-    return eng_ptr->evaluate(state, eng_ptr->evaluation_mode());
+  EvaluatorFn evaluator = [eng_ptr = &engine](const Board& state,
+                                              NnueAdapter* adapter) {
+    return eng_ptr->evaluate(state, eng_ptr->evaluation_mode(), adapter);
   };
 
   const int base_ply = history.ply_count;

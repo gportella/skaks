@@ -32,6 +32,7 @@ add_library(sf_nnue_probe STATIC
   ${SKAKS_ROOT}/sf_nnue/misc.cpp
   ${SKAKS_ROOT}/sf_nnue/position.cpp
   ${SKAKS_ROOT}/sf_nnue/probe.cpp
+  ${SKAKS_ROOT}/sf_nnue/nnue_adapter.cpp
   ${SKAKS_ROOT}/sf_nnue/nnue/evaluate_nnue.cpp
   ${SKAKS_ROOT}/sf_nnue/nnue/features/half_ka_v2_hm.cpp
 )
@@ -42,6 +43,7 @@ target_include_directories(sf_nnue_probe
     ${SKAKS_ROOT}/sf_nnue/nnue
     ${SKAKS_ROOT}/sf_nnue/nnue/features
     ${SKAKS_ROOT}/sf_nnue/nnue/layers
+    ${SKAKS_ROOT}/include
 )
 
 target_compile_features(sf_nnue_probe PUBLIC cxx_std_23)

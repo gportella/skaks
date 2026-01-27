@@ -21,17 +21,17 @@
 #ifndef NNUE_EVALUATE_NNUE_H_INCLUDED
 #define NNUE_EVALUATE_NNUE_H_INCLUDED
 
+#include "../misc.h"
+#include "../types.h"
+#include "nnue_architecture.h"
+#include "nnue_feature_transformer.h"
+
 #include <cstdint>
 #include <iosfwd>
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
-
-#include "../misc.h"
-#include "../types.h"
-#include "nnue_architecture.h"
-#include "nnue_feature_transformer.h"
 
 namespace Stockfish {
 class Position;
@@ -40,54 +40,56 @@ namespace Eval {
 struct EvalFile;
 }
 
-}
+} // namespace Stockfish
 
 namespace Stockfish::Eval::NNUE {
 
+class AdapterPosition;
+
 // Hash value of evaluation function structure
 constexpr std::uint32_t HashValue[2] = {
-  FeatureTransformer<TransformedFeatureDimensionsBig, nullptr>::get_hash_value()
-    ^ Network<TransformedFeatureDimensionsBig, L2Big, L3Big>::get_hash_value(),
-  FeatureTransformer<TransformedFeatureDimensionsSmall, nullptr>::get_hash_value()
-    ^ Network<TransformedFeatureDimensionsSmall, L2Small, L3Small>::get_hash_value()};
+    FeatureTransformer<TransformedFeatureDimensionsBig,
+                       nullptr>::get_hash_value() ^
+        Network<TransformedFeatureDimensionsBig, L2Big, L3Big>::get_hash_value(),
+    FeatureTransformer<TransformedFeatureDimensionsSmall,
+                       nullptr>::get_hash_value() ^
+        Network<TransformedFeatureDimensionsSmall, L2Small,
+                L3Small>::get_hash_value()};
 
 // Deleter for automating release of memory area
-template<typename T>
-struct AlignedDeleter {
-    void operator()(T* ptr) const {
-        ptr->~T();
-        std_aligned_free(ptr);
-    }
+template <typename T> struct AlignedDeleter {
+  void operator()(T* ptr) const {
+    ptr->~T();
+    std_aligned_free(ptr);
+  }
 };
 
-template<typename T>
-struct LargePageDeleter {
-    void operator()(T* ptr) const {
-        ptr->~T();
-        aligned_large_pages_free(ptr);
-    }
+template <typename T> struct LargePageDeleter {
+  void operator()(T* ptr) const {
+    ptr->~T();
+    aligned_large_pages_free(ptr);
+  }
 };
 
-template<typename T>
-using AlignedPtr = std::unique_ptr<T, AlignedDeleter<T>>;
+template <typename T> using AlignedPtr = std::unique_ptr<T, AlignedDeleter<T>>;
 
-template<typename T>
+template <typename T>
 using LargePagePtr = std::unique_ptr<T, LargePageDeleter<T>>;
 
 std::string trace(Position& pos);
-template<NetSize Net_Size>
-Value evaluate(const Position& pos, bool adjusted = false, int* complexity = nullptr);
-void  hint_common_parent_position(const Position& pos);
+template <NetSize Net_Size>
+Value evaluate(const Position& pos, bool adjusted = false,
+               int* complexity = nullptr);
+Value evaluate_adapter(const AdapterPosition& pos, NetSize netSize,
+                       bool adjusted = false, int* complexity = nullptr);
+void hint_common_parent_position(const Position& pos);
 
 std::optional<std::string> load_eval(std::istream& stream, NetSize netSize);
-bool                       save_eval(std::ostream&      stream,
-                                     NetSize            netSize,
-                                     const std::string& name,
-                                     const std::string& netDescription);
-bool                       save_eval(const std::optional<std::string>& filename,
-                                     NetSize                           netSize,
-                                     const std::unordered_map<Eval::NNUE::NetSize, Eval::EvalFile>&);
+bool save_eval(std::ostream& stream, NetSize netSize, const std::string& name,
+               const std::string& netDescription);
+bool save_eval(const std::optional<std::string>& filename, NetSize netSize,
+               const std::unordered_map<Eval::NNUE::NetSize, Eval::EvalFile>&);
 
-}  // namespace Stockfish::Eval::NNUE
+} // namespace Stockfish::Eval::NNUE
 
-#endif  // #ifndef NNUE_EVALUATE_NNUE_H_INCLUDED
+#endif // #ifndef NNUE_EVALUATE_NNUE_H_INCLUDED

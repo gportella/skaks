@@ -59,6 +59,11 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         help="Force use of search_nnue block when params are provided",
     )
     parser.add_argument(
+        "--use-native",
+        action="store_true",
+        help="Force native (HCE) evaluation and search params",
+    )
+    parser.add_argument(
         "--games",
         type=int,
         default=0,
@@ -169,14 +174,23 @@ def run_perf_pgn(args: argparse.Namespace) -> int:
         params = _load_yaml(Path(args.params).expanduser().resolve())
         if args.search_nnue:
             params = _force_search_nnue(params)
+        if args.use_native:
+            params = dict(params)
+            params["use_search_nnue"] = False
         cand_params = params
 
     if args.baseline_params:
         base_params = _load_yaml(Path(args.baseline_params).expanduser().resolve())
         if args.search_nnue:
             base_params = _force_search_nnue(base_params)
+        if args.use_native:
+            base_params = dict(base_params)
+            base_params["use_search_nnue"] = False
     elif cand_params is not None:
         base_params = cand_params
+    elif args.use_native:
+        base_params = {"use_search_nnue": False}
+        cand_params = {"use_search_nnue": False}
 
     games = args.games if args.games > 0 else len(fens)
 

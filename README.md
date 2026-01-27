@@ -1,24 +1,26 @@
 # Skaks -- learning by doing 
 
-> Uses Stockfish NNUE as I was tired of tuning my eval, no incremental eval.
+> Uses Stockfish NNUE as I was tired of tuning my eval, no incremental eval for NNUE yet.
+> This whole thing then becomes GLPv3, will slowly add the following in the source code:t -C /Users/guillem/work/repos/skaks status -s
+t -C /Users/guillem/work/repos/skaks status -s | cat
+
+> // SPDX-License-Identifier: GPL-3.0-or-later
 
 Simple toy chess engine, for learning and fun. 
 
 When executed, it does `UCI` by default (just run `skaks`, or `skaks --uci`). It can self-play `skaks -s` from canonical start or from `--fen` position. 
-Use `--eval stockfish` together with `--nnue /path/to/net.nnue` to run the bundled Stockfish NNUE evaluator (the legacy `sunfish` spelling remains as an alias).
-Default depth I think it's 4 right now, as I improve it we can allow ourselves better depth. No time limits yet. 
 
 There's a `--perf` option, useful for regressions. I leave here a couple of scripts to track the performance, both in therms of nodes/ms and 
 and "quality" in puzzle solving -- not awesome, about 12% if lucky for *tricky* (?) ones.
 
-> Careful, there are still some corner cases that might not be great, need to check the 50 moves rule, and perhas some legal move generation issues.
+> Careful, there are still some corner cases that might not be great, need to check the 50 moves rule
 
 ## Current version 
 
 ```test
 > skaks -vv
 
-skaks version 0.9.5
+skaks version 0.16.4
 Optimizations:
  - Bitboard move generation with precomputed attack masks
  - Alpha-beta search with transposition table caching
@@ -30,12 +32,17 @@ Optimizations:
  - Quiescence search to reduce horizon effect
  - Killer move heuristic for quiet move ordering
  - Support for polyglot book of moves
- - Null move pruning, historical heuristic and SEE sorting
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
  - Time management for search limits
- - Incremental evaluation with piece-square tables
  - MVV-LVA and SEE for capture move ordering
  - Threaded UCI search support, with pondering
- - Parammeter loading from external file
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Non-incremental NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+
 ```
 
 
@@ -97,53 +104,6 @@ cmake --build --preset dev-debug --target chess_engine_tests
 ctest --test-dir build/debug --output-on-failure
 ```
 
-## Evaluating and tuning
-
-- `validation_moves/eval_from_pgn.py` takes a PGN file (one or many games) and prints a CSV with both Stockfish and skaks scores for each position. Example:
-
-	```sh
-	python validation_moves/eval_from_pgn.py --pgn my_games.pgn --stockfish /usr/local/bin/stockfish > evals.csv
-	```
-
-- The `tuning/` scripts consume those score pairs to train new eval parameters and write YAML configs you can pass back to the engine. After collecting more data, rerun tuning to update the parameters.
-
-- Phase split helper for Texel/analysis datasets:
-
-	```sh
-	# Split a CSV (fen + score/stockfish_cp) into opening/middlegame/endgame buckets
-	skaks-opt fen-phase-split \
-	  --input tuning/texel_fit_quiet.csv \
-	  --output-dir tuning/phased
-
-	# Or write a single CSV with a phase column
-	skaks-opt fen-phase-split --input tuning/texel_fit_quiet.csv --phase-column
-	```
-
-
-### Phase-weight-only tuning
-
-Use these when you only want to optimize the phase weights (`phase_weights_mg` / `phase_weights_eg`) already present in `tuning/best_params.yaml`.
-
-```bash
-# CP regression on eval_pairs CSV (Optuna)
-python -m skaks_opt fit \
-	--data eval_pairs_pvs_with_results.csv \
-	--phase-weights-only \
-	--trials 80 \
-	--threads 0 \
-	--batch-size 512 \
-	--pov side \
-	--best-out tuning/best_params_phase.yaml
-
-# Self-play optimizer
-skaks-opt param-optimize \
-	--start-params tuning/best_params.yaml \
-	--phase-weights-only \
-	--output tuning/best_params_phase.yaml
-
-# Quick internal arena (baseline vs tuned params)
-./build/debug/bin/skaks --arena --params tuning/best_params_phase.yaml --arena-games 200
-```
 
 ## Cross-compiling
 
@@ -156,18 +116,3 @@ cmake --build --preset linux-cross-x86_64
 
 The presets assume a clang-based cross toolchain (`clang --target=<triple>`). Adjust the compiler paths and `CMAKE_SYSROOT` as needed.
 
-## Tooling
-
-There is a `tunning` directory with Python scripts to help with performance benchmarking and puzzle solving. These scripts require Python 3.11+ and can be run as follows:
-
-```bashpython3 tunning/perf_benchmark.py --help
-```
-```bash
-
-
-```
-
-- `.clang-format` and `.clang-tidy` are configured for LLVM-style formatting and broad static analysis.
-- `CMakePresets.json` centralizes configuration for development, release, sanitizers, and cross targets.
-- Compiler warnings are elevated to errors by default; disable by setting `-DCHESS_ENABLE_WARNINGS_AS_ERRORS=OFF`.
-- Sanitizers can be toggled with `-DCHESS_ENABLE_SANITIZERS=ON` (enabled automatically in `dev-debug`).

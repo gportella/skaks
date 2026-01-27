@@ -37,10 +37,12 @@ Value evaluate(const Position& pos);
 // for the build process (profile-build and fishtest) to work. Do not change the
 // name of the macro, as it is used in the Makefile.
 #ifndef EvalFileDefaultNameBig
-#define EvalFileDefaultNameBig "nn-b1a57edbea57.nnue"
+// #define EvalFileDefaultNameBig "nn-b1a57edbea57.nnue"
+#define EvalFileDefaultNameBig "nn-c288c895ea92.nnue"
 #endif
 #ifndef EvalFileDefaultNameSmall
-#define EvalFileDefaultNameSmall "nn-baff1ede1f90.nnue"
+// #define EvalFileDefaultNameSmall "nn-baff1ede1f90.nnue"
+#define EvalFileDefaultNameSmall "nn-37f18f62d772.nnue"
 #endif
 
 struct EvalFile {

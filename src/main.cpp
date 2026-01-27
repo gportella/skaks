@@ -304,7 +304,7 @@ int main(int argc, char** argv) {
 
     const chess::EvalVector eval_vec = chess::compute_eval_vector(board);
     const int raw_linear = chess::eval_linear(eval_vec, chess::phase_weights());
-    const int white_eval = engine.evaluate(board, eval_mode);
+    const int white_eval = engine.evaluate(board, eval_mode, nullptr);
     const int stm_eval = (board.side_to_move == chess::SideToMove::White)
                              ? white_eval
                              : -white_eval;

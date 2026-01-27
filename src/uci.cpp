@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GLP-3.0-or-later
 #include "chess/uci.hpp"
 
 #include "chess/board.hpp"
@@ -350,6 +351,16 @@ struct GoParameters {
 
 std::atomic<int> g_info_depth_cap{0};
 
+/// Parses UCI "go" command arguments into a GoParameters structure.
+///
+/// Processes depth, time controls (movetime, wtime/btime, increments,
+/// movestogo), node limits, and ponder mode, falling back to the provided depth
+/// when needed.
+///
+/// @param args Space-delimited UCI "go" arguments.
+/// @param fallback_depth Default depth if no explicit depth or time controls are
+/// set.
+/// @return Parsed GoParameters with limits and flags populated.
 GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
   GoParameters parsed{};
   parsed.depth = fallback_depth;
@@ -467,7 +478,12 @@ void emit_book_move(const Move& move) {
   std::cout.flush();
 }
 
-void emit_search_info_line(const SearchResult& result) {
+/// Returns true if the current board state is drawable by the 50-move rule.
+inline bool rule50_draw_reached(const Board& board) {
+  return board.fifty_move_counter >= 100;
+}
+
+void emit_search_info_line(Board& board, const SearchResult& result) {
   const std::uint64_t elapsed_ms = std::max<std::uint64_t>(1, result.elapsed_ms);
   const std::uint64_t nodes = result.nodes;
   const std::uint64_t nps = (nodes * 1000ULL) / elapsed_ms;
@@ -499,6 +515,8 @@ void emit_search_info_line(const SearchResult& result) {
 
   if (result.pv_length > 0 && !result.principal_variation.empty()) {
     std::string pv_line;
+    Board pv_board = board;
+    SideToMove pv_side = board.side_to_move;
     const int pv_len = std::min(
         result.pv_length, static_cast<int>(result.principal_variation.size()));
     for (int idx = 0; idx < pv_len; ++idx) {
@@ -511,6 +529,12 @@ void emit_search_info_line(const SearchResult& result) {
         pv_line.push_back(' ');
       }
       pv_line += move_to_uci(pv_move);
+
+      [[maybe_unused]] auto pv_undo = make_move(pv_board, pv_move);
+      pv_side = flip_side(pv_side);
+      if (rule50_draw_reached(pv_board)) {
+        break;
+      }
     }
     if (!pv_line.empty()) {
       info_line << " pv " << pv_line;
@@ -640,6 +664,9 @@ void emit_search_result(Board& board, const SearchResult& result) {
 
       [[maybe_unused]] auto pv_undo = make_move(pv_board, pv_move);
       pv_side = flip_side(pv_side);
+      if (rule50_draw_reached(pv_board)) {
+        break;
+      }
     }
 
     if (!pv_valid) {
@@ -682,6 +709,18 @@ void emit_search_result(Board& board, const SearchResult& result) {
 
 } // namespace
 
+/**
+ * @brief Runs the UCI command processing loop for the engine.
+ *
+ * Initializes engine/board state, manages search threads, and handles UCI
+ * commands such as "uci", "isready", "position", "go", "stop", "quit",
+ * "setoption", "staticeval", and "ponderhit". Supports optional Polyglot
+ * opening book usage and configures threading and ponder settings.
+ *
+ * @param engine Engine instance used to perform searches and evaluations.
+ * @param default_depth Fallback search depth when none is specified in "go".
+ * @param polyglot_ctx Optional Polyglot context for opening book support.
+ */
 void run_uci_loop(Engine& engine, int default_depth,
                   const std::optional<UciPolyglotContext>& polyglot_ctx) {
   // Disable buffering on stdout
@@ -752,8 +791,10 @@ void run_uci_loop(Engine& engine, int default_depth,
             return;
           }
 
-          params.info_callback = [](const SearchResult& res) {
-            emit_search_info_line(res);
+          params.info_callback = [worker_board](const SearchResult& res) {
+            if (worker_board) {
+              emit_search_info_line(*worker_board, res);
+            }
           };
           SearchResult res = engine_ptr->search(*worker_board, params);
 
@@ -985,7 +1026,10 @@ void run_uci_loop(Engine& engine, int default_depth,
       }
     } else if (keyword == "staticeval") {
       stop_search(true);
-      const int white_eval = engine.evaluate(board, engine.evaluation_mode());
+      std::unique_ptr<NnueAdapter> nnue_adapter =
+          std::make_unique<NnueAdapter>(board);
+      const int white_eval =
+          engine.evaluate(board, engine.evaluation_mode(), nnue_adapter.get());
       const int stm_eval =
           (board.side_to_move == SideToMove::White) ? white_eval : -white_eval;
       std::ostringstream oss;

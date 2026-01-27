@@ -8,7 +8,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "skaks-eval"
-version = "0.1.0"
+version = "0.2.1"
 description = "Python bindings for skaks eval"
 authors = [{ name = "skaks" }]
 readme = "README.md"

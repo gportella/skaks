@@ -5,6 +5,7 @@
 #include "chess/evaluator.hpp"
 #include "chess/history.hpp"
 #include "chess/moves.hpp"
+#include "chess/nnue_sf.hpp"
 #include "chess/transposition_table.hpp"
 #include "chess/types.hpp"
 

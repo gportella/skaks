@@ -3,6 +3,7 @@
 #include "chess/board.hpp"
 #include "chess/eval_mode.hpp"
 #include "chess/history.hpp"
+#include "chess/nnue_sf.hpp"
 #include "chess/search.hpp"
 #include "chess/transposition_table.hpp"
 
@@ -19,7 +20,8 @@ public:
 
   [[nodiscard]] SearchResult search(Board& board,
                                     const SearchParameters& params);
-  [[nodiscard]] int evaluate(const Board& board, EvaluationMode mode) const;
+  [[nodiscard]] int evaluate(const Board& board, EvaluationMode mode,
+                             NnueAdapter* adapter) const;
   void set_evaluation_mode(EvaluationMode mode);
   [[nodiscard]] EvaluationMode evaluation_mode() const {
     return evaluation_mode_;
@@ -44,7 +46,7 @@ public:
   void init_nnue();
 
 private:
-  EvaluationMode evaluation_mode_ = EvaluationMode::Native;
+  EvaluationMode evaluation_mode_ = EvaluationMode::Stockfish;
   MoveHistory history_;
   TranspositionTable tt_;
   int thread_count_ = 1;

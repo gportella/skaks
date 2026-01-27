@@ -4,6 +4,7 @@
 #include "chess/exchange.hpp"
 #include "chess/move_ordering.hpp"
 #include "chess/moves.hpp"
+#include "chess/nnue_sf.hpp"
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
@@ -34,6 +35,27 @@
 #define CHESS_USE_POSIX_THREADS 0
 #endif
 
+/*
+//  Parallel search implementation (Lazy SMP), ala Stockfish's but simplified.
+//  search_position_parallel() sets up a shared LazySmpContext that contains
+//  a queue, Transposition Table, evaluator and abort flags.
+//  It spawns helper_threads workers with pthreads (on POSIX systems) via
+//  pthread_create(), each running lazy_worker_loop().
+//  The main thread runs the regular search;
+//  When it hits a split point, it creates LazySmpTask
+//  objects (board copy, move, local history/killer/order tables, eval context)
+//  and enqueues them.
+//  Workers pop tasks, run evaluate_move() on their local
+//  board copy, and submit results back to the split point.
+//  The main thread  periodically collects results and merges
+//  them into the main PV/alpha‑beta state.
+//
+//  Parallelism is at move‑level: when the main thread reaches a split point, it
+//  enqueues tasks for some later moves in the current node’s move list.
+//  each worker runs that specific search subtree. The main thread keeps
+//  searching its own move while helpers work.
+*/
+
 namespace chess {
 
 namespace search_detail {
@@ -63,6 +85,7 @@ struct SearchScratch {
   KillerTable* killers = nullptr;
   TranspositionTable* tt = nullptr;
   MoveOrderingTables ordering;
+  NnueAdapter* nnue_adapter = nullptr;
   TimeManager* time_manager = nullptr;
   std::uint64_t node_limit = 0;
   bool use_nodes = false;
@@ -142,6 +165,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
                                const uint32_t* excluded_root_moves,
                                std::size_t excluded_root_count);
 
+// This is it, the core move evaluation function, calling alphabeta_minimax()
 MoveEvaluationResult evaluate_move(Board& board, const Move& move,
                                    const MoveEvaluationContext& ctx,
                                    SearchScratch& scratch, std::uint64_t& nodes,
@@ -160,6 +184,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
   const int move_number = ctx.move_number;
 
   Undo undo = make_move(board, move);
+  scratch.nnue_adapter->push_move(move);
 
   const bool irreversible = move_is_irreversible(move);
   const int next_repetition_start =
@@ -214,6 +239,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
     child = run_search(reduced_depth, ctx.alpha, ctx.beta, false);
     if (child.aborted) {
       undo_move(board, undo);
+      scratch.nnue_adapter->pop_move();
       if (ctx.ply + 1 < MAX_PLY && scratch.history) {
         scratch.history
             ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -251,6 +277,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
       child = run_search(search_depth, narrow_alpha, narrow_beta, true);
       if (child.aborted) {
         undo_move(board, undo);
+        scratch.nnue_adapter->pop_move();
         if (ctx.ply + 1 < MAX_PLY && scratch.history) {
           scratch.history
               ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -269,6 +296,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
         child = run_search(search_depth, ctx.alpha, ctx.beta, ctx.is_pv);
         if (child.aborted) {
           undo_move(board, undo);
+          scratch.nnue_adapter->pop_move();
           if (ctx.ply + 1 < MAX_PLY && scratch.history) {
             scratch.history
                 ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -284,6 +312,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
                          ctx.is_pv && is_first_move);
       if (child.aborted) {
         undo_move(board, undo);
+        scratch.nnue_adapter->pop_move();
         if (ctx.ply + 1 < MAX_PLY && scratch.history) {
           scratch.history
               ->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] = 0;
@@ -299,6 +328,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
   const int score = child.score;
 
   undo_move(board, undo);
+  scratch.nnue_adapter->pop_move();
 
   if (ctx.ply + 1 < MAX_PLY && scratch.history) {
     scratch.history->repetition_counts[static_cast<std::size_t>(ctx.ply + 1)] =
@@ -440,8 +470,10 @@ struct LazySmpContext {
   }
 };
 
+// owned by each worker thread
 struct LazySmpThread {
   LazySmpContext* context = nullptr;
+  std::unique_ptr<NnueAdapter> nnue_adapter = nullptr;
   int id = 0;
 };
 
@@ -453,6 +485,8 @@ void execute_lazy_task(LazySmpTask& task, LazySmpThread& thread) {
     return;
   }
 
+  thread.nnue_adapter->reset(task.board);
+
   SearchScratch scratch{};
   scratch.history = task.has_history ? &task.history : nullptr;
   scratch.killers = task.has_killers ? &task.killers : nullptr;
@@ -462,6 +496,9 @@ void execute_lazy_task(LazySmpTask& task, LazySmpThread& thread) {
   scratch.abort_requested = task.abort_flag ? task.abort_flag : ctx->abort_flag;
   scratch.local_abort = &task.split_point->cancel_flag;
   scratch.thread = &thread;
+  // more convenint to keep threadless implementation
+  // stash it in the scratch, don't rely on tls
+  scratch.nnue_adapter = thread.nnue_adapter.get();
 
   std::uint64_t nodes = 0;
   MoveEvaluationContext eval_ctx = task.eval_ctx;
@@ -485,6 +522,7 @@ void execute_lazy_task(LazySmpTask& task, LazySmpThread& thread) {
   task.split_point->submit(std::move(result));
 }
 
+// wait for tasks and execute them
 void lazy_worker_loop(LazySmpThread& thread) {
   tls_lazy_thread = &thread;
   std::unique_ptr<LazySmpTask> task;
@@ -500,6 +538,7 @@ struct LazyWorkerPayload {
   LazySmpThread* thread = nullptr;
 };
 
+// entry point for POSIX thread
 void* lazy_worker_entry(void* payload_ptr) {
   std::unique_ptr<LazyWorkerPayload> payload(
       static_cast<LazyWorkerPayload*>(payload_ptr));
@@ -698,6 +737,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   // ie. can this side pass and still be >= beta
   if (allow_null_move(board, depth)) {
     UndoNull undo_null = make_null_move(board);
+    scratch.nnue_adapter->push_null();
     int null_move_reduction = search_params().null_move_reduction;
     if (depth <= 5) {
       null_move_reduction = std::min(null_move_reduction, 2);
@@ -708,10 +748,12 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         ply_from_root + 1, false, nodes, nullptr, nullptr, 0);
     if (null_result.aborted) {
       undo_null_move(board, undo_null);
+      scratch.nnue_adapter->pop_null();
       return null_result;
     }
     const int score_after_null = normalize_mate_score(null_result.score, ply);
     undo_null_move(board, undo_null);
+    scratch.nnue_adapter->pop_null();
     if (score_after_null >= beta) {
       if (search_stats_enabled()) {
         search_stats().null_move_cutoffs.fetch_add(1, std::memory_order_relaxed);
@@ -734,9 +776,11 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
     int qs_raw = 0;
     if (do_quiescence) {
-      qs_raw = quiescence(board, alpha, beta, stm, evaluator, nodes, tt, ply);
+      qs_raw = quiescence(board, alpha, beta, stm, evaluator,
+                          scratch.nnue_adapter, nodes, tt, ply);
     } else {
-      int eval = evaluator(static_cast<const Board&>(board));
+      int eval =
+          evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
       qs_raw = eval;
     }
     const int qs = normalize_mate_score(qs_raw, ply);
@@ -976,7 +1020,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     if (!is_pv && quiet_like && child_depth_lmp <= 3 && child_depth_lmp > 0 &&
         !parent_in_check) {
       if (!static_eval_ready) {
-        static_eval = evaluator(static_cast<const Board&>(board));
+        static_eval =
+            evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
         static_eval_normalized = normalize_mate_score(static_eval, ply);
         static_eval_ready = true;
       }
@@ -1149,6 +1194,7 @@ SearchResult search_position(Board& board, SideToMove stm,
   KillerTable killers{};
   std::atomic<bool> abort_requested{false};
   SearchScratch scratch{};
+  std::unique_ptr<NnueAdapter> nnue_adapter_owner;
   scratch.ordering.reset();
   scratch.history = history;
   scratch.killers = &killers;
@@ -1163,6 +1209,12 @@ SearchResult search_position(Board& board, SideToMove stm,
   }
   scratch.local_abort = nullptr;
   scratch.thread = tls_lazy_thread;
+  if (scratch.thread) {
+    scratch.nnue_adapter = scratch.thread->nnue_adapter.get();
+  } else {
+    nnue_adapter_owner = std::make_unique<NnueAdapter>(board);
+    scratch.nnue_adapter = nnue_adapter_owner.get();
+  }
 
   if (search_stats_enabled()) {
     reset_search_stats();
@@ -1520,11 +1572,10 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
                                       MoveHistory* history,
                                       TranspositionTable* tt,
                                       int repetition_start, int helper_threads) {
-  if (params.limits.use_nodes) {
-    return search_position(board, stm, params, evaluator, history, tt,
-                           repetition_start);
-  }
-  if (helper_threads <= 0) {
+
+  // for now, use single-threaded search if no helpers or node limits are set
+  // we might revisit the use_nodes later
+  if (params.limits.use_nodes || helper_threads <= 0) {
     return search_position(board, stm, params, evaluator, history, tt,
                            repetition_start);
   }
@@ -1552,6 +1603,9 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
   for (int idx = 1; idx <= helper_threads; ++idx) {
     threads[static_cast<std::size_t>(idx)].context = &context;
     threads[static_cast<std::size_t>(idx)].id = idx;
+    threads[static_cast<std::size_t>(idx)].nnue_adapter =
+        std::make_unique<NnueAdapter>(board);
+
 #if CHESS_USE_POSIX_THREADS
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -1597,6 +1651,7 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
   LazySmpThread* previous_thread = tls_lazy_thread;
   threads[0].context = &context;
   threads[0].id = 0;
+  threads[0].nnue_adapter = std::make_unique<NnueAdapter>(board);
   tls_lazy_thread = &threads[0];
 
   SearchResult result = search_position(board, stm, parallel_params, evaluator,
@@ -1625,7 +1680,8 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
 
 // used when no Engine is provided, uses default eval
 namespace {
-int default_evaluator(const Board& board) {
+int default_evaluator(const Board& board, NnueAdapter* adapter) {
+  (void)adapter;
   return evaluate_board(board);
 }
 } // namespace

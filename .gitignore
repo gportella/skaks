@@ -15,11 +15,9 @@ CTestTestfile.cmake
 # my own stuff
 validation_matches.sqlite3
 eval_pairs*.csv
-<<<<<<< HEAD
 tuning/optuna.db
 optuna.db
 *.sqlite3
-=======
 validation_moves/.skaks_elo.json
 tuning/optuna.db
 optuna.db
@@ -31,7 +29,6 @@ tuning/*.sqlite3
 eval_data/
 validation_moves/
 tuning/datasets/lichess_elite/
->>>>>>> nnue_version
 
 # IDE/editor state
 .vscode/

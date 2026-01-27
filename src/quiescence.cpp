@@ -27,7 +27,7 @@ inline int capture_gain(const Move& move) {
 
 uint16_t collect_quiet_checks(Board& board, SideToMove stm,
                               std::array<uint32_t, kMaxMovementCount>& out,
-                              uint16_t max_checks) {
+                              NnueAdapter* nnue_adapter, uint16_t max_checks) {
   uint16_t pseudo_count = 0;
   auto pseudo = generate_all_moves(board, stm, pseudo_count);
   uint16_t kept = 0;
@@ -40,12 +40,18 @@ uint16_t collect_quiet_checks(Board& board, SideToMove stm,
     }
 
     Undo undo = make_move(board, move);
+    if (nnue_adapter) {
+      nnue_adapter->push_move(move);
+    }
     const bool legal = !is_check(board, flip_side(stm));
     bool gives_check = false;
     if (legal) {
       gives_check = is_check(board, board.side_to_move);
     }
     undo_move(board, undo);
+    if (nnue_adapter) {
+      nnue_adapter->pop_move();
+    }
 
     if (legal && gives_check) {
       out[kept++] = pseudo[i];
@@ -56,9 +62,11 @@ uint16_t collect_quiet_checks(Board& board, SideToMove stm,
 
 } // namespace
 
+// The quiescence search function:
+// extends search in "noisy" positions to avoid horizon effect
 int quiescence(Board& board, int alpha, int beta, SideToMove stm,
-               const EvaluatorFn& evaluator, std::uint64_t& nodes,
-               TranspositionTable* tt, int ply) {
+               const EvaluatorFn& evaluator, NnueAdapter* nnue_adapter,
+               std::uint64_t& nodes, TranspositionTable* tt, int ply) {
   ++nodes;
 
   if (search_stats_enabled()) {
@@ -68,7 +76,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   const auto& sparams = search_params();
 
   if (ply >= sparams.quiescence_max_ply) {
-    return evaluator(static_cast<const Board&>(board));
+    return evaluator(static_cast<const Board&>(board), nnue_adapter);
   }
 
   // TT probe: tighten window or return cached cutoff/score
@@ -96,7 +104,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   const int alpha_origin = alpha;
   const int beta_origin = beta;
   const bool in_check = is_check(board, stm);
-  const int stand_eval = evaluator(static_cast<const Board&>(board));
+  const int stand_eval =
+      evaluator(static_cast<const Board&>(board), nnue_adapter);
   const int stand_pat = stand_eval;
   const bool maximizing = (stm == SideToMove::White);
 
@@ -150,8 +159,14 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         continue;
       }
       Undo u = make_move(board, m);
+      if (nnue_adapter) {
+        nnue_adapter->push_move(m);
+      }
       const bool legal = !is_check(board, flip_side(board.side_to_move));
       undo_move(board, u);
+      if (nnue_adapter) {
+        nnue_adapter->pop_move();
+      }
       if (legal) {
         moves[write_idx++] = moves[i];
       }
@@ -276,9 +291,15 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
 
     // Recurse on tactical move
     Undo undo = make_move(board, move);
+    if (nnue_adapter) {
+      nnue_adapter->push_move(move);
+    }
     const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
-                                 nodes, tt, ply + 1);
+                                 nnue_adapter, nodes, tt, ply + 1);
     undo_move(board, undo);
+    if (nnue_adapter) {
+      nnue_adapter->pop_move();
+    }
     if (process_score(move, score)) {
       return score;
     }
@@ -291,14 +312,21 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         static_cast<uint16_t>(std::min<int>(quiet_cap_raw, kMaxMovementCount));
     if (quiet_cap > 0) {
       std::array<uint32_t, kMaxMovementCount> quiet_checks{};
-      const uint16_t quiet_count =
-          collect_quiet_checks(board, stm, quiet_checks, quiet_cap);
+      const uint16_t quiet_count = collect_quiet_checks(board, stm, quiet_checks,
+                                                        nnue_adapter, quiet_cap);
       for (uint16_t i = 0; i < quiet_count; ++i) {
         Move move = decode_move(quiet_checks[i]);
         Undo undo = make_move(board, move);
-        const int score = quiescence(board, alpha, beta, flip_side(stm),
-                                     evaluator, nodes, tt, ply + 1);
+        if (nnue_adapter) {
+          nnue_adapter->push_move(move);
+        }
+        const int score =
+            quiescence(board, alpha, beta, flip_side(stm), evaluator,
+                       nnue_adapter, nodes, tt, ply + 1);
         undo_move(board, undo);
+        if (nnue_adapter) {
+          nnue_adapter->pop_move();
+        }
         if (process_score(move, score)) {
           return score;
         }

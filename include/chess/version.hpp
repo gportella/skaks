@@ -6,7 +6,7 @@
 namespace chess {
 
 inline constexpr std::string_view kEngineName = "skaks";
-inline constexpr std::string_view kEngineVersion = "0.16.4";
+inline constexpr std::string_view kEngineVersion = "0.17.0";
 
 inline constexpr std::array<std::string_view, 19> kOptimizationFeatures{
     "Bitboard move generation with precomputed attack masks",
@@ -21,13 +21,13 @@ inline constexpr std::array<std::string_view, 19> kOptimizationFeatures{
     "Support for polyglot book of moves",
     "Null move pruning, 2-ply historical heuristic and SEE sorting",
     "Time management for search limits",
-    "Incremental evaluation with piece-square tables",
     "MVV-LVA and SEE for capture move ordering",
     "Threaded UCI search support, with pondering",
     "Parameter loading from external file",
-    "Non-incremental NNUE from Stockfish",
     "SIMD optimizations for bitboard operations and threads",
-    "Extensive CLI modes for self-play, benchmarking, and profiling"};
+    "Incremental eval NNUE from Stockfish",
+    "Extensive CLI modes for self-play, benchmarking, and profiling",
+    "Futility and SEE pruning in search"};
 } // namespace chess
 
 // Detect whether NEON headers are available at compile time (for aarch64).

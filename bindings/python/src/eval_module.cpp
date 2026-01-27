@@ -333,6 +333,10 @@ chess::EngineParams params_from_dict(const py::dict& root) {
     params.use_search_nnue = true;
   }
 
+  if (root.contains("use_search_nnue")) {
+    params.use_search_nnue = py::cast<bool>(root["use_search_nnue"]);
+  }
+
   return params;
 }
 
@@ -341,12 +345,12 @@ struct EvalOneResult {
   std::string error;
 };
 
-EvalOneResult eval_one(const std::string& fen) {
+EvalOneResult eval_one(const std::string& fen, chess::EvaluationMode mode) {
   EvalOneResult res{};
   try {
     chess::Board b = chess::initial_board(fen);
     chess::Engine engine;
-    res.cp = engine.evaluate(b, chess::EvaluationMode::Native);
+    res.cp = engine.evaluate(b, mode, nullptr);
   } catch (const std::exception& ex) {
     res.error = ex.what();
   }
@@ -358,6 +362,13 @@ py::dict eval_fens(const std::vector<std::string>& fens,
   chess::EngineParams p =
       params ? params_from_dict(*params) : chess::default_engine_params();
   chess::set_engine_params(p);
+  const bool use_nnue = p.use_search_nnue;
+  if (use_nnue) {
+    chess::Engine engine_init;
+    engine_init.init_nnue();
+  }
+  const auto mode = use_nnue ? chess::EvaluationMode::Stockfish
+                             : chess::EvaluationMode::Native;
 
   const std::size_t n = fens.size();
   std::vector<int> scores(n, 0);
@@ -382,7 +393,7 @@ py::dict eval_fens(const std::vector<std::string>& fens,
         for (std::size_t i = start; i < end; ++i) {
           try {
             chess::Board b = chess::initial_board(fens[i]);
-            scores[i] = engine.evaluate(b, chess::EvaluationMode::Native);
+            scores[i] = engine.evaluate(b, mode, nullptr);
             errors[i].clear();
           } catch (const std::exception& ex) {
             errors[i] = ex.what();
@@ -418,7 +429,14 @@ py::object eval_fen_single(const std::string& fen,
   chess::EngineParams p =
       params ? params_from_dict(*params) : chess::default_engine_params();
   chess::set_engine_params(p);
-  auto res = eval_one(fen);
+  const bool use_nnue = p.use_search_nnue;
+  if (use_nnue) {
+    chess::Engine engine_init;
+    engine_init.init_nnue();
+  }
+  const auto mode = use_nnue ? chess::EvaluationMode::Stockfish
+                             : chess::EvaluationMode::Native;
+  auto res = eval_one(fen, mode);
   if (!res.error.empty()) {
     return py::dict("ok"_a = false, "error"_a = res.error);
   }

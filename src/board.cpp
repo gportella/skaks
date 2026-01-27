@@ -1,4 +1,4 @@
-
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "chess/board.hpp"
 
 #include "chess/attack_masks.hpp"

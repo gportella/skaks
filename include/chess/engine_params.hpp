@@ -22,7 +22,7 @@ inline EngineParams default_engine_params() {
   params.evaluation = default_evaluation_params();
   params.search = default_search_params();
   params.search_nnue = params.search;
-  params.use_search_nnue = false;
+  params.use_search_nnue = true;
   for (std::size_t i = 0; i < static_cast<std::size_t>(TermId::Count); ++i) {
     params.phase_weights.mg[i] = 1.0F;
     params.phase_weights.eg[i] = 1.0F;
