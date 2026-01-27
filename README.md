@@ -1,26 +1,25 @@
-# Skaks -- learning by doing 
-
-> Uses Stockfish NNUE as I was tired of tuning my eval, no incremental eval for NNUE yet.
-> This whole thing then becomes GLPv3, will slowly add the following in the source code:t -C /Users/guillem/work/repos/skaks status -s
-t -C /Users/guillem/work/repos/skaks status -s | cat
-
-> // SPDX-License-Identifier: GPL-3.0-or-later
+# Skaks chess engine
 
 Simple toy chess engine, for learning and fun. 
 
-When executed, it does `UCI` by default (just run `skaks`, or `skaks --uci`). It can self-play `skaks -s` from canonical start or from `--fen` position. 
+> Uses Stockfish NNUE as I was tired of tuning my eval. There's at least 400 ELO point difference between the classical heuristic and the NNUE version. The incremental eval for NNUE is ok, though done via an adaptor. Even with the Stockfish NNUE and all my efforts to improve search, it's not a very strong engine, 2000 ELO tops.
 
-There's a `--perf` option, useful for regressions. I leave here a couple of scripts to track the performance, both in therms of nodes/ms and 
-and "quality" in puzzle solving -- not awesome, about 12% if lucky for *tricky* (?) ones.
 
-> Careful, there are still some corner cases that might not be great, need to check the 50 moves rule
+When executed, it does `UCI` by default (just run `skaks`, or `skaks --uci`). Other options available via cli, `skaks -h`.
+
+By default, the NNUE is active. To use the old heuristics (*aka* HCE), do `skaks --no-nnue --uci`, do use `--uci` or `-u` to enable `UCI` mode or else it starts self-play.
+
+By default it uses as many threads as logical CPU cores, but you can change this via `--threads`. 
+
+Supports time controls (though could be better), fixed-depth or fixed-node search (fixed node is single-threaded for now), both via cli or `UCI`. The most significant (??) search params can be set via cli or `UCI`, besides the python bindings (see further down).
+
 
 ## Current version 
 
 ```test
 > skaks -vv
 
-skaks version 0.16.4
+skaks version 0.17.0
 Optimizations:
  - Bitboard move generation with precomputed attack masks
  - Alpha-beta search with transposition table caching
@@ -34,16 +33,33 @@ Optimizations:
  - Support for polyglot book of moves
  - Null move pruning, 2-ply historical heuristic and SEE sorting
  - Time management for search limits
- - MVV-LVA and SEE for capture move ordering
+ - Added MVV-LVA and SEE for capture move ordering
  - Threaded UCI search support, with pondering
  - Parameter loading from external file
  - SIMD optimizations for bitboard operations and threads
- - Non-incremental NNUE from Stockfish
+ - Incremental eval NNUE from Stockfish
  - Extensive CLI modes for self-play, benchmarking, and profiling
  - Futility and SEE pruning in search
  - Compiled with NEON eval_linear path
-
 ```
+
+
+#### Aditional helpers 
+
+There's a `--perf` option, useful for regressions. I leave here a couple of scripts to track the performance in terms of number of nodes and nodes/ms. It's not very significant, as the real performance can be best seen via play. 
+
+There's a small python binding in `bindings/python`, a library called `skaks_eval`, which makes it easier to play around with the evals, do a large number of self-play with different sets of params, etc. I use these in `skaks-opt`, which is a *cli* for parameter tuning, etc. No documentation for now, too many changes and needs clean-up.
+
+First install the `skaks_eval` library, e.g. 
+
+```bash
+cd bindings/python
+pip install -e . 
+```
+
+and then you can install `skaks-opt`, from this directory, also using `pip install -e .` or similar. 
+
+`skaks-opt` has a subcommand, `skaks-opt perf-pgn` that allows to profile the execution a bit better by playing some games, it's good to check the miliseconds per ply.
 
 
 ## Prerequisites
