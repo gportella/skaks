@@ -44,7 +44,7 @@ Optimizations:
 
 ### HCE vs NNUE
 
-I did not manage to improve the classical heuristics very much, I don't have the computational resources to do so. Borrowed some PST from various engines and tried with `Texel`, but a good fit against the `win-lose-draw` curve from quiet positions obtained from millions of high-profile games did not really translate into great play for me. `SPSA` + SPRT is cool, but don't have the time and resources, and the evaluation parameters were improving very slowly. Did not want to add more terms to the mix. Therefore I took the approach to *borrow* Stockfish's NNUE, and spend the time coding search. Not awesome, but much better now, quick and dirty comparison with `fastchess`:
+I did not manage to improve the classical heuristics very much, I don't have the know-how, patience and computational resources to do so. Borrowed some PST from various engines and tried with `Texel`, but a good fit against the `win-lose-draw` curve from quiet positions obtained from millions of high-profile games did not really translate into great play for me. `SPSA` + poor-man's `SPRT` should do, but don't have the time and resources, and the evaluation parameters were improving very slowly. Did not want to add more terms to the mix. Therefore I took the approach to *borrow* Stockfish's NNUE, and spend the time coding search. The search params need to be fine-tuned, but there are less, will do. Overall, the change to NNUE was for the better; quick and dirty comparison with `fastchess`:
 
 ```
 fastchess -rounds 1200 \
