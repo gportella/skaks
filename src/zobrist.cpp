@@ -1,4 +1,4 @@
-
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "chess/zobrist.hpp"
 
 #include "chess/board.hpp"
@@ -20,6 +20,13 @@ static inline std::uint64_t splitmix64(std::uint64_t& s) {
   return z ^ (z >> 31);
 }
 
+/// Initializes Zobrist hashing tables using a SplitMix64 RNG seeded by `seed`.
+///
+/// Fills piece, castling, en passant, and side-to-move keys exactly once;
+/// subsequent calls return immediately if already initialized.
+///
+/// @param seed 64-bit seed for deterministic key generation (default is a fixed
+/// constant).
 void init_zobrist(std::uint64_t seed = 0xA5A5A5A5A5A5A5A5ULL) {
   if (g_inited)
     return; // or assert(!g_inited) if reinit is a logic error
@@ -35,6 +42,14 @@ void init_zobrist(std::uint64_t seed = 0xA5A5A5A5A5A5A5A5ULL) {
   Z.sideToMove = splitmix64(s);
   g_inited = true;
 }
+/// \brief Computes the Zobrist hash key for a given board position.
+///
+/// Iterates over all squares to XOR piece-square keys, then incorporates
+/// side-to-move, castling rights, and en passant file (only if a capture
+/// is available) to produce the final position key.
+///
+/// \param b The board state to hash.
+/// \return The 64-bit Zobrist key representing the position.
 std::uint64_t compute_position_key(const Board& b) {
   std::uint64_t key = 0ULL;
 
@@ -66,6 +81,25 @@ const Zobrist& zobrist_table() {
   return Z;
 }
 
+/// Updates the board's Zobrist position key after applying a move, using
+/// undo data and the resulting game state.
+///
+/// This function:
+/// - Removes any previous en passant hash contribution (if applicable).
+/// - Removes the previous castling rights hash.
+/// - Toggles the moving piece from its origin square.
+/// - Toggles any captured piece from its capture square.
+/// - Adds the piece now occupying the destination square.
+/// - Handles rook movement for castling.
+/// - Adds the updated castling rights hash.
+/// - Adds the updated en passant hash (if applicable).
+/// - Toggles the side-to-move hash.
+///
+/// @param b The board being updated; its position_key is modified.
+/// @param undo Snapshot of pre-move state (pieces, rights, squares).
+/// @param castle_mask_after Castling rights mask after the move.
+/// @param ep_hash_before Whether the pre-move en passant file should be hashed.
+/// @param ep_hash_after Whether the post-move en passant file should be hashed.
 void update_key_for_move(Board& b, const Undo& undo, int castle_mask_after,
                          bool ep_hash_before, bool ep_hash_after) {
   const Zobrist& zob = zobrist_table();

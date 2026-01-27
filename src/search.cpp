@@ -182,6 +182,23 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
 
   int child_depth = ctx.depth - 1;
   const int move_number = ctx.move_number;
+  // Search tuning: extend on checking moves and avoid LMR on known-good
+  // killer/counter replies to preserve tactical reliability.
+  const uint32_t move_code =
+      encode_move(move.from, move.to, move.moving_pc, move.captured_pc,
+                  move.promo_pc, move.flags);
+  bool is_killer = false;
+  if (scratch.killers && ctx.ply >= 0 && ctx.ply < static_cast<int>(MAX_PLY)) {
+    const auto idx = static_cast<std::size_t>(ctx.ply);
+    const uint32_t primary = scratch.killers->primary[idx];
+    const uint32_t secondary = scratch.killers->secondary[idx];
+    is_killer = (move_code == primary) || (move_code == secondary);
+  }
+  uint32_t counter_code = 0;
+  if (ctx.parent_move) {
+    counter_code = scratch.ordering.counter_move(*ctx.parent_move);
+  }
+  const bool is_counter = (counter_code != 0 && move_code == counter_code);
 
   Undo undo = make_move(board, move);
   scratch.nnue_adapter->push_move(move);
@@ -191,9 +208,8 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
       irreversible ? (ctx.ply + 1) : ctx.repetition_start;
 
   const bool in_check_after_move = is_check(board, flip_side(ctx.stm));
-  if (child_depth == 0 && in_check_after_move &&
-      ctx.ply < static_cast<int>(MAX_PLY) - 1) {
-    child_depth = 1;
+  if (in_check_after_move && ctx.ply < static_cast<int>(MAX_PLY) - 1) {
+    child_depth += CHECK_EXTENSION;
   }
 
   const int history_score = scratch.ordering.history_score(move);
@@ -201,7 +217,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
   int reduction = 0;
   // LATER MOVE REDUCTION
   if (quiet_like && !king_move && !castle_move && !in_check_after_move &&
-      child_depth >= 2 && move_number > 1) {
+      child_depth >= 2 && move_number > 1 && !is_killer && !is_counter) {
 
     const double depth_factor = std::log1p(std::min(child_depth, 63));
     const double order_factor = std::log1p(std::min(move_number, 63));
