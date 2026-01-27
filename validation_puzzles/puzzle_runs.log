@@ -2103,3 +2103,184 @@ Optimizations:
  - Extensive CLI modes for self-play, benchmarking, and profiling
  - Compiled with NEON eval_linear path
 --- perf ---
+=== perf snapshot 2026-01-27T22:28:19 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.17.1
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+--- perf ---
+=== perf snapshot 2026-01-27T22:29:24 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.17.1
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 71/418 puzzles at depth 6 (17.0%)
+[brakto_kopec.epd] Solved 5/24 puzzles at depth 6 (20.8%)
+[eigennmann_rapid_engine.epd] Solved 25/103 puzzles at depth 6 (24.3%)
+[lct_2.epd] Solved 10/35 puzzles at depth 6 (28.6%)
+=== perf snapshot 2026-01-27T22:32:41 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.17.1
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 5/50 puzzles at depth 10 (10.0%)
+[brakto_kopec.epd] Solved 8/24 puzzles at depth 10 (33.3%)
+[eigennmann_rapid_engine.epd] Solved 10/50 puzzles at depth 10 (20.0%)
+[lct_2.epd] Solved 13/35 puzzles at depth 10 (37.1%)
+=== perf snapshot 2026-01-27T22:34:42 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.17.1
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 5/50 puzzles at depth 10 (10.0%)
+[brakto_kopec.epd] Solved 10/24 puzzles at depth 10 (41.7%)
+[eigennmann_rapid_engine.epd] Solved 8/50 puzzles at depth 10 (16.0%)
+[lct_2.epd] Solved 13/35 puzzles at depth 10 (37.1%)
+=== perf snapshot 2026-01-27T22:36:52 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.17.1
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 7/50 puzzles at depth 10 (14.0%)
+[brakto_kopec.epd] Solved 12/24 puzzles at depth 10 (50.0%)
+[eigennmann_rapid_engine.epd] Solved 12/50 puzzles at depth 10 (24.0%)
+[lct_2.epd] Solved 15/35 puzzles at depth 10 (42.9%)
+=== perf snapshot 2026-01-27T22:39:06 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+skaks version 0.17.1
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 5/50 puzzles at depth 10 (10.0%)
+[brakto_kopec.epd] Solved 10/24 puzzles at depth 10 (41.7%)
+[eigennmann_rapid_engine.epd] Solved 17/50 puzzles at depth 10 (34.0%)

@@ -58,7 +58,7 @@ def main(argv: List[str]) -> int:
     parser.add_argument(
         "--depth",
         type=int,
-        default=5,
+        default=6,
         help="Search depth passed to run_puzzle_suite.py (default: 6)",
     )
     parser.add_argument(
