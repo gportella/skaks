@@ -2,8 +2,7 @@
 
 Simple toy chess engine, for learning and fun. 
 
-> Uses Stockfish NNUE as I was tired of tuning my eval. There's at least 400 ELO point difference between the classical heuristic and the NNUE version. The incremental eval for NNUE is ok, though done via an adaptor. Even with the Stockfish NNUE and all my efforts to improve search, it's not a very strong engine, 2000 ELO tops.
-
+> Uses Stockfish NNUE as I was tired of tuning my eval. There's at least 200 ELO point difference between the classical heuristic and the NNUE version. The incremental eval for NNUE is ok, though done via an adaptor. Even with the Stockfish NNUE and all my efforts to improve search, it's not a very strong engine, 2000 ELO tops.
 
 When executed, it does `UCI` by default (just run `skaks`, or `skaks --uci`). Other options available via cli, `skaks -h`.
 
@@ -41,6 +40,32 @@ Optimizations:
  - Extensive CLI modes for self-play, benchmarking, and profiling
  - Futility and SEE pruning in search
  - Compiled with NEON eval_linear path
+```
+
+### HCE vs NNUE
+
+I did not manage to improve the classical heuristics very much, I don't have the computational resources to do so. Borrowed some PST from various engines and tried with `Texel`, but a good fit against the `win-lose-draw` curve from quiet positions obtained from millions of high-profile games did not really translate into great play for me. `SPSA` + SPRT is cool, but don't have the time and resources, and the evaluation parameters were improving very slowly. Did not want to add more terms to the mix. Therefore I took the approach to *borrow* Stockfish's NNUE, and spend the time coding search. Not awesome, but much better now, quick and dirty comparison with `fastchess`:
+
+```
+fastchess -rounds 1200 \
+-engine cmd=skaks name=Skaks-NNUE \
+-engine cmd=skaks_hce name=Skaks-HCE \
+-openings file=lichess_elite_2015-09.pgn format=pgn order=random \ 
+-repeat \
+-concurrency 4 \
+-sprt elo0=0 elo1=2 alpha=0.05 beta=0.05  
+-each tc=5+0.1  
+
+[...]
+--------------------------------------------------
+Results of Skaks-NNUE vs Skaks-HCE (5+0.1, 14t, NULL, lichess_elite_2015-09.pgn):
+Elo: 232.74 +/- 23.37, nElo: 292.26 +/- 22.05
+LOS: 100.00 %, DrawRatio: 40.04 %, PairsRatio: 285.00
+Games: 954, Wins: 739, Losses: 181, Draws: 34, Points: 756.0 (79.25 %)
+Ptnml(0-2): [1, 0, 191, 10, 275], WL/DD Ratio: 14.92
+LLR: 2.95 (100.0%) (-2.94, 2.94) [0.00, 2.00]
+--------------------------------------------------
+SPRT ([0.00, 2.00]) completed - H1 was accepted
 ```
 
 
