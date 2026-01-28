@@ -351,6 +351,7 @@ struct GoParameters {
   chess::SearchLimits limits;
   bool ponder = false;
   bool depth_explicit = false;
+  bool infinite = false;
 };
 
 std::atomic<int> g_info_depth_cap{0};
@@ -378,6 +379,7 @@ GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
   bool have_increment = false;
   bool have_movetime = false;
   bool ponder = false;
+  bool infinite = false;
 
   while (stream >> token) {
     if (token == "depth") {
@@ -425,8 +427,8 @@ GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
         parsed.limits.moves_to_go = mtg;
       }
     } else if (token == "infinite") {
-      parsed.depth = fallback_depth;
-      have_depth = true;
+      infinite = true;
+      parsed.infinite = true;
     } else if (token == "ponder") {
       ponder = true;
     } else if (token == "nodes") {
@@ -438,7 +440,9 @@ GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
     }
   }
 
-  if (have_movetime) {
+  if (infinite) {
+    parsed.limits = chess::SearchLimits{};
+  } else if (have_movetime) {
     parsed.limits.use_time = true;
   } else if (have_wtime || have_btime || have_increment ||
              parsed.limits.moves_to_go > 0) {
@@ -446,7 +450,8 @@ GoParameters parse_go_arguments(std::string_view args, int fallback_depth) {
     parsed.limits.per_move = false;
   }
 
-  if (!have_depth && !parsed.limits.use_time) {
+  if (!have_depth && !parsed.limits.use_time && !parsed.limits.use_nodes &&
+      !infinite) {
     parsed.depth = fallback_depth;
   }
 
@@ -935,7 +940,9 @@ void run_uci_loop(Engine& engine, int default_depth,
         continue;
       }
       SearchParameters params{};
-      if (go_params.limits.use_time || go_params.limits.use_nodes) {
+      if (go_params.infinite) {
+        params.depth = static_cast<int>(MAX_PLY) - 1;
+      } else if (go_params.limits.use_time || go_params.limits.use_nodes) {
         if (!go_params.depth_explicit) {
           params.depth = static_cast<int>(MAX_PLY) - 1;
         } else {
