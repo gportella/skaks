@@ -680,8 +680,8 @@ Undo make_move(Board& b, const Move& m) {
   return undo;
 }
 
-bool allow_null_move(Board& b, int depth) {
-  if (depth < NULL_MOVE_MIN_DEPTH) {
+bool allow_null_move(Board& b, int depth, int min_depth) {
+  if (depth < min_depth) {
     return false;
   }
 

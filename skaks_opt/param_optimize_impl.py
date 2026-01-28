@@ -290,6 +290,7 @@ def _trace_search_params(label: str, payload: Optional[Dict[str, Any]], nodes: O
         f"asp_max={_val('aspiration_window_max')} "
         f"q_delta={_val('quiescence_delta_margin')} "
         f"null_r={_val('null_move_reduction')} "
+        f"null_div={_val('null_move_reduction_divisor')} "
         f"null_min={_val('null_move_min_depth')} "
         f"lmr_i={_val('lmr_intercept')} "
         f"lmr_div={_val('lmr_divisor')} "

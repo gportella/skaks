@@ -179,7 +179,7 @@ inline constexpr Move decode_move(uint32_t encoded_move) {
 }
 void undo_null_move(Board& b, const UndoNull& u);
 UndoNull make_null_move(Board& b);
-bool allow_null_move(Board& b, int depth);
+bool allow_null_move(Board& b, int depth, int min_depth);
 
 Undo make_move(Board& b, const Move& m);
 int update_castling_rights(Board& b, const Move&);

@@ -312,6 +312,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         static_cast<uint16_t>(std::min<int>(quiet_cap_raw, kMaxMovementCount));
     if (quiet_cap > 0) {
       std::array<uint32_t, kMaxMovementCount> quiet_checks{};
+      // not worth keeping track of quiet moves from before, recompute for now
       const uint16_t quiet_count = collect_quiet_checks(board, stm, quiet_checks,
                                                         nnue_adapter, quiet_cap);
       for (uint16_t i = 0; i < quiet_count; ++i) {

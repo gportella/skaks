@@ -429,10 +429,14 @@ bool parse_search(const YAML::Node& search_node, chess::SearchParams& search,
     return false;
   if (!parse_field("null_move_reduction", search.null_move_reduction))
     return false;
+  if (!parse_field("null_move_reduction_divisor",
+                   search.null_move_reduction_divisor))
+    return false;
   if (!parse_field("null_move_min_depth", search.null_move_min_depth))
     return false;
-  if (search.null_move_reduction < 0 || search.null_move_min_depth < 0) {
-    error = "null-move parameters must be non-negative";
+  if (search.null_move_reduction < 0 || search.null_move_min_depth < 0 ||
+      search.null_move_reduction_divisor <= 0) {
+    error = "null-move parameters must be non-negative; divisor > 0";
     return false;
   }
   if (!parse_field_double("lmr_intercept", search.lmr_intercept))

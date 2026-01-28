@@ -182,6 +182,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
 
   int child_depth = ctx.depth - 1;
   const int move_number = ctx.move_number;
+
   // Search tuning: extend on checking moves and avoid LMR on known-good
   // killer/counter replies to preserve tactical reliability.
   const uint32_t move_code =
@@ -456,7 +457,7 @@ struct LazySmpContext {
   std::atomic<bool> internal_abort{false};
   std::atomic<bool>* abort_flag = nullptr;
   int helper_count = 0;
-  int min_split_depth = 3;
+  int min_split_depth = 5;
 
   void enqueue(std::unique_ptr<LazySmpTask> task) {
     {
@@ -751,13 +752,19 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   // NULL MOVE PRUNING
   // Ahead of main search loop to see if we can prune immediately,
   // ie. can this side pass and still be >= beta
-  if (allow_null_move(board, depth)) {
+  const auto& sparams = search_params();
+  const int null_min_depth =
+      std::max(sparams.null_move_min_depth, sparams.null_move_reduction + 1);
+  if (allow_null_move(board, depth, null_min_depth)) {
     UndoNull undo_null = make_null_move(board);
     scratch.nnue_adapter->push_null();
-    int null_move_reduction = search_params().null_move_reduction;
-    if (depth <= 5) {
-      null_move_reduction = std::min(null_move_reduction, 2);
+    const int divisor = std::max(1, sparams.null_move_reduction_divisor);
+    int null_move_reduction = sparams.null_move_reduction + depth / divisor;
+    if (depth <= null_min_depth) {
+      null_move_reduction =
+          std::min(null_move_reduction, sparams.null_move_reduction);
     }
+    null_move_reduction = std::min(null_move_reduction, std::max(0, depth - 1));
     SearchResult null_result = alphabeta_minimax(
         board, std::max(0, depth - 1 - null_move_reduction), beta - 1, beta,
         flip_side(stm), evaluator, scratch, ply + 1, repetition_start,
@@ -818,6 +825,41 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     return leaf;
   }
 
+  // Cache static eval so reverse-futility and later quiet-move futility share
+  // it.
+  bool static_eval_ready = false;
+  int static_eval = 0;
+  int static_eval_normalized = 0;
+
+  // reverse futility pruning: early cutoff in non-PV, non-check nodes
+  if (!is_pv && depth >= 3 && depth <= 8 && !is_check(board, stm)) {
+    const int eval =
+        evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
+    const int margin_idx = std::min(depth, 3);
+    const int margin =
+        sparams.futility_margins[static_cast<std::size_t>(margin_idx)];
+    const int eval_normalized = normalize_mate_score(eval, ply);
+    static_eval = eval;
+    static_eval_normalized = eval_normalized;
+    static_eval_ready = true;
+    if (stm == SideToMove::White) {
+      if (eval_normalized - margin >= beta) {
+        SearchResult prune{};
+        prune.score = eval_normalized;
+        prune.outcome = SearchResult::Outcome::InProgress;
+        prune.pv_length = 0;
+        return prune;
+      }
+    } else {
+      if (eval_normalized + margin <= alpha) {
+        SearchResult prune{};
+        prune.score = eval_normalized;
+        prune.outcome = SearchResult::Outcome::InProgress;
+        prune.pv_length = 0;
+        return prune;
+      }
+    }
+  }
   uint16_t move_count = 0;
   // GENERATE LEGAL MOVES, filtering excluded root moves if any and
   // then sorting them
@@ -890,9 +932,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
   const bool parent_in_check = is_check(board, stm);
   int moves_tried = 0;
-  bool static_eval_ready = false;
-  int static_eval = 0;
-  int static_eval_normalized = 0;
 
   // Prepare move evaluation context for SMP tasks and main loop
   MoveEvaluationContext move_ctx{};

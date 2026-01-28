@@ -34,6 +34,7 @@ void trace_search_params(const char* label, const chess::EngineParams& params,
             << " asp_max=" << s.aspiration_window_max
             << " q_delta=" << s.quiescence_delta_margin
             << " null_r=" << s.null_move_reduction
+            << " null_div=" << s.null_move_reduction_divisor
             << " null_min=" << s.null_move_min_depth
             << " lmr_div=" << s.lmr_divisor
             << " lmr_hist=" << s.lmr_history_divisor
@@ -50,6 +51,7 @@ void trace_active_search_params(const char* label, std::uint64_t node_limit) {
             << " asp_max=" << s.aspiration_window_max
             << " q_delta=" << s.quiescence_delta_margin
             << " null_r=" << s.null_move_reduction
+            << " null_div=" << s.null_move_reduction_divisor
             << " null_min=" << s.null_move_min_depth
             << " lmr_div=" << s.lmr_divisor
             << " lmr_hist=" << s.lmr_history_divisor
@@ -292,6 +294,8 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.search.quiescence_max_quiet_checks);
     assign_if_present(s, "null_move_reduction",
                       params.search.null_move_reduction);
+    assign_if_present(s, "null_move_reduction_divisor",
+                      params.search.null_move_reduction_divisor);
     assign_if_present(s, "null_move_min_depth",
                       params.search.null_move_min_depth);
     assign_if_present(s, "lmr_intercept", params.search.lmr_intercept);
@@ -321,6 +325,8 @@ chess::EngineParams params_from_dict(const py::dict& root) {
                       params.search_nnue.quiescence_max_quiet_checks);
     assign_if_present(s, "null_move_reduction",
                       params.search_nnue.null_move_reduction);
+    assign_if_present(s, "null_move_reduction_divisor",
+                      params.search_nnue.null_move_reduction_divisor);
     assign_if_present(s, "null_move_min_depth",
                       params.search_nnue.null_move_min_depth);
     assign_if_present(s, "lmr_intercept", params.search_nnue.lmr_intercept);

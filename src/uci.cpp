@@ -109,6 +109,8 @@ void emit_search_param_options() {
   emit_spin_option("quiescence_max_quiet_checks",
                    sparams.quiescence_max_quiet_checks, 0, 16);
   emit_spin_option("null_move_reduction", sparams.null_move_reduction, 0, 6);
+  emit_spin_option("null_move_reduction_divisor",
+                   sparams.null_move_reduction_divisor, 1, 12);
   emit_spin_option("null_move_min_depth", sparams.null_move_min_depth, 0, 12);
   emit_string_option("lmr_intercept", sparams.lmr_intercept);
   emit_string_option("lmr_divisor", sparams.lmr_divisor);
@@ -139,6 +141,8 @@ void apply_search_param_option(std::string_view lowered_name,
       current.quiescence_max_quiet_checks = std::stoi(std::string(value));
     } else if (lowered_name == "null_move_reduction") {
       current.null_move_reduction = std::stoi(std::string(value));
+    } else if (lowered_name == "null_move_reduction_divisor") {
+      current.null_move_reduction_divisor = std::stoi(std::string(value));
     } else if (lowered_name == "null_move_min_depth") {
       current.null_move_min_depth = std::stoi(std::string(value));
     } else if (lowered_name == "lmr_intercept") {
