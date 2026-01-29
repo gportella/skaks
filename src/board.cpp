@@ -51,6 +51,8 @@ void initialize_incremental_scores(Board& board) {
   board.pst_endgame_score = 0;
   board.phase = 0;
 
+#if SKAKS_ENABLE_HCE
+
   const auto& mg_tables = midgame_pst();
   const auto& eg_tables = endgame_pst();
 
@@ -77,6 +79,7 @@ void initialize_incremental_scores(Board& board) {
 
     board.phase += kPstPhaseWeights[static_cast<std::size_t>(type_index)];
   }
+#endif
 }
 
 Board parse_fen_string(std::string_view fen) {

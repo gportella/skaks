@@ -392,8 +392,8 @@ Undo make_move(Board& b, const Move& m) {
 
   undo.ep_hash_before = (b.en_passant >= 0 && ep_capture_available(b));
 
+#if SKAKS_ENABLE_HCE
   // Incremental score updates
-  // TODO: remove because we have NNUE now, remove HCE
   undo.material_score_before = b.material_score;
   undo.pst_midgame_score_before = b.pst_midgame_score;
   undo.pst_endgame_score_before = b.pst_endgame_score;
@@ -451,6 +451,15 @@ Undo make_move(Board& b, const Move& m) {
     update_score(rook, static_cast<int>(to_index(rook_from)), false);
     update_score(rook, static_cast<int>(to_index(rook_to)), true);
   }
+#else
+  const auto mover_index = to_index(b.side_to_move);
+  const auto enemy_index = to_index(flip_side(b.side_to_move));
+  const Square from_sq = static_cast<Square>(m.from);
+  const Square to_sq = static_cast<Square>(m.to);
+  const auto from_idx = to_index(m.from);
+  const auto to_idx = to_index(m.to);
+  const auto captured_idx = to_index(undo.captured_sq);
+#endif
 
   b.pieces[from_idx] = OccupancyType::empty;
   if (undo.was_en_passant) {
@@ -852,11 +861,13 @@ void undo_move(Board& b, const Undo& u) {
   b.castling_rights = u.castling_rights_before;
   b.has_castled = u.castled_before;
 
+#if SKAKS_ENABLE_HCE
   // Restore incremental scores
   b.material_score = u.material_score_before;
   b.pst_midgame_score = u.pst_midgame_score_before;
   b.pst_endgame_score = u.pst_endgame_score_before;
   b.phase = u.phase_before;
+#endif
 
   std::copy(std::begin(u.occupancy), std::end(u.occupancy),
             std::begin(b.occupancy));

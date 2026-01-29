@@ -34,13 +34,15 @@
 
 namespace {
 
+#if SKAKS_ENABLE_HCE
 constexpr std::array<const char*, static_cast<std::size_t>(chess::TermId::Count)>
-    kTermNames = {"Material",      "PawnCenter",   "CenterControl",
-                  "Attacking",     "KingSafety",   "KingMobility",
-                  "Pins",          "PstMg",        "PstEg",
-                  "PassedPawns",   "Initiative",   "Hanging",
-                  "KingRing",      "BishopPair",   "RookFiles",
-                  "MinorMobility", "PawnStructure"};
+  kTermNames = {"Material",      "PawnCenter",   "CenterControl",
+          "Attacking",     "KingSafety",   "KingMobility",
+          "Pins",          "PstMg",        "PstEg",
+          "PassedPawns",   "Initiative",   "Hanging",
+          "KingRing",      "BishopPair",   "RookFiles",
+          "MinorMobility", "PawnStructure"};
+#endif
 
 bool suppress_info_strings() {
   static bool initialized = false;
@@ -302,6 +304,7 @@ int main(int argc, char** argv) {
 
     engine.reset_history(board);
 
+#if SKAKS_ENABLE_HCE
     const chess::EvalVector eval_vec = chess::compute_eval_vector(board);
     const int raw_linear = chess::eval_linear(eval_vec, chess::phase_weights());
     const int white_eval = engine.evaluate(board, eval_mode, nullptr);
@@ -340,6 +343,20 @@ int main(int argc, char** argv) {
       std::cout << "static_eval_white " << white_eval << "\n";
       std::cout << "static_eval_stm " << stm_eval << "\n";
     }
+#else
+    if (cli.options.eval_breakdown) {
+      std::cerr << "eval-breakdown requires SKAKS_ENABLE_HCE=ON" << "\n";
+      return EXIT_FAILURE;
+    }
+    const int white_eval = engine.evaluate(board, eval_mode, nullptr);
+    const int stm_eval = (board.side_to_move == chess::SideToMove::White)
+                             ? white_eval
+                             : -white_eval;
+    if (cli.options.static_eval) {
+      std::cout << "static_eval_white " << white_eval << "\n";
+      std::cout << "static_eval_stm " << stm_eval << "\n";
+    }
+#endif
     return EXIT_SUCCESS;
   }
 

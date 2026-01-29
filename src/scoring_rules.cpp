@@ -809,6 +809,7 @@ int evaluate_pawn_structure(const Board& board) {
   return black_penalty - white_penalty;
 }
 
+#if SKAKS_ENABLE_HCE
 EvalVector compute_eval_vector(const Board& b) {
   EvalVector v{};
   v.f[static_cast<int>(TermId::Material)] = evaluate_material(b);
@@ -837,6 +838,11 @@ EvalVector compute_eval_vector(const Board& b) {
   v.eg_phase = eg_phase;
   return v;
 }
+#else
+EvalVector compute_eval_vector(const Board& /*b*/) {
+  return {};
+}
+#endif
 
 int eval_linear(const EvalVector& v, const PhaseWeights& W) {
   const float mgw =
@@ -1060,6 +1066,7 @@ int evaluate_opening_principles(const Board& board) {
 }
 
 // Final evaluation: strictly White-centric; do not flip by side_to_move
+#if SKAKS_ENABLE_HCE
 int evaluate_board(const Board& board) {
   if (board.king_captured == PieceColor::White) {
     return -100000; // Black wins (bad for White)
@@ -1075,5 +1082,10 @@ int evaluate_board(const Board& board) {
   const double compressed = quiet_cap * std::tanh(adjusted / quiet_cap);
   return static_cast<int>(std::lround(compressed));
 }
+#else
+int evaluate_board(const Board& /*board*/) {
+  return 0;
+}
+#endif
 
 } // namespace chess

@@ -14,6 +14,7 @@ option(CHESS_ENABLE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(CHESS_ENABLE_IPO "Enable interprocedural optimization (LTO)" OFF)
 option(CHESS_ENABLE_SANITIZERS "Enable address/undefined sanitizers in supported builds" OFF)
 option(CHESS_BUILD_PYTHON "Build Python bindings" OFF)
+option(SKAKS_ENABLE_HCE "Enable handcrafted evaluation (HCE)" OFF)
 
 include(FetchContent)
 
