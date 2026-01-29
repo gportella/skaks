@@ -1049,12 +1049,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     const int probcut_depth = depth - kProbCutReduction;
     if (probcut_depth >= 1) {
       const int bound = (stm == SideToMove::White) ? beta : alpha;
-      const int alpha_pc = (stm == SideToMove::White)
-                               ? bound
-                               : bound - kProbCutMargin;
-      const int beta_pc = (stm == SideToMove::White)
-                              ? bound + kProbCutMargin
-                              : bound;
+      const int alpha_pc =
+          (stm == SideToMove::White) ? bound : bound - kProbCutMargin;
+      const int beta_pc =
+          (stm == SideToMove::White) ? bound + kProbCutMargin : bound;
       for (uint16_t i = 0; i < move_count; ++i) {
         const Move move = decode_move(moves[i]);
         if (move.captured_pc == OccupancyType::empty) {
@@ -1077,8 +1075,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         if (probcut.aborted) {
           return probcut;
         }
-        const int probcut_score =
-            normalize_mate_score(probcut.score, ply);
+        const int probcut_score = normalize_mate_score(probcut.score, ply);
         if ((stm == SideToMove::White && probcut_score >= beta_pc) ||
             (stm == SideToMove::Black && probcut_score <= alpha_pc)) {
           SearchResult cutoff{};
