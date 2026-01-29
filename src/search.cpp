@@ -1036,6 +1036,61 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     return draw;
   }
 
+  /**
+   * @brief ProbCut: shallow tactical search on promising captures.
+   *
+   * If a reduced search on a good capture already fails high/low by a margin,
+   * we can prune the node early. This saves eval work at deeper time controls
+   * while retaining tactical reliability.
+   */
+  if (!is_pv && depth >= 5 && !is_check(board, stm)) {
+    constexpr int kProbCutMargin = 150;
+    constexpr int kProbCutReduction = 3;
+    const int probcut_depth = depth - kProbCutReduction;
+    if (probcut_depth >= 1) {
+      const int bound = (stm == SideToMove::White) ? beta : alpha;
+      const int alpha_pc = (stm == SideToMove::White)
+                               ? bound
+                               : bound - kProbCutMargin;
+      const int beta_pc = (stm == SideToMove::White)
+                              ? bound + kProbCutMargin
+                              : bound;
+      for (uint16_t i = 0; i < move_count; ++i) {
+        const Move move = decode_move(moves[i]);
+        if (move.captured_pc == OccupancyType::empty) {
+          continue;
+        }
+        if (static_exchange_eval(board, move) < 0) {
+          continue;
+        }
+        const Undo undo = make_move(board, move);
+        scratch.nnue_adapter->push_move(move);
+        const bool irreversible = move_is_irreversible(move);
+        const int next_repetition_start =
+            irreversible ? (ply + 1) : repetition_start;
+        SearchResult probcut = alphabeta_minimax(
+            board, probcut_depth, alpha_pc, beta_pc, flip_side(stm), evaluator,
+            scratch, ply + 1, next_repetition_start, ply_from_root + 1, false,
+            nodes, &move, nullptr, 0);
+        scratch.nnue_adapter->pop_move();
+        undo_move(board, undo);
+        if (probcut.aborted) {
+          return probcut;
+        }
+        const int probcut_score =
+            normalize_mate_score(probcut.score, ply);
+        if ((stm == SideToMove::White && probcut_score >= beta_pc) ||
+            (stm == SideToMove::Black && probcut_score <= alpha_pc)) {
+          SearchResult cutoff{};
+          cutoff.score = probcut_score;
+          cutoff.outcome = SearchResult::Outcome::InProgress;
+          cutoff.pv_length = 0;
+          return cutoff;
+        }
+      }
+    }
+  }
+
   uint32_t tt_code = 0;
   if (has_cached_move) {
     if (is_excluded_move(cached_move)) {
