@@ -22,6 +22,12 @@ struct SearchParams {
   double lmr_history_divisor = LMR_HISTORY_DIVISOR;
   double lmr_pv_offset = LMR_PV_OFFSET;
   std::array<int, 4> futility_margins = FUTILITY_MARGINS;
+  int razor_margin_bonus = RAZOR_MARGIN_BONUS;
+  int probcut_margin = PROBCUT_MARGIN;
+  int probcut_reduction = PROBCUT_REDUCTION;
+  int probcut_max_captures = PROBCUT_MAX_CAPTURES;
+  int see_capture_threshold = SEE_CAPTURE_THRESHOLD;
+  int see_capture_max_value = SEE_CAPTURE_MAX_VALUE;
 };
 
 inline SearchParams default_search_params() {

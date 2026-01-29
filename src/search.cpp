@@ -948,7 +948,8 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     }
     const int margin_idx = std::min(depth, 3);
     const int razor_margin =
-        sparams.futility_margins[static_cast<std::size_t>(margin_idx)] + 150;
+        sparams.futility_margins[static_cast<std::size_t>(margin_idx)] +
+        sparams.razor_margin_bonus;
     bool do_razor = false;
     if (stm == SideToMove::White) {
       do_razor = static_eval_normalized + razor_margin <= alpha;
@@ -1043,16 +1044,15 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
    * we can prune the node early. This saves eval work at deeper time controls
    * while retaining tactical reliability.
    */
-  if (!is_pv && depth >= 5 && !is_check(board, stm)) {
-    constexpr int kProbCutMargin = 150;
-    constexpr int kProbCutReduction = 3;
-    const int probcut_depth = depth - kProbCutReduction;
+  if (!is_pv && depth >= 6 && !is_check(board, stm)) {
+    const int probcut_depth = depth - sparams.probcut_reduction;
     if (probcut_depth >= 1) {
       const int bound = (stm == SideToMove::White) ? beta : alpha;
       const int alpha_pc =
-          (stm == SideToMove::White) ? bound : bound - kProbCutMargin;
+          (stm == SideToMove::White) ? bound : bound - sparams.probcut_margin;
       const int beta_pc =
-          (stm == SideToMove::White) ? bound + kProbCutMargin : bound;
+          (stm == SideToMove::White) ? bound + sparams.probcut_margin : bound;
+      int captures_checked = 0;
       for (uint16_t i = 0; i < move_count; ++i) {
         const Move move = decode_move(moves[i]);
         if (move.captured_pc == OccupancyType::empty) {
@@ -1060,6 +1060,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         }
         if (static_exchange_eval(board, move) < 0) {
           continue;
+        }
+        if (sparams.probcut_max_captures > 0 &&
+            ++captures_checked > sparams.probcut_max_captures) {
+          break;
         }
         const Undo undo = make_move(board, move);
         scratch.nnue_adapter->push_move(move);
@@ -1250,8 +1254,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       int see_threshold = 0;
       if (depth <= 4) {
         const int captured_value = piece_material_magnitude(move.captured_pc);
-        if (captured_value > 0 && captured_value <= 330) {
-          see_threshold = 30;
+        if (captured_value > 0 &&
+            captured_value <= sparams.see_capture_max_value) {
+          see_threshold = sparams.see_capture_threshold;
         }
       }
       if (see < see_threshold) {

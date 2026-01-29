@@ -32,6 +32,12 @@ inline constexpr double LMR_DIVISOR = 1.5;
 inline constexpr double LMR_HISTORY_DIVISOR = 8000.0;
 inline constexpr double LMR_PV_OFFSET = 1.0;
 inline constexpr std::array<int, 4> FUTILITY_MARGINS{0, 120, 240, 400};
+inline constexpr int RAZOR_MARGIN_BONUS = 80;
+inline constexpr int PROBCUT_MARGIN = 250;
+inline constexpr int PROBCUT_REDUCTION = 4;
+inline constexpr int PROBCUT_MAX_CAPTURES = 3;
+inline constexpr int SEE_CAPTURE_THRESHOLD = 10;
+inline constexpr int SEE_CAPTURE_MAX_VALUE = 330;
 inline constexpr std::size_t DEFAULT_HASH_MB = 512;
 
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES =

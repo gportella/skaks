@@ -116,6 +116,14 @@ void emit_search_param_options() {
   emit_string_option("lmr_divisor", sparams.lmr_divisor);
   emit_string_option("lmr_history_divisor", sparams.lmr_history_divisor);
   emit_string_option("lmr_pv_offset", sparams.lmr_pv_offset);
+  emit_spin_option("razor_margin_bonus", sparams.razor_margin_bonus, 0, 400);
+  emit_spin_option("probcut_margin", sparams.probcut_margin, 0, 600);
+  emit_spin_option("probcut_reduction", sparams.probcut_reduction, 1, 6);
+  emit_spin_option("probcut_max_captures", sparams.probcut_max_captures, 1, 16);
+  emit_spin_option("see_capture_threshold", sparams.see_capture_threshold, 0,
+                   200);
+  emit_spin_option("see_capture_max_value", sparams.see_capture_max_value, 0,
+                   900);
 }
 
 void apply_search_param_option(std::string_view lowered_name,
@@ -153,6 +161,18 @@ void apply_search_param_option(std::string_view lowered_name,
       current.lmr_history_divisor = std::stod(std::string(value));
     } else if (lowered_name == "lmr_pv_offset") {
       current.lmr_pv_offset = std::stod(std::string(value));
+    } else if (lowered_name == "razor_margin_bonus") {
+      current.razor_margin_bonus = std::stoi(std::string(value));
+    } else if (lowered_name == "probcut_margin") {
+      current.probcut_margin = std::stoi(std::string(value));
+    } else if (lowered_name == "probcut_reduction") {
+      current.probcut_reduction = std::stoi(std::string(value));
+    } else if (lowered_name == "probcut_max_captures") {
+      current.probcut_max_captures = std::stoi(std::string(value));
+    } else if (lowered_name == "see_capture_threshold") {
+      current.see_capture_threshold = std::stoi(std::string(value));
+    } else if (lowered_name == "see_capture_max_value") {
+      current.see_capture_max_value = std::stoi(std::string(value));
     } else {
       return;
     }
