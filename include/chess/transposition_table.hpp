@@ -4,9 +4,10 @@
 #include "chess/moves.hpp"
 #include "chess/score.hpp"
 
+#include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
 #include <vector>
 
 namespace chess {
@@ -23,71 +24,39 @@ struct TranspositionEntry {
 
 class TranspositionTable {
 public:
-  explicit TranspositionTable(std::size_t entry_count = 1 << 16) {
-    resize(entry_count);
-  }
+  static constexpr std::size_t kClusterSize = 4;
 
-  void resize(std::size_t entry_count) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (entry_count == 0) {
-      entry_count = 1;
-    }
-    std::size_t pow_two = 1;
-    while (pow_two < entry_count) {
-      pow_two <<= 1U;
-    }
-    entries_.assign(pow_two, {});
-    mask_ = pow_two - 1U;
-  }
+  struct Slot {
+    std::atomic<std::uint64_t> key{0};
+    Move best_move{};
+    int depth{-1};
+    int score{0};
+    TranspositionFlag flag{TranspositionFlag::None};
+  };
 
-  void clear() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& entry : entries_) {
-      entry = {};
-    }
-  }
+  struct alignas(64) Cluster {
+    std::array<Slot, kClusterSize> slots{};
+  };
 
-  bool probe(std::uint64_t key, TranspositionEntry& out) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto& slot = entries_[index(key)];
-    if (slot.depth >= 0 && slot.key == key) {
-      out = slot;
-      return true;
-    }
-    return false;
-  }
+  explicit TranspositionTable(std::size_t entry_count = 1 << 16);
 
+  void resize(std::size_t entry_count);
+  void resize_mb(std::size_t megabytes);
+  void clear();
+  bool probe(std::uint64_t key, TranspositionEntry& out) const;
   void store(std::uint64_t key, int depth, int score, TranspositionFlag flag,
-             const Move& move, int ply) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    TranspositionEntry& slot = entries_[index(key)];
-    if (slot.depth > depth && slot.key == key) {
-      return;
-    }
-    slot.key = key;
-    slot.depth = depth;
-    const int normalized = normalize_mate_score(score, ply);
-    slot.score = encode_score(normalized, ply);
-    slot.flag = flag;
-    slot.best_move = move;
-  }
+             const Move& move, int ply);
 
-  static int decode_score(int stored_score, int ply) {
-    return decode_mate_score(stored_score, ply);
-  }
-
-  static int encode_score(int score, int ply) {
-    return encode_mate_score(score, ply);
-  }
+  static int decode_score(int stored_score, int ply);
+  static int encode_score(int score, int ply);
 
 private:
   std::size_t index(std::uint64_t key) const {
     return static_cast<std::size_t>(key) & mask_;
   }
 
-  std::vector<TranspositionEntry> entries_;
+  std::vector<Cluster> clusters_;
   std::size_t mask_ = 0;
-  mutable std::mutex mutex_;
 };
 
 } // namespace chess

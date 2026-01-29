@@ -5,6 +5,7 @@
 #include "chess/move_ordering.hpp"
 #include "chess/moves.hpp"
 #include "chess/nnue_sf.hpp"
+#include "chess/piece_values.hpp"
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
 #include "chess/scoring_rules.hpp"
@@ -116,6 +117,12 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
   if (!scratch.time_manager || !scratch.time_manager->enabled()) {
     return false;
   }
+  if (scratch.time_manager->hard_limit_reached()) {
+    if (scratch.abort_requested) {
+      scratch.abort_requested->store(true, std::memory_order_relaxed);
+    }
+    return true;
+  }
   if ((nodes & kTimeCheckMask) != 0) {
     return false;
   }
@@ -125,6 +132,45 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
   if (scratch.abort_requested) {
     scratch.abort_requested->store(true, std::memory_order_relaxed);
   }
+  return true;
+}
+
+SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
+                               SideToMove stm, const EvaluatorFn& evaluator,
+                               SearchScratch& scratch, int ply,
+                               int repetition_start, int ply_from_root,
+                               bool is_pv, std::uint64_t& nodes,
+                               const Move* parent_move,
+                               const uint32_t* excluded_root_moves,
+                               std::size_t excluded_root_count);
+
+/**
+ * @brief Runs a shallow internal iterative deepening (IID) search.
+ *
+ * Used to seed move ordering when no TT move is available. The search is
+ * intentionally shallow and uses a full window to discover a plausible
+ * principal move without skewing bounds.
+ */
+bool run_internal_iterative_deepening(Board& board, SideToMove stm, int depth,
+                                      const EvaluatorFn& evaluator,
+                                      SearchScratch& scratch, int ply,
+                                      int repetition_start, int ply_from_root,
+                                      std::uint64_t& nodes, Move& out_move) {
+  if (depth < 3) {
+    return false;
+  }
+
+  const int iid_depth = std::max(1, depth - 2);
+  SearchResult iid = alphabeta_minimax(
+      board, iid_depth, -INF, INF, stm, evaluator, scratch, ply,
+      repetition_start, ply_from_root, false, nodes, nullptr, nullptr, 0);
+  if (iid.aborted) {
+    return false;
+  }
+  if (iid.best_move.moving_pc == OccupancyType::empty) {
+    return false;
+  }
+  out_move = iid.best_move;
   return true;
 }
 
@@ -155,15 +201,6 @@ struct MoveEvaluationResult {
   int score = 0;
   bool aborted = false;
 };
-
-SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
-                               SideToMove stm, const EvaluatorFn& evaluator,
-                               SearchScratch& scratch, int ply,
-                               int repetition_start, int ply_from_root,
-                               bool is_pv, std::uint64_t& nodes,
-                               const Move* parent_move,
-                               const uint32_t* excluded_root_moves,
-                               std::size_t excluded_root_count);
 
 // This is it, the core move evaluation function, calling alphabeta_minimax()
 MoveEvaluationResult evaluate_move(Board& board, const Move& move,
@@ -702,7 +739,26 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   TranspositionEntry cached_entry;
   bool has_cached_move = false;
   Move cached_move{};
-  if (tt && tt->probe(board.position_key, cached_entry)) {
+  bool tt_hit = false;
+  if (tt) {
+    if (search_stats_enabled()) {
+      const auto start = std::chrono::steady_clock::now();
+      tt_hit = tt->probe(board.position_key, cached_entry);
+      const auto end = std::chrono::steady_clock::now();
+      const std::uint64_t elapsed = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+              .count());
+      auto& stats = search_stats();
+      stats.tt_probes.fetch_add(1, std::memory_order_relaxed);
+      if (tt_hit) {
+        stats.tt_hits.fetch_add(1, std::memory_order_relaxed);
+      }
+      stats.tt_probe_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
+    } else {
+      tt_hit = tt->probe(board.position_key, cached_entry);
+    }
+  }
+  if (tt_hit) {
     if (!is_excluded_move(cached_entry.best_move)) {
       const int cached_score = normalize_mate_score(
           TranspositionTable::decode_score(cached_entry.score, ply), ply);
@@ -717,6 +773,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
             tt_result.principal_variation.clear();
             tt_result.principal_variation.push_back(tt_result.best_move);
             tt_result.pv_length = 1;
+          }
+          if (search_stats_enabled()) {
+            search_stats().tt_cutoffs.fetch_add(1, std::memory_order_relaxed);
           }
           return tt_result;
         }
@@ -739,6 +798,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
             tt_cutoff.principal_variation.push_back(tt_cutoff.best_move);
             tt_cutoff.pv_length = 1;
           }
+          if (search_stats_enabled()) {
+            search_stats().tt_cutoffs.fetch_add(1, std::memory_order_relaxed);
+          }
           return tt_cutoff;
         }
       }
@@ -746,6 +808,19 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         has_cached_move = true;
         cached_move = cached_entry.best_move;
       }
+    }
+  }
+
+  // IID: if no TT move is available at PV nodes, run a shallow search to
+  // seed move ordering with a likely principal move.
+  if (!has_cached_move && is_pv) {
+    Move iid_move{};
+    if (run_internal_iterative_deepening(board, stm, depth, evaluator, scratch,
+                                         ply, repetition_start, ply_from_root,
+                                         nodes, iid_move) &&
+        !is_excluded_move(iid_move)) {
+      has_cached_move = true;
+      cached_move = iid_move;
     }
   }
 
@@ -860,10 +935,67 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       }
     }
   }
+
+  // razor pruning: shallow check before full search at low depth in non-PV
+  // nodes to save eval calls when the position is already far below alpha.
+  if (!is_pv && depth <= 3 && !is_check(board, stm)) {
+    if (!static_eval_ready) {
+      const int eval =
+          evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
+      static_eval = eval;
+      static_eval_normalized = normalize_mate_score(eval, ply);
+      static_eval_ready = true;
+    }
+    const int margin_idx = std::min(depth, 3);
+    const int razor_margin =
+        sparams.futility_margins[static_cast<std::size_t>(margin_idx)] + 150;
+    bool do_razor = false;
+    if (stm == SideToMove::White) {
+      do_razor = static_eval_normalized + razor_margin <= alpha;
+    } else {
+      do_razor = static_eval_normalized - razor_margin >= beta;
+    }
+    if (do_razor) {
+      const int qs =
+          normalize_mate_score(quiescence(board, alpha, beta, stm, evaluator,
+                                          scratch.nnue_adapter, nodes, tt, ply),
+                               ply);
+      if (stm == SideToMove::White) {
+        if (qs <= alpha) {
+          SearchResult prune{};
+          prune.score = qs;
+          prune.outcome = SearchResult::Outcome::InProgress;
+          prune.pv_length = 0;
+          return prune;
+        }
+      } else {
+        if (qs >= beta) {
+          SearchResult prune{};
+          prune.score = qs;
+          prune.outcome = SearchResult::Outcome::InProgress;
+          prune.pv_length = 0;
+          return prune;
+        }
+      }
+    }
+  }
   uint16_t move_count = 0;
   // GENERATE LEGAL MOVES, filtering excluded root moves if any and
   // then sorting them
-  auto moves = generate_legal_moves(board, stm, move_count);
+  std::array<uint32_t, kMaxMovementCount> moves{};
+  if (search_stats_enabled()) {
+    const auto start = std::chrono::steady_clock::now();
+    moves = generate_legal_moves(board, stm, move_count);
+    const auto end = std::chrono::steady_clock::now();
+    const std::uint64_t elapsed = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+            .count());
+    auto& stats = search_stats();
+    stats.movegen_calls.fetch_add(1, std::memory_order_relaxed);
+    stats.movegen_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
+  } else {
+    moves = generate_legal_moves(board, stm, move_count);
+  }
 
   if (apply_root_exclusions) {
     uint16_t write_idx = 0;
@@ -1063,7 +1195,14 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     if (is_capture && !is_pv && !parent_in_check &&
         (!has_cached_move || move_code != tt_code)) {
       const int see = static_exchange_eval(board, move);
-      if (see < 0) {
+      int see_threshold = 0;
+      if (depth <= 4) {
+        const int captured_value = piece_material_magnitude(move.captured_pc);
+        if (captured_value > 0 && captured_value <= 330) {
+          see_threshold = 30;
+        }
+      }
+      if (see < see_threshold) {
         if (search_stats_enabled()) {
           search_stats().see_prunes.fetch_add(1, std::memory_order_relaxed);
         }
@@ -1590,21 +1729,70 @@ SearchResult search_position(Board& board, SideToMove stm,
 
   if (search_stats_enabled()) {
     const auto& stats = search_stats();
-    std::cerr << "[search-stats] q_nodes="
-              << stats.quiescence_nodes.load(std::memory_order_relaxed)
-              << " q_stand_pat_cutoffs="
-              << stats.quiescence_stand_pat_cutoffs.load(
-                     std::memory_order_relaxed)
-              << " q_zero_gain_skips="
-              << stats.quiescence_zero_gain_skips.load(std::memory_order_relaxed)
-              << " q_delta_prunes="
-              << stats.quiescence_delta_prunes.load(std::memory_order_relaxed)
-              << " null_cutoffs="
-              << stats.null_move_cutoffs.load(std::memory_order_relaxed)
-              << " lmp_prunes="
-              << stats.lmp_prunes.load(std::memory_order_relaxed)
-              << " pvs_researches="
-              << stats.pvs_researches.load(std::memory_order_relaxed) << '\n';
+    const auto q_nodes = stats.quiescence_nodes.load(std::memory_order_relaxed);
+    const auto q_stand_pat =
+        stats.quiescence_stand_pat_cutoffs.load(std::memory_order_relaxed);
+    const auto q_zero_gain =
+        stats.quiescence_zero_gain_skips.load(std::memory_order_relaxed);
+    const auto q_delta =
+        stats.quiescence_delta_prunes.load(std::memory_order_relaxed);
+    const auto null_cutoffs =
+        stats.null_move_cutoffs.load(std::memory_order_relaxed);
+    const auto lmp_prunes = stats.lmp_prunes.load(std::memory_order_relaxed);
+    const auto pvs_researches =
+        stats.pvs_researches.load(std::memory_order_relaxed);
+    const auto eval_calls = stats.eval_calls.load(std::memory_order_relaxed);
+    const auto eval_time_ns = stats.eval_time_ns.load(std::memory_order_relaxed);
+    const auto movegen_calls =
+        stats.movegen_calls.load(std::memory_order_relaxed);
+    const auto movegen_time_ns =
+        stats.movegen_time_ns.load(std::memory_order_relaxed);
+    const auto tt_probes = stats.tt_probes.load(std::memory_order_relaxed);
+    const auto tt_hits = stats.tt_hits.load(std::memory_order_relaxed);
+    const auto tt_cutoffs = stats.tt_cutoffs.load(std::memory_order_relaxed);
+    const auto tt_probe_time_ns =
+        stats.tt_probe_time_ns.load(std::memory_order_relaxed);
+    const double eval_ms = static_cast<double>(eval_time_ns) / 1e6;
+    const double movegen_ms = static_cast<double>(movegen_time_ns) / 1e6;
+    const double tt_probe_ms = static_cast<double>(tt_probe_time_ns) / 1e6;
+    const double avg_eval_us = eval_calls > 0
+                                   ? static_cast<double>(eval_time_ns) / 1e3 /
+                                         static_cast<double>(eval_calls)
+                                   : 0.0;
+    const double avg_movegen_us =
+        movegen_calls > 0 ? static_cast<double>(movegen_time_ns) / 1e3 /
+                                static_cast<double>(movegen_calls)
+                          : 0.0;
+    const double tt_hit_rate = tt_probes > 0
+                                   ? (100.0 * static_cast<double>(tt_hits) /
+                                      static_cast<double>(tt_probes))
+                                   : 0.0;
+    std::cerr << "[search-stats] q_nodes=" << q_nodes
+              << " q_stand_pat_cutoffs=" << q_stand_pat
+              << " q_zero_gain_skips=" << q_zero_gain
+              << " q_delta_prunes=" << q_delta
+              << " null_cutoffs=" << null_cutoffs << " lmp_prunes=" << lmp_prunes
+              << " pvs_researches=" << pvs_researches
+              << " eval_calls=" << eval_calls
+              << " eval_ms=" << static_cast<std::uint64_t>(eval_ms)
+              << " avg_eval_us=" << avg_eval_us
+              << " movegen_calls=" << movegen_calls
+              << " movegen_ms=" << static_cast<std::uint64_t>(movegen_ms)
+              << " avg_movegen_us=" << avg_movegen_us
+              << " tt_probes=" << tt_probes << " tt_hits=" << tt_hits
+              << " tt_hit_rate=" << tt_hit_rate << " tt_cutoffs=" << tt_cutoffs
+              << " tt_probe_ms=" << static_cast<std::uint64_t>(tt_probe_ms)
+              << '\n';
+    const double total_bucket_ms = eval_ms + movegen_ms + tt_probe_ms;
+    if (total_bucket_ms > 0.0) {
+      const double eval_pct = 100.0 * eval_ms / total_bucket_ms;
+      const double movegen_pct = 100.0 * movegen_ms / total_bucket_ms;
+      const double tt_pct = 100.0 * tt_probe_ms / total_bucket_ms;
+      std::cerr << "[search-prof] eval_pct=" << eval_pct
+                << " movegen_pct=" << movegen_pct << " tt_probe_pct=" << tt_pct
+                << " total_bucket_ms="
+                << static_cast<std::uint64_t>(total_bucket_ms) << '\n';
+    }
     std::cerr << "[search-stop] last_depth=" << last_completed_depth
               << " target_depth=" << params.depth
               << " aborted=" << (stopped_by_abort ? 1 : 0)

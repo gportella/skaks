@@ -120,11 +120,11 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.best_move = parsed.count("bestmove") > 0;
     result.options.static_eval = parsed.count("static-eval") > 0;
-  #if SKAKS_ENABLE_HCE
+#if SKAKS_ENABLE_HCE
     result.options.eval_breakdown = parsed.count("eval-breakdown") > 0;
-  #else
+#else
     result.options.eval_breakdown = false;
-  #endif
+#endif
 
 #if SKAKS_ENABLE_HCE
     const bool want_nnue = parsed.count("nnue") > 0;

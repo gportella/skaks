@@ -37,6 +37,7 @@ public:
   void reset_history(const Board& board);
   void clear_history();
   void clear_transposition_table();
+  void resize_transposition_table_mb(std::size_t megabytes);
 
   [[nodiscard]] const MoveHistory& history() const {
     return history_;

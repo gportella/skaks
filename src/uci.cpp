@@ -741,11 +741,15 @@ void run_uci_loop(Engine& engine, int default_depth,
   auto search_state = std::make_shared<AsyncSearchState>();
   bool ponder_enabled = true;
   constexpr int kMinThreads = 1;
+  constexpr int kMinHashMB = 1;
+  constexpr int kMaxHashMB = 65536;
   const unsigned detected_threads = std::thread::hardware_concurrency();
   const int max_threads =
       static_cast<int>(std::clamp(detected_threads, 1u, 256u));
   int thread_count = std::clamp(engine.thread_count(), kMinThreads, max_threads);
   engine.set_thread_count(thread_count);
+  int hash_mb = static_cast<int>(DEFAULT_HASH_MB);
+  engine.resize_transposition_table_mb(static_cast<std::size_t>(hash_mb));
 
   auto join_worker = [&]() {
     if (search_state->worker.joinable()) {
@@ -870,6 +874,14 @@ void run_uci_loop(Engine& engine, int default_depth,
         threads_line << "option name Threads type spin default " << thread_count
                      << " min " << kMinThreads << " max " << max_threads;
         const std::string line_out = threads_line.str();
+        log_uci("out", line_out);
+        std::cout << line_out << '\n';
+      }
+      {
+        std::ostringstream hash_line;
+        hash_line << "option name Hash type spin default " << hash_mb << " min "
+                  << kMinHashMB << " max " << kMaxHashMB;
+        const std::string line_out = hash_line.str();
         log_uci("out", line_out);
         std::cout << line_out << '\n';
       }
@@ -1026,6 +1038,31 @@ void run_uci_loop(Engine& engine, int default_depth,
         if (clamped != requested) {
           const std::string info = "info string Threads option is limited to " +
                                    std::to_string(max_threads);
+          log_uci("out", info);
+          if (info_strings_enabled()) {
+            std::cout << info << '\n';
+            std::cout.flush();
+          }
+        }
+      } else if (lowered_name == "hash") {
+        int requested = hash_mb;
+        if (!value.empty()) {
+          try {
+            requested = std::stoi(value);
+          } catch (const std::exception&) {
+            requested = hash_mb;
+          }
+        }
+        const int clamped = std::clamp(requested, kMinHashMB, kMaxHashMB);
+        if (clamped != hash_mb) {
+          stop_search(true);
+          hash_mb = clamped;
+          engine.resize_transposition_table_mb(
+              static_cast<std::size_t>(hash_mb));
+        }
+        if (clamped != requested) {
+          const std::string info = "info string Hash option is limited to " +
+                                   std::to_string(kMaxHashMB);
           log_uci("out", info);
           if (info_strings_enabled()) {
             std::cout << info << '\n';

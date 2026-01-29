@@ -5,6 +5,7 @@
 #include "chess/cli.hpp"
 #include "chess/defaults.hpp"
 #include "chess/engine.hpp"
+#include "chess/search_stats.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -212,6 +213,9 @@ int run_perf_mode(Engine& engine, const chess::CliOptions& options) {
 
       engine.reset_history(board);
       engine.clear_transposition_table();
+      if (search_stats_enabled()) {
+        reset_search_stats();
+      }
 
       auto session = engine.create_session(board);
       SearchParameters params = base_params;

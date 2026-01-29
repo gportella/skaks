@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
@@ -24,13 +25,14 @@ inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 10;
 inline constexpr int QUIESCENCE_ZERO_GAIN_SKIP_INDEX = 1;
 inline constexpr int QUIESCENCE_MAX_QUIET_CHECKS = 0;
 inline constexpr int NULL_MOVE_REDUCTION = 3;
-inline constexpr int NULL_MOVE_REDUCTION_DIVISOR = 6;
+inline constexpr int NULL_MOVE_REDUCTION_DIVISOR = 8;
 inline constexpr int NULL_MOVE_MIN_DEPTH = 4;
 inline constexpr double LMR_INTERCEPT = 0.0;
 inline constexpr double LMR_DIVISOR = 1.5;
 inline constexpr double LMR_HISTORY_DIVISOR = 8000.0;
 inline constexpr double LMR_PV_OFFSET = 1.0;
 inline constexpr std::array<int, 4> FUTILITY_MARGINS{0, 120, 240, 400};
+inline constexpr std::size_t DEFAULT_HASH_MB = 512;
 
 inline constexpr uint8_t MAX_BB_UPDATE_PIECES =
     3; // max 3 pieces change per move

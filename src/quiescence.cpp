@@ -7,6 +7,7 @@
 #include "chess/search_stats.hpp"
 
 #include <algorithm>
+#include <chrono>
 
 namespace chess {
 
@@ -82,9 +83,29 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   // TT probe: tighten window or return cached cutoff/score
   if (tt) {
     TranspositionEntry e;
-    if (tt->probe(board.position_key, e)) {
+    bool hit = false;
+    if (search_stats_enabled()) {
+      const auto start = std::chrono::steady_clock::now();
+      hit = tt->probe(board.position_key, e);
+      const auto end = std::chrono::steady_clock::now();
+      const std::uint64_t elapsed = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+              .count());
+      auto& stats = search_stats();
+      stats.tt_probes.fetch_add(1, std::memory_order_relaxed);
+      if (hit) {
+        stats.tt_hits.fetch_add(1, std::memory_order_relaxed);
+      }
+      stats.tt_probe_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
+    } else {
+      hit = tt->probe(board.position_key, e);
+    }
+    if (hit) {
       const int tscore = TranspositionTable::decode_score(e.score, ply);
       if (e.flag == TranspositionFlag::Exact) {
+        if (search_stats_enabled()) {
+          search_stats().tt_cutoffs.fetch_add(1, std::memory_order_relaxed);
+        }
         return tscore;
       } else if (e.flag == TranspositionFlag::LowerBound) {
         if (tscore >= beta)
@@ -95,8 +116,12 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
           return tscore;
         beta = std::min(beta, tscore);
       }
-      if (alpha >= beta)
+      if (alpha >= beta) {
+        if (search_stats_enabled()) {
+          search_stats().tt_cutoffs.fetch_add(1, std::memory_order_relaxed);
+        }
         return tscore;
+      }
     }
   }
 
@@ -146,9 +171,33 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   uint16_t move_count = 0;
   std::array<uint32_t, kMaxMovementCount> moves{};
   if (in_check) {
-    moves = generate_legal_moves(board, stm, move_count);
+    if (search_stats_enabled()) {
+      const auto start = std::chrono::steady_clock::now();
+      moves = generate_legal_moves(board, stm, move_count);
+      const auto end = std::chrono::steady_clock::now();
+      const std::uint64_t elapsed = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+              .count());
+      auto& stats = search_stats();
+      stats.movegen_calls.fetch_add(1, std::memory_order_relaxed);
+      stats.movegen_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
+    } else {
+      moves = generate_legal_moves(board, stm, move_count);
+    }
   } else {
-    moves = generate_all_moves(board, stm, move_count);
+    if (search_stats_enabled()) {
+      const auto start = std::chrono::steady_clock::now();
+      moves = generate_all_moves(board, stm, move_count);
+      const auto end = std::chrono::steady_clock::now();
+      const std::uint64_t elapsed = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+              .count());
+      auto& stats = search_stats();
+      stats.movegen_calls.fetch_add(1, std::memory_order_relaxed);
+      stats.movegen_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
+    } else {
+      moves = generate_all_moves(board, stm, move_count);
+    }
     uint16_t write_idx = 0;
     // filter only legal captures and promotions
     for (uint16_t i = 0; i < move_count; ++i) {

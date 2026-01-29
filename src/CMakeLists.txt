@@ -21,6 +21,7 @@ add_library(chess_engine_core STATIC
   pst_tables.cpp
   scoring_rules.cpp
   search.cpp
+  transposition_table.cpp
   time_manager.cpp
   zobrist.cpp
   uci.cpp

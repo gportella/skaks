@@ -13,6 +13,7 @@
 #include "chess/pst_tables.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/search.hpp"
+#include "chess/search_stats.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/uci.hpp"
@@ -36,12 +37,12 @@ namespace {
 
 #if SKAKS_ENABLE_HCE
 constexpr std::array<const char*, static_cast<std::size_t>(chess::TermId::Count)>
-  kTermNames = {"Material",      "PawnCenter",   "CenterControl",
-          "Attacking",     "KingSafety",   "KingMobility",
-          "Pins",          "PstMg",        "PstEg",
-          "PassedPawns",   "Initiative",   "Hanging",
-          "KingRing",      "BishopPair",   "RookFiles",
-          "MinorMobility", "PawnStructure"};
+    kTermNames = {"Material",      "PawnCenter",   "CenterControl",
+                  "Attacking",     "KingSafety",   "KingMobility",
+                  "Pins",          "PstMg",        "PstEg",
+                  "PassedPawns",   "Initiative",   "Hanging",
+                  "KingRing",      "BishopPair",   "RookFiles",
+                  "MinorMobility", "PawnStructure"};
 #endif
 
 bool suppress_info_strings() {
@@ -559,10 +560,24 @@ int main(int argc, char** argv) {
     std::cout << "Board of color to move: " << board.side_to_move << "\n";
     chess::terminal_board_print(board);
   }
+  if (chess::search_stats_enabled()) {
+    chess::reset_search_stats();
+  }
   int move_number = 1;
   const int max_full_moves = cli.options.max_full_moves;
   bool move_limit_reached = false;
   bool result_announced = false;
+
+  struct SelfPlayStats {
+    std::uint64_t nodes = 0;
+    std::uint64_t elapsed_ms = 0;
+    std::uint64_t total_depth = 0;
+    std::uint64_t total_seldepth = 0;
+    int max_depth = 0;
+    int max_seldepth = 0;
+    int searches = 0;
+    int book_moves = 0;
+  } selfplay_stats;
 
   while (true) {
     std::chrono::steady_clock::time_point move_start{};
@@ -607,6 +622,17 @@ int main(int argc, char** argv) {
       auto result = engine.search(board, params);
       move_to_play = result.best_move;
       search_result = result;
+      selfplay_stats.nodes += result.nodes;
+      selfplay_stats.elapsed_ms += result.elapsed_ms;
+      selfplay_stats.total_depth +=
+          static_cast<std::uint64_t>(std::max(result.searched_depth, 0));
+      selfplay_stats.total_seldepth +=
+          static_cast<std::uint64_t>(std::max(result.selective_depth, 0));
+      selfplay_stats.max_depth =
+          std::max(selfplay_stats.max_depth, result.searched_depth);
+      selfplay_stats.max_seldepth =
+          std::max(selfplay_stats.max_seldepth, result.selective_depth);
+      selfplay_stats.searches += 1;
     }
 
     if (profile && !cli.options.only_fen && search_result) {
@@ -666,6 +692,7 @@ int main(int argc, char** argv) {
                   << chess::square_to_string(move_to_play->to);
         if (move_from_book) {
           std::cout << " (book)";
+          selfplay_stats.book_moves += 1;
         }
         std::cout << "\n";
       }
@@ -721,6 +748,83 @@ int main(int argc, char** argv) {
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         total_end - total_start);
     std::cout << "[timing] total_ms=" << elapsed.count() << "\n";
+  }
+
+  if (!cli.options.only_fen) {
+    const std::uint64_t total_nodes = selfplay_stats.nodes;
+    const std::uint64_t total_ms =
+        std::max<std::uint64_t>(1, selfplay_stats.elapsed_ms);
+    const std::uint64_t nps = (total_nodes * 1000ULL) / total_ms;
+    const int plies_played = std::max(0, move_number - 1);
+    const std::uint64_t avg_nodes_per_ply =
+        plies_played > 0 ? total_nodes / static_cast<std::uint64_t>(plies_played)
+                         : 0;
+    const std::uint64_t avg_ms_per_ply =
+        plies_played > 0 ? total_ms / static_cast<std::uint64_t>(plies_played)
+                         : 0;
+    const std::uint64_t avg_depth =
+        selfplay_stats.searches > 0
+            ? selfplay_stats.total_depth /
+                  static_cast<std::uint64_t>(selfplay_stats.searches)
+            : 0;
+    const std::uint64_t avg_seldepth =
+        selfplay_stats.searches > 0
+            ? selfplay_stats.total_seldepth /
+                  static_cast<std::uint64_t>(selfplay_stats.searches)
+            : 0;
+    std::cout << "[selfplay] plies=" << plies_played
+              << " searches=" << selfplay_stats.searches
+              << " book_moves=" << selfplay_stats.book_moves
+              << " nodes=" << total_nodes << " ms=" << total_ms << " nps=" << nps
+              << " avg_nodes/ply=" << avg_nodes_per_ply
+              << " avg_ms/ply=" << avg_ms_per_ply << " avg_depth=" << avg_depth
+              << " avg_seldepth=" << avg_seldepth
+              << " max_depth=" << selfplay_stats.max_depth
+              << " max_seldepth=" << selfplay_stats.max_seldepth << "\n";
+    if (chess::search_stats_enabled()) {
+      const auto& stats = chess::search_stats();
+      const std::uint64_t eval_calls =
+          stats.eval_calls.load(std::memory_order_relaxed);
+      const std::uint64_t eval_ns =
+          stats.eval_time_ns.load(std::memory_order_relaxed);
+      const std::uint64_t movegen_calls =
+          stats.movegen_calls.load(std::memory_order_relaxed);
+      const std::uint64_t movegen_ns =
+          stats.movegen_time_ns.load(std::memory_order_relaxed);
+      const std::uint64_t tt_probes =
+          stats.tt_probes.load(std::memory_order_relaxed);
+      const std::uint64_t tt_hits =
+          stats.tt_hits.load(std::memory_order_relaxed);
+      const std::uint64_t tt_cutoffs =
+          stats.tt_cutoffs.load(std::memory_order_relaxed);
+      const std::uint64_t tt_probe_ns =
+          stats.tt_probe_time_ns.load(std::memory_order_relaxed);
+      const double eval_ms = static_cast<double>(eval_ns) / 1e6;
+      const double movegen_ms = static_cast<double>(movegen_ns) / 1e6;
+      const double tt_probe_ms = static_cast<double>(tt_probe_ns) / 1e6;
+      const double avg_eval_us = eval_calls > 0
+                                     ? static_cast<double>(eval_ns) / 1e3 /
+                                           static_cast<double>(eval_calls)
+                                     : 0.0;
+      const double avg_movegen_us = movegen_calls > 0
+                                        ? static_cast<double>(movegen_ns) / 1e3 /
+                                              static_cast<double>(movegen_calls)
+                                        : 0.0;
+      const double tt_hit_rate = tt_probes > 0
+                                     ? (100.0 * static_cast<double>(tt_hits) /
+                                        static_cast<double>(tt_probes))
+                                     : 0.0;
+      std::cout << "[selfplay-prof] eval_calls=" << eval_calls
+                << " eval_ms=" << static_cast<std::uint64_t>(eval_ms)
+                << " avg_eval_us=" << avg_eval_us
+                << " movegen_calls=" << movegen_calls
+                << " movegen_ms=" << static_cast<std::uint64_t>(movegen_ms)
+                << " avg_movegen_us=" << avg_movegen_us
+                << " tt_probes=" << tt_probes << " tt_hits=" << tt_hits
+                << " tt_hit_rate=" << tt_hit_rate << " tt_cutoffs=" << tt_cutoffs
+                << " tt_probe_ms=" << static_cast<std::uint64_t>(tt_probe_ms)
+                << "\n";
+    }
   }
 
   return 0;

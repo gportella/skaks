@@ -5,6 +5,7 @@
 #include "chess/moves.hpp"
 #include "chess/nnue_sf.hpp"
 #include "chess/scoring_rules.hpp"
+#include "chess/search_stats.hpp"
 #include "chess/time_manager.hpp"
 #include "evaluate.h"
 #include "probe.h"
@@ -37,6 +38,7 @@ void log_smp_fallback() {
 
 Engine::Engine() : history_{} {
   clear_history();
+  tt_.resize_mb(DEFAULT_HASH_MB);
 }
 
 SearchResult Engine::search(Board& board, const SearchParameters& params) {
@@ -112,6 +114,19 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
 
   EvaluatorFn evaluator = [eng_ptr = &engine](const Board& state,
                                               NnueAdapter* adapter) {
+    if (search_stats_enabled()) {
+      const auto start = std::chrono::steady_clock::now();
+      const int score =
+          eng_ptr->evaluate(state, eng_ptr->evaluation_mode(), adapter);
+      const auto end = std::chrono::steady_clock::now();
+      const std::uint64_t elapsed = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+              .count());
+      auto& stats = search_stats();
+      stats.eval_calls.fetch_add(1, std::memory_order_relaxed);
+      stats.eval_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
+      return score;
+    }
     return eng_ptr->evaluate(state, eng_ptr->evaluation_mode(), adapter);
   };
 
@@ -178,6 +193,10 @@ void Engine::clear_history() {
 
 void Engine::clear_transposition_table() {
   tt_.clear();
+}
+
+void Engine::resize_transposition_table_mb(std::size_t megabytes) {
+  tt_.resize_mb(megabytes);
 }
 
 void Engine::reset_history(const Board& board) {
