@@ -188,8 +188,7 @@ Bitboard occupancy_from_index(std::uint64_t index,
   return occ;
 }
 
-[[maybe_unused]] std::size_t index_from_occupancy(Bitboard occ,
-                                                  const int* bits,
+[[maybe_unused]] std::size_t index_from_occupancy(Bitboard occ, const int* bits,
                                                   int bit_count) {
   std::size_t index = 0;
   for (int i = 0; i < bit_count; ++i) {

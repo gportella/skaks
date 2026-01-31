@@ -5,7 +5,7 @@
 
 namespace chess {
 
-inline constexpr std::string_view kEngineName = "skaks";
+inline constexpr std::string_view kEngineName = "s𝕜a𝕜s";
 inline constexpr std::string_view kEngineVersion = "0.18.4";
 
 inline constexpr std::array<std::string_view, 19> kOptimizationFeatures{
