@@ -2,6 +2,7 @@
 
 #include "chess/board.hpp"
 #include "chess/board_arithmetic.hpp"
+#include "chess/magic_bitboards.hpp"
 #include "chess/ray_tables.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
@@ -74,83 +75,11 @@ inline const std::array<Bitboard, 64> KING_ATTACKS =
     build_king_attack_patterns();
 
 inline Bitboard rook_attacks_from(u_int8_t sq, Bitboard b_occupancy) {
-
-  const auto& rays = ROOK_RAYS[sq];
-  //  north
-  auto north = rays.north;
-  auto blocker = north & b_occupancy;
-  if (blocker) {
-    int b = lsb_index(blocker);
-    const Bitboard mask_inclusive =
-        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
-    north &= mask_inclusive;
-  }
-  // East
-  Bitboard east = rays.east;
-  Bitboard east_blockers = east & b_occupancy;
-  if (east_blockers) {
-    int b = lsb_index(east_blockers); // nearest east blocker
-    const Bitboard mask_inclusive =
-        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
-    east &= mask_inclusive;
-  }
-
-  // South
-  Bitboard south = rays.south;
-  Bitboard south_blockers = south & b_occupancy;
-  if (south_blockers) {
-    int b = msb_index(south_blockers);
-    Bitboard mask_inclusive = ~((Bitboard(1) << b) - 1);
-    south &= mask_inclusive;
-  }
-  // West
-  Bitboard west = rays.west;
-  Bitboard west_blockers = west & b_occupancy;
-  if (west_blockers) {
-    int b = msb_index(west_blockers); // nearest west blocker
-    Bitboard mask_inclusive = ~((Bitboard(1) << b) - 1);
-    west &= mask_inclusive;
-  }
-
-  return north | south | east | west;
+  return rook_attacks_magic(sq, b_occupancy);
 }
 
 inline Bitboard bishop_attacks_from(u_int8_t sq, Bitboard b_occupancy) {
-
-  const auto& rays = BISHOP_RAYS[sq];
-  //  northeast
-  auto northeast = rays.northeast;
-  auto ne_blocker = northeast & b_occupancy;
-  if (ne_blocker) {
-    int b = lsb_index(ne_blocker);
-    const Bitboard mask_inclusive =
-        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
-    northeast &= mask_inclusive;
-  }
-  auto southeast = rays.southeast;
-  auto se_blocker = southeast & b_occupancy;
-  if (se_blocker) {
-    int b = msb_index(se_blocker);
-    Bitboard mask_inclusive = ~((Bitboard(1) << b) - 1);
-    southeast &= mask_inclusive;
-  }
-  auto northwest = rays.northwest;
-  auto nw_blocker = northwest & b_occupancy;
-  if (nw_blocker) {
-    int b = lsb_index(nw_blocker);
-    const Bitboard mask_inclusive =
-        (b == 63) ? U64_MASK : ((Bitboard(1) << (b + 1)) - 1);
-    northwest &= mask_inclusive;
-  }
-  auto southwest = rays.southwest;
-  auto sw_blocker = southwest & b_occupancy;
-  if (sw_blocker) {
-    int b = msb_index(sw_blocker);
-    Bitboard mask_inclusive = ~((Bitboard(1) << b) - 1);
-    southwest &= mask_inclusive;
-  }
-
-  return northeast | southeast | northwest | southwest;
+  return bishop_attacks_magic(sq, b_occupancy);
 }
 
 // pawns are a pain

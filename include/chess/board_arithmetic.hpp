@@ -2,6 +2,7 @@
 
 #include "chess/types.hpp"
 
+#include <algorithm>
 #include <bit>
 #include <cassert>
 
@@ -65,7 +66,8 @@ inline constexpr void toggle_bit(Bitboard& bb, Square sq) noexcept {
 // #if defined(_MSC_VER)
 //   return static_cast<int>(__popcnt64(bb));
 // #else
-//   return static_cast<int>(__builtin_popcountll(static_cast<unsigned long long>(bb)));
+//   return static_cast<int>(__builtin_popcountll(static_cast<unsigned long
+//   long>(bb)));
 // #endif
 // }
 inline int popcount_bitboard(Bitboard bb) noexcept {

@@ -1,0 +1,22 @@
+search_nnue:
+  aspiration_window_initial: 100
+  aspiration_window_max: 1200
+  quiescence_delta_margin: 250
+  quiescence_max_ply: 8
+  quiescence_max_noisy_moves: 10
+  quiescence_zero_gain_skip_index: 1
+  quiescence_max_quiet_checks: 0
+  null_move_reduction: 3
+  null_move_reduction_divisor: 8
+  null_move_min_depth: 4
+  lmr_intercept: 0.0
+  lmr_divisor: 1.5
+  lmr_history_divisor: 8000.0
+  lmr_pv_offset: 1.0
+  futility_margins: [0, 120, 300, 700]
+  razor_margin_bonus: 80
+  probcut_margin: 250
+  probcut_reduction: 4
+  probcut_max_captures: 3
+  see_capture_threshold: 10
+  see_capture_max_value: 330

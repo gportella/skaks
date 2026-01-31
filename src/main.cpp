@@ -6,6 +6,7 @@
 #include "chess/demo_debug.hpp"
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
+#include "chess/magic_bitboards.hpp"
 #include "chess/moves.hpp"
 #include "chess/params_loader.hpp"
 #include "chess/perf.hpp"
@@ -213,6 +214,7 @@ chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options) {
 } // namespace
 
 int main(int argc, char** argv) {
+  chess::init_magic_bitboards();
   const auto cli = chess::parse_cli(argc, argv);
   if (cli.parse_error) {
     std::cerr << "Error: " << cli.message << "\n";

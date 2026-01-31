@@ -97,6 +97,17 @@ struct SearchScratch {
 
 constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
 
+bool search_stats_print_enabled() {
+  static bool initialized = false;
+  static bool enabled = false;
+  if (!initialized) {
+    initialized = true;
+    const char* flag = std::getenv("SKAKS_SEARCH_STATS_PRINT");
+    enabled = (flag != nullptr && *flag != '\0');
+  }
+  return enabled;
+}
+
 inline bool should_abort_due_to_time(SearchScratch& scratch,
                                      std::uint64_t nodes) {
   if (scratch.use_nodes && scratch.node_limit > 0 &&
@@ -145,7 +156,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
                                std::size_t excluded_root_count);
 
 /**
- * @brief Runs a shallow internal iterative deepening (IID) search.
+ * @brief Shallow internal iterative deepening (IID) search.
  *
  * Used to seed move ordering when no TT move is available. The search is
  * intentionally shallow and uses a full window to discover a plausible
@@ -984,7 +995,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   // GENERATE LEGAL MOVES, filtering excluded root moves if any and
   // then sorting them
   std::array<uint32_t, kMaxMovementCount> moves{};
-  if (search_stats_enabled()) {
+  if (search_stats_enabled() && search_stats_print_enabled()) {
     const auto start = std::chrono::steady_clock::now();
     moves = generate_legal_moves(board, stm, move_count);
     const auto end = std::chrono::steady_clock::now();

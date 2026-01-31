@@ -10,6 +10,7 @@ add_library(chess_engine_core STATIC
   engine.cpp
   exchange.cpp
   cli.cpp
+  magic_bitboards.cpp
   nnue_sf.cpp
   moves.cpp
     move_ordering.cpp

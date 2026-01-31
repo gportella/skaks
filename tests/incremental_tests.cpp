@@ -61,13 +61,20 @@ PstScores calculate_pst_scratch(const Board& board) {
 class IncrementalTest : public ::testing::Test {
 protected:
   void VerifyIncrementalScores(const Board& board) {
+#if !SKAKS_ENABLE_HCE
+    (void)board;
+    return;
+#endif
     // Verify Material
+#if SKAKS_ENABLE_HCE
     int expected_material = calculate_material_scratch(board);
     EXPECT_EQ(board.material_score, expected_material)
         << "Material score mismatch. Incremental: " << board.material_score
         << ", Scratch: " << expected_material
         << "\nFEN: " << board_to_fen(board);
+#endif
 
+#if SKAKS_ENABLE_HCE
     // Verify PST
     PstScores expected_pst = calculate_pst_scratch(board);
     EXPECT_EQ(board.pst_midgame_score, expected_pst.midgame)
@@ -82,6 +89,7 @@ protected:
         << "Phase mismatch. Incremental: " << board.phase
         << ", Scratch: " << expected_pst.phase
         << "\nFEN: " << board_to_fen(board);
+#endif
   }
 
   void RunRandomWalk(Board& board, int depth, int seed) {

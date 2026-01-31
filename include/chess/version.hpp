@@ -6,10 +6,10 @@
 namespace chess {
 
 inline constexpr std::string_view kEngineName = "skaks";
-inline constexpr std::string_view kEngineVersion = "0.17.7";
+inline constexpr std::string_view kEngineVersion = "0.18.4";
 
 inline constexpr std::array<std::string_view, 19> kOptimizationFeatures{
-    "Bitboard move generation with precomputed attack masks",
+    "Bitboard generation with precomputed attack masks and magic bitboards",
     "Alpha-beta search, tuneable size transposition table caching",
     "Zobrist hashing for incremental board state keys",
     "Repetition detection through historical position tracking",
