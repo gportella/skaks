@@ -30,4 +30,9 @@ TEST(SearchPvsRetry, BlackDoesNotTriggerOnFailHigh) {
   EXPECT_FALSE(needs_retry);
 }
 
+TEST(SearchSingular, BetaMarginApplied) {
+  const int beta = chess::search_detail::singular_beta(100, 6, 8);
+  EXPECT_EQ(beta, 52);
+}
+
 } // namespace

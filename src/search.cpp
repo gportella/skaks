@@ -1,5 +1,6 @@
 #include "chess/search.hpp"
 
+#include "chess/board_arithmetic.hpp"
 #include "chess/complexity.hpp"
 #include "chess/exchange.hpp"
 #include "chess/move_ordering.hpp"
@@ -14,6 +15,7 @@
 #include "chess/search_stats.hpp"
 #include "chess/syzygy.hpp"
 #include "chess/time_manager.hpp"
+#include "chess/types_io.hpp"
 
 #include <algorithm>
 #include <array>
@@ -26,6 +28,7 @@
 #include <iostream>
 #include <memory>
 #include <new>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -75,6 +78,13 @@ bool should_retry_pvs(SideToMove stm, int child_score, int narrow_alpha,
 namespace {
 
 constexpr int kMaxAspirationAttempts = 24;
+constexpr int kSingularMinDepth = 6;
+constexpr int kSingularMarginPerDepth = 8;
+constexpr int kSingularSearchDivisor = 2;
+constexpr int kNegativeExtension = 1;
+constexpr int kCorrectionClamp = 1024;
+constexpr int kCorrectionUpdateClamp = 256;
+constexpr int kCorrectionScale = 8;
 
 struct LazySmpThread;
 
@@ -94,6 +104,11 @@ struct SearchScratch {
   std::atomic<bool>* abort_requested = nullptr;
   std::atomic<bool>* local_abort = nullptr;
   LazySmpThread* thread = nullptr;
+  std::array<int, MAX_PLY> static_eval_history{};
+  static constexpr std::size_t kCorrTableSize = 1 << 14;
+  std::array<std::array<int, kCorrTableSize>, 2> pawn_corr{};
+  std::array<std::array<int, kCorrTableSize>, 2> nonpawn_corr{};
+  std::array<std::array<int, 64>, 2> cont_corr{};
 };
 
 constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
@@ -147,14 +162,70 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
   return true;
 }
 
-SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
-                               SideToMove stm, const EvaluatorFn& evaluator,
-                               SearchScratch& scratch, int ply,
-                               int repetition_start, int ply_from_root,
-                               bool is_pv, std::uint64_t& nodes,
-                               const Move* parent_move,
-                               const uint32_t* excluded_root_moves,
-                               std::size_t excluded_root_count);
+inline std::size_t corr_index(std::uint64_t key) {
+  return static_cast<std::size_t>(key) & (SearchScratch::kCorrTableSize - 1);
+}
+
+inline std::uint64_t pawn_key(const Board& board) {
+  const Bitboard wp = board.pieces_bb[static_cast<std::size_t>(Piece::wP)];
+  const Bitboard bp = board.pieces_bb[static_cast<std::size_t>(Piece::bP)];
+  const std::uint64_t key =
+      static_cast<std::uint64_t>(wp) ^ (static_cast<std::uint64_t>(bp) << 1);
+  return key ^ (key >> 32);
+}
+
+inline std::uint64_t nonpawn_key(const Board& board) {
+  const Bitboard wp = board.pieces_bb[static_cast<std::size_t>(Piece::wP)];
+  const Bitboard bp = board.pieces_bb[static_cast<std::size_t>(Piece::bP)];
+  const Bitboard occ = board.occupancy[to_index(PieceColor::Both)];
+  const std::uint64_t key = static_cast<std::uint64_t>(occ ^ wp ^ bp);
+  return key ^ (key >> 32);
+}
+
+inline int correction_delta(SearchScratch& scratch, SideToMove stm,
+                            const Move* parent_move, std::uint64_t pkey,
+                            std::uint64_t npkey) {
+  const std::size_t side = to_index(stm);
+  const std::size_t pidx = corr_index(pkey);
+  const std::size_t nidx = corr_index(npkey);
+  int corr = scratch.pawn_corr[side][pidx] + scratch.nonpawn_corr[side][nidx];
+  if (parent_move && parent_move->moving_pc != OccupancyType::empty) {
+    const std::size_t idx = static_cast<std::size_t>(parent_move->to);
+    corr += scratch.cont_corr[side][idx];
+  }
+  return corr / kCorrectionScale;
+}
+
+inline void update_correction_history(SearchScratch& scratch, SideToMove stm,
+                                      const Move* parent_move,
+                                      std::uint64_t pkey, std::uint64_t npkey,
+                                      int depth, int diff) {
+  const std::size_t side = to_index(stm);
+  const std::size_t pidx = corr_index(pkey);
+  const std::size_t nidx = corr_index(npkey);
+  const int delta = std::clamp(diff * depth / 4, -kCorrectionUpdateClamp,
+                               kCorrectionUpdateClamp);
+  scratch.pawn_corr[side][pidx] =
+      std::clamp(scratch.pawn_corr[side][pidx] + delta, -kCorrectionClamp,
+                 kCorrectionClamp);
+  scratch.nonpawn_corr[side][nidx] =
+      std::clamp(scratch.nonpawn_corr[side][nidx] + delta, -kCorrectionClamp,
+                 kCorrectionClamp);
+  if (parent_move && parent_move->moving_pc != OccupancyType::empty) {
+    const std::size_t idx = static_cast<std::size_t>(parent_move->to);
+    scratch.cont_corr[side][idx] =
+        std::clamp(scratch.cont_corr[side][idx] + delta, -kCorrectionClamp,
+                   kCorrectionClamp);
+  }
+}
+
+SearchResult
+alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
+                  const EvaluatorFn& evaluator, SearchScratch& scratch, int ply,
+                  int repetition_start, int ply_from_root, bool is_pv,
+                  std::uint64_t& nodes, const Move* parent_move,
+                  const Move* excluded_move, const uint32_t* excluded_root_moves,
+                  std::size_t excluded_root_count);
 
 /**
  * @brief Shallow internal iterative deepening (IID) search.
@@ -173,9 +244,10 @@ bool run_internal_iterative_deepening(Board& board, SideToMove stm, int depth,
   }
 
   const int iid_depth = std::max(1, depth - 2);
-  SearchResult iid = alphabeta_minimax(
-      board, iid_depth, -INF, INF, stm, evaluator, scratch, ply,
-      repetition_start, ply_from_root, false, nodes, nullptr, nullptr, 0);
+  SearchResult iid =
+      alphabeta_minimax(board, iid_depth, -INF, INF, stm, evaluator, scratch,
+                        ply, repetition_start, ply_from_root, false, nodes,
+                        nullptr, nullptr, nullptr, 0);
   if (iid.aborted) {
     return false;
   }
@@ -220,6 +292,13 @@ struct MoveEvaluationContext {
   int beta = INF;
   bool is_pv = false;
   bool parent_in_check = false;
+  bool is_improving = false;
+  bool tt_move = false;
+  int tt_depth = 0;
+  bool tt_lower_bound = false;
+  int tt_score = 0;
+  int tt_extension = 0;
+  int tt_negative_extension = 0;
   int move_number = 1;
   SideToMove stm = SideToMove::White;
   int ply = 0;
@@ -283,6 +362,15 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
     child_depth += CHECK_EXTENSION;
   }
 
+  if (ctx.tt_move) {
+    if (ctx.tt_extension > 0) {
+      child_depth += ctx.tt_extension;
+    }
+    if (ctx.tt_negative_extension < 0) {
+      child_depth = std::max(0, child_depth + ctx.tt_negative_extension);
+    }
+  }
+
   const int history_score = scratch.ordering.history_score(move);
 
   int reduction = 0;
@@ -302,6 +390,18 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
     }
     scaled -= static_cast<double>(history_score) /
               std::max(sparams.lmr_history_divisor, 1.0);
+    if (ctx.tt_move) {
+      scaled -= 1.0;
+    }
+    if (ctx.is_improving) {
+      scaled -= 0.5;
+    }
+    if (history_score > 8000) {
+      scaled -= 0.5;
+    }
+    if (!ctx.is_pv && move_number > 8) {
+      scaled += 0.25;
+    }
 
     const int tentative = static_cast<int>(std::round(scaled));
     reduction = std::clamp(tentative, 0, child_depth - 1);
@@ -314,7 +414,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
     SearchResult res = alphabeta_minimax(
         board, depth_to_use, a_val, b_val, flip_side(ctx.stm), evaluator,
         scratch, ctx.ply + 1, next_repetition_start, ctx.ply_from_root + 1,
-        pv_flag, nodes, &move, nullptr, 0);
+        pv_flag, nodes, &move, nullptr, nullptr, 0);
     res.score = normalize_mate_score(res.score, ctx.ply);
     return res;
   };
@@ -687,14 +787,13 @@ inline void store_killer_move(SearchScratch& scratch, int ply,
   primary = code;
 }
 
-SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
-                               SideToMove stm, const EvaluatorFn& evaluator,
-                               SearchScratch& scratch, int ply,
-                               int repetition_start, int ply_from_root,
-                               bool is_pv, std::uint64_t& nodes,
-                               const Move* parent_move,
-                               const uint32_t* excluded_root_moves,
-                               std::size_t excluded_root_count) {
+SearchResult
+alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
+                  const EvaluatorFn& evaluator, SearchScratch& scratch, int ply,
+                  int repetition_start, int ply_from_root, bool is_pv,
+                  std::uint64_t& nodes, const Move* parent_move,
+                  const Move* excluded_move, const uint32_t* excluded_root_moves,
+                  std::size_t excluded_root_count) {
   if (scratch.use_nodes && scratch.node_limit > 0 &&
       nodes >= scratch.node_limit) {
     if (scratch.abort_requested) {
@@ -731,7 +830,19 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   };
 
   auto is_excluded_move = [&](const Move& move) -> bool {
-    if (!apply_root_exclusions || move.moving_pc == OccupancyType::empty) {
+    if (move.moving_pc == OccupancyType::empty) {
+      return false;
+    }
+    if (excluded_move && excluded_move->moving_pc != OccupancyType::empty) {
+      if (move.from == excluded_move->from && move.to == excluded_move->to &&
+          move.moving_pc == excluded_move->moving_pc &&
+          move.captured_pc == excluded_move->captured_pc &&
+          move.promo_pc == excluded_move->promo_pc &&
+          move.flags == excluded_move->flags) {
+        return true;
+      }
+    }
+    if (!apply_root_exclusions) {
       return false;
     }
     const uint32_t encoded =
@@ -778,6 +889,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   bool has_cached_move = false;
   Move cached_move{};
   bool tt_hit = false;
+  int tt_depth = -1;
+  int tt_score = 0;
+  bool tt_lower_bound = false;
   if (tt) {
     if (search_stats_enabled()) {
       const auto start = std::chrono::steady_clock::now();
@@ -800,6 +914,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     if (!is_excluded_move(cached_entry.best_move)) {
       const int cached_score = normalize_mate_score(
           TranspositionTable::decode_score(cached_entry.score, ply), ply);
+      tt_depth = cached_entry.depth;
+      tt_score = cached_score;
+      tt_lower_bound = (cached_entry.flag == TranspositionFlag::LowerBound);
       if (cached_entry.depth >= depth) {
         switch (cached_entry.flag) {
         case TranspositionFlag::Exact: {
@@ -862,6 +979,62 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     }
   }
 
+  uint32_t tt_code = 0;
+  if (has_cached_move) {
+    if (is_excluded_move(cached_move)) {
+      has_cached_move = false;
+    } else {
+      // we'll encode it for sorting, same format as generated moves
+      tt_code = encode_move(cached_move.from, cached_move.to,
+                            cached_move.moving_pc, cached_move.captured_pc,
+                            cached_move.promo_pc, cached_move.flags);
+    }
+  }
+
+  int tt_extension = 0;
+  int tt_negative_extension = 0;
+  if (has_cached_move && tt_lower_bound && depth >= kSingularMinDepth &&
+      !is_pv && !is_check(board, stm) && !is_excluded_move(cached_move)) {
+    const int singular_beta =
+        search_detail::singular_beta(tt_score, depth, kSingularMarginPerDepth);
+    const int singular_depth = std::max(1, depth / kSingularSearchDivisor);
+    SearchResult singular = alphabeta_minimax(
+        board, singular_depth, singular_beta - 1, singular_beta, stm, evaluator,
+        scratch, ply, repetition_start, ply_from_root, false, nodes, parent_move,
+        &cached_move, nullptr, 0);
+    if (singular.aborted) {
+      return singular;
+    }
+    const int singular_score = normalize_mate_score(singular.score, ply);
+    if (stm == SideToMove::White) {
+      if (singular_score < singular_beta) {
+        tt_extension = 1;
+      } else if (singular_score >= beta) {
+        SearchResult cutoff{};
+        cutoff.score = singular_score;
+        cutoff.outcome = SearchResult::Outcome::InProgress;
+        cutoff.pv_length = 0;
+        return cutoff;
+      }
+    } else {
+      if (singular_score > singular_beta) {
+        tt_extension = 1;
+      } else if (singular_score <= alpha) {
+        SearchResult cutoff{};
+        cutoff.score = singular_score;
+        cutoff.outcome = SearchResult::Outcome::InProgress;
+        cutoff.pv_length = 0;
+        return cutoff;
+      }
+    }
+  }
+  if (has_cached_move && tt_lower_bound && !is_pv && depth >= 4) {
+    if ((stm == SideToMove::White && tt_score >= beta) ||
+        (stm == SideToMove::Black && tt_score <= alpha)) {
+      tt_negative_extension = -kNegativeExtension;
+    }
+  }
+
   // NULL MOVE PRUNING
   // Ahead of main search loop to see if we can prune immediately,
   // ie. can this side pass and still be >= beta
@@ -881,7 +1054,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     SearchResult null_result = alphabeta_minimax(
         board, std::max(0, depth - 1 - null_move_reduction), beta - 1, beta,
         flip_side(stm), evaluator, scratch, ply + 1, repetition_start,
-        ply_from_root + 1, false, nodes, nullptr, nullptr, 0);
+        ply_from_root + 1, false, nodes, nullptr, nullptr, nullptr, 0);
     if (null_result.aborted) {
       undo_null_move(board, undo_null);
       scratch.nnue_adapter->pop_null();
@@ -943,30 +1116,35 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   bool static_eval_ready = false;
   int static_eval = 0;
   int static_eval_normalized = 0;
+  int static_eval_corrected = 0;
+  const std::uint64_t pkey = pawn_key(board);
+  const std::uint64_t npkey = nonpawn_key(board);
 
   // reverse futility pruning: early cutoff in non-PV, non-check nodes
   if (!is_pv && depth >= 3 && depth <= 8 && !is_check(board, stm)) {
     const int eval =
         evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
+    const int corr = correction_delta(scratch, stm, parent_move, pkey, npkey);
     const int margin_idx = std::min(depth, 3);
     const int margin =
         sparams.futility_margins[static_cast<std::size_t>(margin_idx)];
     const int eval_normalized = normalize_mate_score(eval, ply);
     static_eval = eval;
     static_eval_normalized = eval_normalized;
+    static_eval_corrected = eval_normalized + corr;
     static_eval_ready = true;
     if (stm == SideToMove::White) {
-      if (eval_normalized - margin >= beta) {
+      if (static_eval_corrected - margin >= beta) {
         SearchResult prune{};
-        prune.score = eval_normalized;
+        prune.score = static_eval_corrected;
         prune.outcome = SearchResult::Outcome::InProgress;
         prune.pv_length = 0;
         return prune;
       }
     } else {
-      if (eval_normalized + margin <= alpha) {
+      if (static_eval_corrected + margin <= alpha) {
         SearchResult prune{};
-        prune.score = eval_normalized;
+        prune.score = static_eval_corrected;
         prune.outcome = SearchResult::Outcome::InProgress;
         prune.pv_length = 0;
         return prune;
@@ -980,8 +1158,10 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     if (!static_eval_ready) {
       const int eval =
           evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
+      const int corr = correction_delta(scratch, stm, parent_move, pkey, npkey);
       static_eval = eval;
       static_eval_normalized = normalize_mate_score(eval, ply);
+      static_eval_corrected = static_eval_normalized + corr;
       static_eval_ready = true;
     }
     const int margin_idx = std::min(depth, 3);
@@ -990,9 +1170,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         sparams.razor_margin_bonus;
     bool do_razor = false;
     if (stm == SideToMove::White) {
-      do_razor = static_eval_normalized + razor_margin <= alpha;
+      do_razor = static_eval_corrected + razor_margin <= alpha;
     } else {
-      do_razor = static_eval_normalized - razor_margin >= beta;
+      do_razor = static_eval_corrected - razor_margin >= beta;
     }
     if (do_razor) {
       const int qs =
@@ -1085,23 +1265,35 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   if (!is_pv && depth >= 6 && !is_check(board, stm)) {
     const int probcut_depth = depth - sparams.probcut_reduction;
     if (probcut_depth >= 1) {
+      if (!static_eval_ready) {
+        static_eval =
+            evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
+        static_eval_normalized = normalize_mate_score(static_eval, ply);
+        static_eval_corrected =
+            static_eval_normalized +
+            correction_delta(scratch, stm, parent_move, pkey, npkey);
+        static_eval_ready = true;
+      }
       const int bound = (stm == SideToMove::White) ? beta : alpha;
+      const int eval_ref = static_eval_corrected;
+      const int dynamic_margin =
+          sparams.probcut_margin + std::max(0, std::abs(bound - eval_ref) / 4);
       const int alpha_pc =
-          (stm == SideToMove::White) ? bound : bound - sparams.probcut_margin;
+          (stm == SideToMove::White) ? bound : bound - dynamic_margin;
       const int beta_pc =
-          (stm == SideToMove::White) ? bound + sparams.probcut_margin : bound;
+          (stm == SideToMove::White) ? bound + dynamic_margin : bound;
       int captures_checked = 0;
-      for (uint16_t i = 0; i < move_count; ++i) {
-        const Move move = decode_move(moves[i]);
+      auto try_probcut = [&](const Move& move) -> std::optional<SearchResult> {
         if (move.captured_pc == OccupancyType::empty) {
-          continue;
+          return std::nullopt;
         }
-        if (static_exchange_eval(board, move) < 0) {
-          continue;
+        const int see = static_exchange_eval(board, move);
+        if (see < dynamic_margin / 2) {
+          return std::nullopt;
         }
         if (sparams.probcut_max_captures > 0 &&
             ++captures_checked > sparams.probcut_max_captures) {
-          break;
+          return std::nullopt;
         }
         const Undo undo = make_move(board, move);
         scratch.nnue_adapter->push_move(move);
@@ -1111,7 +1303,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         SearchResult probcut = alphabeta_minimax(
             board, probcut_depth, alpha_pc, beta_pc, flip_side(stm), evaluator,
             scratch, ply + 1, next_repetition_start, ply_from_root + 1, false,
-            nodes, &move, nullptr, 0);
+            nodes, &move, nullptr, nullptr, 0);
         scratch.nnue_adapter->pop_move();
         undo_move(board, undo);
         if (probcut.aborted) {
@@ -1126,21 +1318,28 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
           cutoff.pv_length = 0;
           return cutoff;
         }
+        return std::nullopt;
+      };
+
+      if (tt_code != 0) {
+        const Move tt_move = decode_move(tt_code);
+        if (auto res = try_probcut(tt_move)) {
+          return *res;
+        }
+      }
+      for (uint16_t i = 0; i < move_count; ++i) {
+        const uint32_t code = moves[i];
+        if (tt_code != 0 && code == tt_code) {
+          continue;
+        }
+        const Move move = decode_move(code);
+        if (auto res = try_probcut(move)) {
+          return *res;
+        }
       }
     }
   }
 
-  uint32_t tt_code = 0;
-  if (has_cached_move) {
-    if (is_excluded_move(cached_move)) {
-      has_cached_move = false;
-    } else {
-      // we'll encode it for sorting, same format as generated moves
-      tt_code = encode_move(cached_move.from, cached_move.to,
-                            cached_move.moving_pc, cached_move.captured_pc,
-                            cached_move.promo_pc, cached_move.flags);
-    }
-  }
   // get history matrix pointer for sorting
   const auto* history_matrix = scratch.ordering.history_matrix();
   const uint32_t counter_code =
@@ -1159,6 +1358,17 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   const bool parent_in_check = is_check(board, stm);
   int moves_tried = 0;
 
+  bool is_improving = false;
+  if (static_eval_ready && ply < MAX_PLY) {
+    scratch.static_eval_history[static_cast<std::size_t>(ply)] =
+        static_eval_corrected;
+    if (ply >= 2) {
+      const int prev =
+          scratch.static_eval_history[static_cast<std::size_t>(ply - 2)];
+      is_improving = static_eval_corrected > prev;
+    }
+  }
+
   // Prepare move evaluation context for SMP tasks and main loop
   MoveEvaluationContext move_ctx{};
   move_ctx.depth = depth;
@@ -1169,6 +1379,7 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   move_ctx.repetition_start = repetition_start;
   move_ctx.parent_in_check = parent_in_check;
   move_ctx.parent_move = parent_move;
+  move_ctx.is_improving = is_improving;
   move_ctx.allow_pvs = true;
 
   LazySmpThread* smp_thread = scratch.thread ? scratch.thread : tls_lazy_thread;
@@ -1253,6 +1464,9 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
   for (uint16_t i = 0; i < move_count; ++i) {
     const uint32_t move_code = moves[i];
     Move move = decode_move(move_code);
+    if (is_excluded_move(move)) {
+      continue;
+    }
     const bool is_capture = move.captured_pc != OccupancyType::empty;
     const bool is_promo = move.promo_pc != OccupancyType::empty;
     const bool quiet_like = !is_capture && !is_promo;
@@ -1312,12 +1526,15 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         static_eval =
             evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
         static_eval_normalized = normalize_mate_score(static_eval, ply);
+        static_eval_corrected =
+            static_eval_normalized +
+            correction_delta(scratch, stm, parent_move, pkey, npkey);
         static_eval_ready = true;
       }
       const auto margin =
           search_params()
               .futility_margins[static_cast<std::size_t>(child_depth_lmp)];
-      const int adjusted_eval = static_eval_normalized + margin;
+      const int adjusted_eval = static_eval_corrected + margin;
       if ((stm == SideToMove::White && adjusted_eval <= alpha) ||
           (stm == SideToMove::Black && adjusted_eval >= beta)) {
         if (search_stats_enabled()) {
@@ -1328,6 +1545,18 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
     }
 
     moves_tried = move_number;
+
+    move_ctx.move_number = move_number;
+    move_ctx.alpha = alpha;
+    move_ctx.beta = beta;
+    move_ctx.allow_pvs = true;
+    move_ctx.tt_move = (tt_code != 0 && move_code == tt_code);
+    move_ctx.tt_depth = tt_depth;
+    move_ctx.tt_lower_bound = tt_lower_bound;
+    move_ctx.tt_score = tt_score;
+    move_ctx.tt_extension = move_ctx.tt_move ? tt_extension : 0;
+    move_ctx.tt_negative_extension =
+        move_ctx.tt_move ? tt_negative_extension : 0;
 
     const bool can_split =
         smp_supported && depth >= smp_ctx->min_split_depth && move_number > 1;
@@ -1369,11 +1598,6 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
       smp_ctx->enqueue(std::move(task));
       continue;
     }
-
-    move_ctx.move_number = move_number;
-    move_ctx.alpha = alpha;
-    move_ctx.beta = beta;
-    move_ctx.allow_pvs = true;
 
     // ACTUAL MOVE EVALUATION IN THE MAIN THREAD
     // recursive call to alphabeta_minimax happens inside evaluate_move()
@@ -1429,6 +1653,14 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
 
   if (best.aborted) {
     return best;
+  }
+
+  if (static_eval_ready && depth > 0 &&
+      best.best_move.moving_pc != OccupancyType::empty) {
+    const int normalized_best = normalize_mate_score(best.score, ply);
+    const int diff = normalized_best - static_eval_corrected;
+    update_correction_history(scratch, stm, parent_move, pkey, npkey, depth,
+                              diff);
   }
 
   // STORE TO TRANSPOSITION TABLE THE RESULT OF THIS NODE's SEARCH
@@ -1652,7 +1884,7 @@ SearchResult search_position(Board& board, SideToMove stm,
         // this will recurse down the tree and return the result
         result = alphabeta_minimax(
             board, current_depth, alpha, beta, stm, evaluator, scratch,
-            start_ply, repetition_start, 0, is_pv, nodes, nullptr,
+            start_ply, repetition_start, 0, is_pv, nodes, nullptr, nullptr,
             excluded_count ? excluded_moves.data() : nullptr, excluded_count);
         result.searched_depth = current_depth;
         result.selective_depth = current_depth;

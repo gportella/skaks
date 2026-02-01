@@ -1,6 +1,6 @@
 # Skaks chess engine
 
-![skaks](skaks_pict.png)
+![skaks](assets/images/skaks_pict.png)
 
 Simple toy chess engine, for learning and fun. 
 
@@ -14,11 +14,14 @@ By default it uses as many threads as logical CPU cores, but you can change this
 
 Supports time controls (though could be better), fixed-depth or fixed-node search (fixed node is single-threaded for now), both via cli or `UCI`. The most significant (??) search params can be set via cli or `UCI`, besides the python bindings (see further down).
 
+![strip top](assets/images/strip_top.png)
 
 ## Current version 
 
+
 ```test
 > skaks -vv
+
 
 skaks version 0.17.0
 Optimizations:
@@ -44,7 +47,10 @@ Optimizations:
  - Compiled with NEON eval_linear path
 ```
 
+![strip middle](assets/images/strip_mid.png)
+
 ### HCE vs NNUE
+
 
 I did not manage to improve the classical heuristics very much, I don't have the know-how, patience and computational resources to do so. Borrowed some PST from various engines and tried with `Texel`, but a good fit against the `win-lose-draw` curve from quiet positions obtained from millions of high-profile games did not really translate into great play for me. `SPSA` + poor-man's `SPRT` should do, but don't have the time and resources, and the evaluation parameters were improving very slowly. Did not want to add more terms to the mix. Therefore I took the approach to *borrow* Stockfish's NNUE, and spend the time coding search. The search params still need to be fine-tuned, though, just took values that seem reasonable. Overall, the change to NNUE was for the better; quick and dirty comparison with `fastchess`:
 
@@ -88,8 +94,10 @@ and then you can install `skaks-opt`, from this directory, also using `pip insta
 
 `skaks-opt` has a subcommand, `skaks-opt perf-pgn` that allows to profile the execution a bit better by playing some games, it's good to check the miliseconds per ply.
 
+![knight](assets/images/knight.png)
 
 ## Prerequisites
+
 
 - CMake 3.24+
 - Ninja (recommended generator)
@@ -159,3 +167,5 @@ cmake --build --preset linux-cross-x86_64
 
 The presets assume a clang-based cross toolchain (`clang --target=<triple>`). Adjust the compiler paths and `CMAKE_SYSROOT` as needed.
 
+
+![strip bottom](assets/images/strip_bottom.png)

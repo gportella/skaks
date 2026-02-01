@@ -1,5 +1,6 @@
 #include "chess/quiescence.hpp"
 
+#include "chess/exchange.hpp"
 #include "chess/moves.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
@@ -167,6 +168,18 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     }
   }
 
+  if (!in_check) {
+    if (maximizing) {
+      if (stand_pat + sparams.quiescence_delta_margin <= alpha) {
+        return stand_pat;
+      }
+    } else {
+      if (stand_pat - sparams.quiescence_delta_margin >= beta) {
+        return stand_pat;
+      }
+    }
+  }
+
   // Generate candidate moves (all if in check, otherwise noisy only)
   uint16_t move_count = 0;
   std::array<uint32_t, kMaxMovementCount> moves{};
@@ -288,6 +301,16 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
 
   for (uint16_t i = 0; i < move_count; ++i) {
     Move move = decode_move(moves[i]);
+
+    if (move.captured_pc != OccupancyType::empty) {
+      const int see = static_exchange_eval(board, move);
+      if (see < 0) {
+        if (search_stats_enabled()) {
+          search_stats().see_prunes.fetch_add(1, std::memory_order_relaxed);
+        }
+        continue;
+      }
+    }
 
     if (!in_check) {
       // Delta and zero-gain pruning for noisy moves
