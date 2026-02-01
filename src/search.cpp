@@ -104,11 +104,7 @@ struct SearchScratch {
   std::atomic<bool>* abort_requested = nullptr;
   std::atomic<bool>* local_abort = nullptr;
   LazySmpThread* thread = nullptr;
-  std::array<int, MAX_PLY> static_eval_history{};
-  static constexpr std::size_t kCorrTableSize = 1 << 14;
-  std::array<std::array<int, kCorrTableSize>, 2> pawn_corr{};
-  std::array<std::array<int, kCorrTableSize>, 2> nonpawn_corr{};
-  std::array<std::array<int, 64>, 2> cont_corr{};
+  struct EvalCorrectionHistory* corr = nullptr;
 };
 
 constexpr std::uint64_t kTimeCheckMask = 0x3FFULL;
@@ -162,8 +158,17 @@ inline bool should_abort_due_to_time(SearchScratch& scratch,
   return true;
 }
 
+struct EvalCorrectionHistory {
+  static constexpr std::size_t kCorrTableSize = 1 << 14;
+  std::array<int, MAX_PLY> static_eval_history{};
+  std::array<std::array<int, kCorrTableSize>, 2> pawn_corr{};
+  std::array<std::array<int, kCorrTableSize>, 2> nonpawn_corr{};
+  std::array<std::array<int, 64>, 2> cont_corr{};
+};
+
 inline std::size_t corr_index(std::uint64_t key) {
-  return static_cast<std::size_t>(key) & (SearchScratch::kCorrTableSize - 1);
+  return static_cast<std::size_t>(key) &
+         (EvalCorrectionHistory::kCorrTableSize - 1);
 }
 
 inline std::uint64_t pawn_key(const Board& board) {
@@ -185,13 +190,17 @@ inline std::uint64_t nonpawn_key(const Board& board) {
 inline int correction_delta(SearchScratch& scratch, SideToMove stm,
                             const Move* parent_move, std::uint64_t pkey,
                             std::uint64_t npkey) {
+  if (!scratch.corr) {
+    return 0;
+  }
   const std::size_t side = to_index(stm);
   const std::size_t pidx = corr_index(pkey);
   const std::size_t nidx = corr_index(npkey);
-  int corr = scratch.pawn_corr[side][pidx] + scratch.nonpawn_corr[side][nidx];
+  int corr = scratch.corr->pawn_corr[side][pidx] +
+             scratch.corr->nonpawn_corr[side][nidx];
   if (parent_move && parent_move->moving_pc != OccupancyType::empty) {
     const std::size_t idx = static_cast<std::size_t>(parent_move->to);
-    corr += scratch.cont_corr[side][idx];
+    corr += scratch.corr->cont_corr[side][idx];
   }
   return corr / kCorrectionScale;
 }
@@ -200,21 +209,24 @@ inline void update_correction_history(SearchScratch& scratch, SideToMove stm,
                                       const Move* parent_move,
                                       std::uint64_t pkey, std::uint64_t npkey,
                                       int depth, int diff) {
+  if (!scratch.corr) {
+    return;
+  }
   const std::size_t side = to_index(stm);
   const std::size_t pidx = corr_index(pkey);
   const std::size_t nidx = corr_index(npkey);
   const int delta = std::clamp(diff * depth / 4, -kCorrectionUpdateClamp,
                                kCorrectionUpdateClamp);
-  scratch.pawn_corr[side][pidx] =
-      std::clamp(scratch.pawn_corr[side][pidx] + delta, -kCorrectionClamp,
+  scratch.corr->pawn_corr[side][pidx] =
+      std::clamp(scratch.corr->pawn_corr[side][pidx] + delta, -kCorrectionClamp,
                  kCorrectionClamp);
-  scratch.nonpawn_corr[side][nidx] =
-      std::clamp(scratch.nonpawn_corr[side][nidx] + delta, -kCorrectionClamp,
-                 kCorrectionClamp);
+  scratch.corr->nonpawn_corr[side][nidx] =
+      std::clamp(scratch.corr->nonpawn_corr[side][nidx] + delta,
+                 -kCorrectionClamp, kCorrectionClamp);
   if (parent_move && parent_move->moving_pc != OccupancyType::empty) {
     const std::size_t idx = static_cast<std::size_t>(parent_move->to);
-    scratch.cont_corr[side][idx] =
-        std::clamp(scratch.cont_corr[side][idx] + delta, -kCorrectionClamp,
+    scratch.corr->cont_corr[side][idx] =
+        std::clamp(scratch.corr->cont_corr[side][idx] + delta, -kCorrectionClamp,
                    kCorrectionClamp);
   }
 }
@@ -661,6 +673,7 @@ struct LazySmpContext {
 struct LazySmpThread {
   LazySmpContext* context = nullptr;
   std::unique_ptr<NnueAdapter> nnue_adapter = nullptr;
+  std::unique_ptr<EvalCorrectionHistory> corr = nullptr;
   int id = 0;
 };
 
@@ -683,6 +696,7 @@ void execute_lazy_task(LazySmpTask& task, LazySmpThread& thread) {
   scratch.abort_requested = task.abort_flag ? task.abort_flag : ctx->abort_flag;
   scratch.local_abort = &task.split_point->cancel_flag;
   scratch.thread = &thread;
+  scratch.corr = thread.corr.get();
   // more convenint to keep threadless implementation
   // stash it in the scratch, don't rely on tls
   scratch.nnue_adapter = thread.nnue_adapter.get();
@@ -1359,12 +1373,12 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   int moves_tried = 0;
 
   bool is_improving = false;
-  if (static_eval_ready && ply < MAX_PLY) {
-    scratch.static_eval_history[static_cast<std::size_t>(ply)] =
+  if (static_eval_ready && ply < MAX_PLY && scratch.corr) {
+    scratch.corr->static_eval_history[static_cast<std::size_t>(ply)] =
         static_eval_corrected;
     if (ply >= 2) {
       const int prev =
-          scratch.static_eval_history[static_cast<std::size_t>(ply - 2)];
+          scratch.corr->static_eval_history[static_cast<std::size_t>(ply - 2)];
       is_improving = static_eval_corrected > prev;
     }
   }
@@ -1729,8 +1743,10 @@ SearchResult search_position(Board& board, SideToMove stm,
 
   KillerTable killers{};
   std::atomic<bool> abort_requested{false};
-  SearchScratch scratch{};
+  auto scratch_owner = std::make_unique<SearchScratch>();
+  SearchScratch& scratch = *scratch_owner;
   std::unique_ptr<NnueAdapter> nnue_adapter_owner;
+  std::unique_ptr<EvalCorrectionHistory> corr_owner;
   scratch.ordering.reset();
   scratch.history = history;
   scratch.killers = &killers;
@@ -1747,9 +1763,16 @@ SearchResult search_position(Board& board, SideToMove stm,
   scratch.thread = tls_lazy_thread;
   if (scratch.thread) {
     scratch.nnue_adapter = scratch.thread->nnue_adapter.get();
+    scratch.corr = scratch.thread->corr.get();
+    if (!scratch.corr) {
+      corr_owner = std::make_unique<EvalCorrectionHistory>();
+      scratch.corr = corr_owner.get();
+    }
   } else {
     nnue_adapter_owner = std::make_unique<NnueAdapter>(board);
     scratch.nnue_adapter = nnue_adapter_owner.get();
+    corr_owner = std::make_unique<EvalCorrectionHistory>();
+    scratch.corr = corr_owner.get();
   }
 
   if (search_stats_enabled()) {
@@ -2190,6 +2213,8 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
     threads[static_cast<std::size_t>(idx)].id = idx;
     threads[static_cast<std::size_t>(idx)].nnue_adapter =
         std::make_unique<NnueAdapter>(board);
+    threads[static_cast<std::size_t>(idx)].corr =
+        std::make_unique<EvalCorrectionHistory>();
 
 #if CHESS_USE_POSIX_THREADS
     pthread_attr_t attr;
@@ -2237,6 +2262,7 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
   threads[0].context = &context;
   threads[0].id = 0;
   threads[0].nnue_adapter = std::make_unique<NnueAdapter>(board);
+  threads[0].corr = std::make_unique<EvalCorrectionHistory>();
   tls_lazy_thread = &threads[0];
 
   SearchResult result = search_position(board, stm, parallel_params, evaluator,
