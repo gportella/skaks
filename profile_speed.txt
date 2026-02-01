@@ -1,0 +1,544 @@
+skaks version 0.16.4
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Incremental evaluation with piece-square tables
+ - MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - Non-incremental NNUE from Stockfish
+ - SIMD optimizations for bitboard operations and threads
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.510 W-L-D=9-8-33 nodes=36057359 ms=62295 nps=578816 avg_nodes/ply=16786 avg_ms/ply=29
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.510 W-L-D=9-8-33 nodes=36057359 ms=62299 nps=578779 avg_nodes/ply=16786 avg_ms/ply=29
+skaks version 0.17.1
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=10-7-33 nodes=40779326 ms=79440 nps=513334 avg_nodes/ply=17714 avg_ms/ply=34
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=10-7-33 nodes=40779326 ms=80726 nps=505157 avg_nodes/ply=17714 avg_ms/ply=35
+skaks version 0.17.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.510 W-L-D=8-7-35 nodes=46998206 ms=89843 nps=523114 avg_nodes/ply=21890 avg_ms/ply=41
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.510 W-L-D=8-7-35 nodes=46998206 ms=92137 nps=510090 avg_nodes/ply=21890 avg_ms/ply=42
+skaks version 0.17.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.510 W-L-D=8-7-35 nodes=46998206 ms=92927 nps=505754 avg_nodes/ply=21890 avg_ms/ply=43
+Repeat
+skaks version 0.17.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+Repeat
+skaks version 0.17.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=5-2-43 nodes=42103626 ms=83676 nps=503174 avg_nodes/ply=18179 avg_ms/ply=36
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=5-2-43 nodes=42103626 ms=83680 nps=503150 avg_nodes/ply=18179 avg_ms/ply=36
+skaks version 0.17.3
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=4-5-41 nodes=45840638 ms=87785 nps=522192 avg_nodes/ply=19801 avg_ms/ply=37
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=4-5-41 nodes=45840638 ms=87876 nps=521651 avg_nodes/ply=19801 avg_ms/ply=37
+skaks version 0.17.5
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=5-2-43 nodes=42103626 ms=78120 nps=538960 avg_nodes/ply=18179 avg_ms/ply=33
+skaks version 0.17.6
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search with transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=5-2-43 nodes=42103626 ms=80819 nps=520961 avg_nodes/ply=18179 avg_ms/ply=34
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=5-2-43 nodes=42103626 ms=81358 nps=517510 avg_nodes/ply=18179 avg_ms/ply=35
+skaks version 0.17.7
+Optimizations:
+ - Bitboard move generation with precomputed attack masks
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=5-2-43 nodes=42103626 ms=82642 nps=509470 avg_nodes/ply=18179 avg_ms/ply=35
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.530 W-L-D=5-2-43 nodes=42103626 ms=95988 nps=438634 avg_nodes/ply=18179 avg_ms/ply=41
+skaks version 0.18.1
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=91059 nps=247026 avg_nodes/ply=9948 avg_ms/ply=40
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=82775 nps=271748 avg_nodes/ply=9948 avg_ms/ply=36
+skaks version 0.18.2
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=48578 nps=463048 avg_nodes/ply=9948 avg_ms/ply=21
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=48733 nps=461575 avg_nodes/ply=9948 avg_ms/ply=21
+skaks version 0.18.4
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=49451 nps=454873 avg_nodes/ply=9948 avg_ms/ply=21
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=49687 nps=452713 avg_nodes/ply=9948 avg_ms/ply=21
+ŝ𝕜𝕒𝕜ŝ version 0.19.0
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=85860 nps=261984 avg_nodes/ply=9948 avg_ms/ply=37
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=81983 nps=274373 avg_nodes/ply=9948 avg_ms/ply=36
+ŝ𝕜𝕒𝕜ŝ version 0.19.2
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=45904 nps=490021 avg_nodes/ply=9948 avg_ms/ply=20
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=83583 nps=269121 avg_nodes/ply=9948 avg_ms/ply=36
+ŝ𝕜𝕒𝕜ŝ version 0.19.3
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=50153 nps=448506 avg_nodes/ply=9948 avg_ms/ply=22
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=49897 nps=450807 avg_nodes/ply=9948 avg_ms/ply=22
+ŝ𝕜𝕒𝕜ŝ version 0.20.0
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=48868 nps=460300 avg_nodes/ply=9948 avg_ms/ply=21
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=49440 nps=454974 avg_nodes/ply=9948 avg_ms/ply=21
+ŝ𝕜𝕒𝕜ŝ version 0.20.2
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=49332 nps=455970 avg_nodes/ply=9948 avg_ms/ply=21
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=50033 nps=449582 avg_nodes/ply=9948 avg_ms/ply=22
+ŝ𝕜𝕒𝕜ŝ version 0.20.3
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=49039 nps=458695 avg_nodes/ply=9948 avg_ms/ply=21
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.490 W-L-D=3-4-43 nodes=22493961 ms=50041 nps=449510 avg_nodes/ply=9948 avg_ms/ply=22
+ŝ𝕜𝕒𝕜ŝ version 0.20.3
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+ - Compiled with NEON eval_linear path
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.480 W-L-D=5-7-38 nodes=24602309 ms=52326 nps=470173 avg_nodes/ply=10944 avg_ms/ply=23
+Repeat
+[perf-pgn] positions= 50 games= 50
+[perf-pgn] score=0.480 W-L-D=5-7-38 nodes=24602309 ms=54269 nps=453340 avg_nodes/ply=10944 avg_ms/ply=24

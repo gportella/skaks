@@ -1007,8 +1007,11 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
 
   int tt_extension = 0;
   int tt_negative_extension = 0;
-  if (has_cached_move && tt_lower_bound && depth >= kSingularMinDepth &&
-      !is_pv && !is_check(board, stm) && !is_excluded_move(cached_move)) {
+  const bool tt_would_fail_high =
+      (stm == SideToMove::White) ? (tt_score >= beta) : (tt_score <= alpha);
+  if (has_cached_move && tt_lower_bound && tt_would_fail_high &&
+      depth >= kSingularMinDepth && !is_pv && !is_check(board, stm) &&
+      !is_excluded_move(cached_move)) {
     const int singular_beta =
         search_detail::singular_beta(tt_score, depth, kSingularMarginPerDepth);
     const int singular_depth = std::max(1, depth / kSingularSearchDivisor);
