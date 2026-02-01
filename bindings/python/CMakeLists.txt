@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(skaks_eval LANGUAGES CXX)
+project(skaks_eval LANGUAGES C CXX)
 
 find_package(pybind11 CONFIG REQUIRED)
 

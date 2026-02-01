@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(chess_engine VERSION 0.1.0 LANGUAGES CXX)
+project(chess_engine VERSION 0.1.0 LANGUAGES C CXX)
 
 set(SKAKS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 

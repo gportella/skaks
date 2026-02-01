@@ -45,6 +45,7 @@ struct SearchResult {
   int searched_depth = 0;
   int selective_depth = 0;
   bool aborted = false;
+  bool from_syzygy = false;
   std::vector<Move> principal_variation;
   int pv_length = 0;
 

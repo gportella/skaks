@@ -3,6 +3,7 @@
 #include "chess/types.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace chess {
 
@@ -27,5 +28,11 @@ Bitboard rook_attacks_magic(int sq, Bitboard occ);
  * @brief Get bishop attacks using magic bitboards.
  */
 Bitboard bishop_attacks_magic(int sq, Bitboard occ);
+
+/**
+ * @brief Returns the current magic bitboard source label.
+ * Values: "disabled", "cache", "embedded", "generated".
+ */
+std::string_view magic_source();
 
 } // namespace chess

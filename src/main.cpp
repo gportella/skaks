@@ -15,6 +15,7 @@
 #include "chess/scoring_rules.hpp"
 #include "chess/search.hpp"
 #include "chess/search_stats.hpp"
+#include "chess/syzygy.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/uci.hpp"
@@ -216,6 +217,7 @@ chess::SearchLimits to_search_limits(const chess::TimeControlOptions& options) {
 int main(int argc, char** argv) {
   chess::init_magic_bitboards();
   const auto cli = chess::parse_cli(argc, argv);
+  chess::syzygy::init_from_env();
   if (cli.parse_error) {
     std::cerr << "Error: " << cli.message << "\n";
     return EXIT_FAILURE;

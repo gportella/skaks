@@ -1,6 +1,7 @@
 #include "chess/magic_bitboards.hpp"
 
 #include "chess/board_arithmetic.hpp"
+#include "chess/magic_bitboards_cache.hpp"
 #include "chess/ray_tables.hpp"
 
 #include <array>
@@ -9,8 +10,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <mutex>
 #include <random>
+#include <string_view>
 #include <vector>
 
 namespace chess {
@@ -47,6 +50,7 @@ std::array<int, 64> g_rook_bit_counts{};
 std::array<int, 64> g_bishop_bit_counts{};
 std::once_flag g_magic_once;
 bool g_magic_ready = false;
+std::string_view g_magic_source = "disabled";
 
 Bitboard rook_mask(int sq) {
   const int rank = sq / 8;
@@ -275,6 +279,9 @@ void init_magic_table(std::array<MagicEntry, 64>& table,
   std::mt19937_64 rng(0xC0FFEE1234ULL);
 
   for (int sq = 0; sq < 64; ++sq) {
+    if (use_magic && (!magic_override)) {
+      // std::cerr << "Init magic square " << sq << "..." << std::endl;
+    }
     const Bitboard mask = masks[static_cast<std::size_t>(sq)];
     const int relevant_bits = local_bit_counts[static_cast<std::size_t>(sq)];
     const int shift_bits =
@@ -335,7 +342,13 @@ void init_magic_tables() {
 #else
       (std::getenv("SKAKS_MAGIC_DISABLE") == nullptr);
 #endif
+  const char* debug_env = std::getenv("SKAKS_MAGIC_DEBUG");
+  const bool magic_debug = (debug_env != nullptr && *debug_env != '\0');
   const char* cache_path = std::getenv("SKAKS_MAGIC_CACHE");
+  if (magic_debug) {
+    std::cerr << "Magic: use_magic=" << (use_magic ? "1" : "0")
+              << " cache=" << (cache_path ? cache_path : "(none)") << "\n";
+  }
   std::array<Bitboard, 64> rook_cached{};
   std::array<Bitboard, 64> bishop_cached{};
   const std::array<Bitboard, 64>* rook_override = nullptr;
@@ -351,10 +364,51 @@ void init_magic_tables() {
           reinterpret_cast<char*>(bishop_cached.data()),
           static_cast<std::streamsize>(bishop_cached.size() * sizeof(Bitboard)));
       if (in.good()) {
-        rook_override = &rook_cached;
-        bishop_override = &bishop_cached;
+        bool any_nonzero = false;
+        for (std::size_t i = 0; i < 64; ++i) {
+          if (rook_cached[i] != 0 || bishop_cached[i] != 0) {
+            any_nonzero = true;
+            break;
+          }
+        }
+        if (any_nonzero) {
+          rook_override = &rook_cached;
+          bishop_override = &bishop_cached;
+          g_magic_source = "cache";
+          if (magic_debug) {
+            std::cerr << "Magic: loaded cache from " << cache_path << "\n";
+          }
+        } else if (magic_debug) {
+          std::cerr << "Magic: cache file empty or zeroed, will regenerate\n";
+        }
+      } else if (magic_debug) {
+        std::cerr << "Magic: failed to read cache file\n";
       }
     }
+  }
+
+  if (!rook_override && !bishop_override) {
+    bool any_nonzero = false;
+    for (std::size_t i = 0; i < 64; ++i) {
+      if (kRookMagics[i] != 0 || kBishopMagics[i] != 0) {
+        any_nonzero = true;
+        break;
+      }
+    }
+    if (any_nonzero) {
+      rook_override = &kRookMagics;
+      bishop_override = &kBishopMagics;
+      g_magic_source = "embedded";
+      if (magic_debug) {
+        std::cerr << "Magic: using embedded magics\n";
+      }
+    }
+  }
+
+  if (!use_magic) {
+    g_magic_source = "disabled";
+  } else if (g_magic_source == "disabled") {
+    g_magic_source = "generated";
   }
 
   init_magic_table(g_rook_magics, g_rook_attacks, g_rook_bits, g_rook_bit_counts,
@@ -365,19 +419,31 @@ void init_magic_tables() {
                    bishop_mask, bishop_attacks_slow,
                    use_magic && bishop_override == nullptr);
 
-  if (cache_path && *cache_path && (!rook_override || !bishop_override)) {
+  if (cache_path && *cache_path && (!rook_override || !bishop_override) &&
+      use_magic) {
     std::ofstream out(cache_path, std::ios::binary | std::ios::trunc);
     if (out.good()) {
+      bool any_nonzero = false;
       for (std::size_t i = 0; i < 64; ++i) {
         rook_cached[i] = g_rook_magics[i].magic;
         bishop_cached[i] = g_bishop_magics[i].magic;
+        if (rook_cached[i] != 0 || bishop_cached[i] != 0) {
+          any_nonzero = true;
+        }
       }
-      out.write(
-          reinterpret_cast<const char*>(rook_cached.data()),
-          static_cast<std::streamsize>(rook_cached.size() * sizeof(Bitboard)));
-      out.write(
-          reinterpret_cast<const char*>(bishop_cached.data()),
-          static_cast<std::streamsize>(bishop_cached.size() * sizeof(Bitboard)));
+      if (any_nonzero) {
+        out.write(
+            reinterpret_cast<const char*>(rook_cached.data()),
+            static_cast<std::streamsize>(rook_cached.size() * sizeof(Bitboard)));
+        out.write(reinterpret_cast<const char*>(bishop_cached.data()),
+                  static_cast<std::streamsize>(bishop_cached.size() *
+                                               sizeof(Bitboard)));
+        if (magic_debug) {
+          std::cerr << "Magic: wrote cache to " << cache_path << "\n";
+        }
+      } else if (magic_debug) {
+        std::cerr << "Magic: generated all-zero magics, not writing cache\n";
+      }
     }
   }
 }
@@ -391,53 +457,52 @@ void init_magic_bitboards() {
   });
 }
 
+std::string_view magic_source() {
+  return g_magic_source;
+}
+
 bool magic_bitboards_ready() {
   return g_magic_ready;
 }
 
 Bitboard rook_attacks_magic(int sq, Bitboard occ) {
 #if defined(SKAKS_TESTS)
+  // Use slow reference implementation in tests to avoid initialization overhead
+  // or hangs in magic number generation during test execution.
   return rook_attacks_slow(sq, occ);
 #else
-  if (!g_magic_ready) {
-    init_magic_bitboards();
-  }
   const auto& entry = g_rook_magics[static_cast<std::size_t>(sq)];
-  if (entry.magic == 0) {
-    return rook_attacks_slow(sq, occ);
-  }
-  const Bitboard occ_masked = occ & entry.mask;
+
+  // Fast path: Magic bitboards
   if (entry.magic != 0) {
+    const Bitboard occ_masked = occ & entry.mask;
     const std::size_t idx =
         static_cast<std::size_t>((occ_masked * entry.magic) >> entry.shift);
     return entry.attacks[idx];
   }
-  const std::size_t idx =
-      index_from_occupancy(occ_masked, entry.bits, entry.bit_count);
-  return entry.attacks[idx];
+
+  // Fallback: Slow attacks (should rarely happen in production)
+  return rook_attacks_slow(sq, occ);
 #endif
 }
 
 Bitboard bishop_attacks_magic(int sq, Bitboard occ) {
 #if defined(SKAKS_TESTS)
+  // Use slow reference implementation in tests.
   return bishop_attacks_slow(sq, occ);
 #else
-  if (!g_magic_ready) {
-    init_magic_bitboards();
-  }
   const auto& entry = g_bishop_magics[static_cast<std::size_t>(sq)];
-  if (entry.magic == 0) {
-    return bishop_attacks_slow(sq, occ);
-  }
-  const Bitboard occ_masked = occ & entry.mask;
+
+  // Fast path: Magic bitboards
   if (entry.magic != 0) {
+    const Bitboard occ_masked = occ & entry.mask;
     const std::size_t idx =
         static_cast<std::size_t>((occ_masked * entry.magic) >> entry.shift);
     return entry.attacks[idx];
   }
-  const std::size_t idx =
-      index_from_occupancy(occ_masked, entry.bits, entry.bit_count);
-  return entry.attacks[idx];
+
+  // Fallback: Slow attacks
+  return bishop_attacks_slow(sq, occ);
 #endif
 }
 

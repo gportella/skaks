@@ -12,6 +12,7 @@
 #include "chess/search_detail.hpp"
 #include "chess/search_params.hpp"
 #include "chess/search_stats.hpp"
+#include "chess/syzygy.hpp"
 #include "chess/time_manager.hpp"
 
 #include <algorithm>
@@ -190,6 +191,27 @@ inline SearchResult make_aborted_result() {
   aborted.aborted = true;
   aborted.pv_length = 0;
   return aborted;
+}
+
+/**
+ * @brief Probe Syzygy WDL tables inside the search.
+ *
+ * This uses the thread-safe WDL probe (not root probing). It only returns
+ * a score and does not supply a best move or PV.
+ */
+bool probe_syzygy_wdl_for_search(const Board& board, int ply_from_root,
+                                 SearchResult& out_result) {
+  if (ply_from_root == 0) {
+    return false;
+  }
+  auto tb = syzygy::probe_wdl(board);
+  if (!tb.available) {
+    return false;
+  }
+  out_result.score = tb.score;
+  out_result.outcome = SearchResult::Outcome::InProgress;
+  out_result.pv_length = 0;
+  return true;
 }
 
 struct MoveEvaluationContext {
@@ -744,6 +766,11 @@ SearchResult alphabeta_minimax(Board& board, int depth, int alpha, int beta,
         return repetition;
       }
     }
+  }
+
+  SearchResult tb_result{};
+  if (probe_syzygy_wdl_for_search(board, ply_from_root, tb_result)) {
+    return tb_result;
   }
 
   // TRANSPOSITION TABLE PROBE, check if we have a cached move stored
@@ -1432,6 +1459,21 @@ SearchResult search_position(Board& board, SideToMove stm,
                              const SearchParameters& params,
                              const EvaluatorFn& evaluator, MoveHistory* history,
                              TranspositionTable* tt, int repetition_start) {
+  if (params.root_excluded_count == 0 && params.pv_count == 1) {
+    auto tb = syzygy::probe_root_dtz(board);
+    if ((!tb.available || !tb.best_move) && syzygy::available()) {
+      tb = syzygy::probe_root_wdl(board);
+    }
+    if (tb.available && tb.best_move) {
+      SearchResult tb_result{};
+      tb_result.best_move = *tb.best_move;
+      tb_result.outcome = SearchResult::Outcome::InProgress;
+      tb_result.pv_length = 1;
+      tb_result.score = tb.score;
+      tb_result.from_syzygy = true;
+      return tb_result;
+    }
+  }
   const bool track_info = static_cast<bool>(params.info_callback);
   const auto search_start = track_info ? std::chrono::steady_clock::now()
                                        : std::chrono::steady_clock::time_point{};

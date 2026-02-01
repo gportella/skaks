@@ -32,6 +32,7 @@ add_executable(chess_engine_tests
   zobrist_tests.cpp
   params_loader_tests.cpp
   uci_tests.cpp
+  syzygy_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests
@@ -57,11 +58,6 @@ target_compile_definitions(chess_engine_tests
   PRIVATE
     TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
     SKAKS_ENABLE_HCE=$<BOOL:${SKAKS_ENABLE_HCE}>
-    SKAKS_TESTS=1
-)
-
-target_compile_definitions(chess_engine_core
-  PRIVATE
     SKAKS_TESTS=1
 )
 

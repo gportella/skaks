@@ -22,10 +22,24 @@ add_library(chess_engine_core STATIC
   pst_tables.cpp
   scoring_rules.cpp
   search.cpp
+  syzygy.cpp
   transposition_table.cpp
   time_manager.cpp
   zobrist.cpp
   uci.cpp
+  ${SKAKS_ROOT}/fathom/src/tbprobe.c
+)
+
+set_source_files_properties(
+  ${SKAKS_ROOT}/fathom/src/tbprobe.c
+  PROPERTIES
+    COMPILE_FLAGS "-Wno-error -Wno-sign-conversion -Wno-sign-compare -Wno-conversion"
+)
+
+set_source_files_properties(
+  ${SKAKS_ROOT}/fathom/src/tbchess.c
+  PROPERTIES
+    HEADER_FILE_ONLY TRUE
 )
 
 add_library(sf_nnue_probe STATIC
@@ -74,6 +88,7 @@ target_include_directories(chess_engine_core
     ${SKAKS_GENERATED_INCLUDE_DIR}
   PRIVATE
     ${SKAKS_ROOT}/sf_nnue
+    ${SKAKS_ROOT}/fathom/src
 )
 
 target_include_directories(chess_engine_core SYSTEM PUBLIC

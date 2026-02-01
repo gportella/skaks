@@ -3,10 +3,12 @@
 
 #include "chess/board.hpp"
 #include "chess/defaults.hpp"
+#include "chess/magic_bitboards.hpp"
 #include "chess/moves.hpp"
 #include "chess/polyglot.hpp"
 #include "chess/score.hpp"
 #include "chess/search_params.hpp"
+#include "chess/syzygy.hpp"
 #include "chess/types_io.hpp"
 
 #include <algorithm>
@@ -124,6 +126,11 @@ void emit_search_param_options() {
                    200);
   emit_spin_option("see_capture_max_value", sparams.see_capture_max_value, 0,
                    900);
+}
+
+void emit_syzygy_options() {
+  log_uci("out", "option name SyzygyPath type string default");
+  std::cout << "option name SyzygyPath type string default" << '\n';
 }
 
 void apply_search_param_option(std::string_view lowered_name,
@@ -570,6 +577,10 @@ void emit_search_info_line(Board& board, const SearchResult& result) {
     }
   }
 
+  if (result.from_syzygy) {
+    info_line << " string syzygy";
+  }
+
   const auto info_str = info_line.str();
   log_uci("out", info_str);
   std::cout << info_str << '\n';
@@ -722,9 +733,12 @@ void emit_search_result(Board& board, const SearchResult& result) {
     const std::string& pv_output = pv_line.empty() ? bestmove : pv_line;
     info_line << " pv " << pv_output;
   }
+  if (result.from_syzygy) {
+    info_line << " string syzygy";
+  }
   const auto info_str = info_line.str();
   log_uci("out", info_str);
-  std::cout << info_str << '\n';
+  std::cout << (info_str + "\n");
   std::cout.flush();
 
   std::string response = "bestmove " + bestmove;
@@ -732,7 +746,7 @@ void emit_search_result(Board& board, const SearchResult& result) {
     response += " ponder " + ponder_move;
   }
   log_uci("out", response);
-  std::cout << response << '\n';
+  std::cout << (response + "\n");
   std::cout.flush();
 }
 
@@ -916,6 +930,33 @@ void run_uci_loop(Engine& engine, int default_depth,
         std::cout << line_out << '\n';
       }
       emit_search_param_options();
+      emit_syzygy_options();
+      if (info_strings_enabled()) {
+        std::ostringstream magic_line;
+        magic_line << "info string magic source=" << magic_source();
+        const char* cache = std::getenv("SKAKS_MAGIC_CACHE");
+        if (cache && *cache) {
+          magic_line << " cache=" << cache;
+        }
+        const std::string line_out = magic_line.str();
+        log_uci("out", line_out);
+        std::cout << line_out << '\n';
+      }
+      if (info_strings_enabled()) {
+        std::ostringstream syzygy_line;
+        if (syzygy::available()) {
+          syzygy_line << "info string syzygy available path=" << syzygy::path()
+                      << " max_pieces=" << syzygy::max_pieces();
+        } else if (!syzygy::path().empty()) {
+          syzygy_line << "info string syzygy unavailable path="
+                      << syzygy::path();
+        } else {
+          syzygy_line << "info string syzygy not configured";
+        }
+        const std::string line_out = syzygy_line.str();
+        log_uci("out", line_out);
+        std::cout << line_out << '\n';
+      }
       log_uci("out", "uciok");
       std::cout << "uciok" << '\n';
       std::cout.flush();
@@ -1083,6 +1124,27 @@ void run_uci_loop(Engine& engine, int default_depth,
         if (clamped != requested) {
           const std::string info = "info string Hash option is limited to " +
                                    std::to_string(kMaxHashMB);
+          log_uci("out", info);
+          if (info_strings_enabled()) {
+            std::cout << info << '\n';
+            std::cout.flush();
+          }
+        }
+      } else if (lowered_name == "syzygypath") {
+        stop_search(true);
+        if (value.empty()) {
+          syzygy::free();
+          syzygy::init("");
+          const std::string info = "info string Syzygy disabled";
+          log_uci("out", info);
+          if (info_strings_enabled()) {
+            std::cout << info << '\n';
+            std::cout.flush();
+          }
+        } else {
+          const bool ok = syzygy::init(value);
+          const std::string info = ok ? "info string Syzygy loaded"
+                                      : "info string Syzygy not available";
           log_uci("out", info);
           if (info_strings_enabled()) {
             std::cout << info << '\n';
