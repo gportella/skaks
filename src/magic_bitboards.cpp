@@ -5,6 +5,7 @@
 #include "chess/ray_tables.hpp"
 
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -51,6 +52,7 @@ std::array<int, 64> g_bishop_bit_counts{};
 std::once_flag g_magic_once;
 bool g_magic_ready = false;
 std::string_view g_magic_source = "disabled";
+std::atomic<MagicBitboardsMode> g_magic_mode{MagicBitboardsMode::Auto};
 
 Bitboard rook_mask(int sq) {
   const int rank = sq / 8;
@@ -461,6 +463,14 @@ std::string_view magic_source() {
   return g_magic_source;
 }
 
+MagicBitboardsMode magic_bitboards_mode() {
+  return g_magic_mode.load(std::memory_order_relaxed);
+}
+
+void set_magic_bitboards_mode(MagicBitboardsMode mode) {
+  g_magic_mode.store(mode, std::memory_order_relaxed);
+}
+
 bool magic_bitboards_ready() {
   return g_magic_ready;
 }
@@ -471,6 +481,9 @@ Bitboard rook_attacks_magic(int sq, Bitboard occ) {
   // or hangs in magic number generation during test execution.
   return rook_attacks_slow(sq, occ);
 #else
+  if (g_magic_mode.load(std::memory_order_relaxed) == MagicBitboardsMode::Slow) {
+    return rook_attacks_slow(sq, occ);
+  }
   const auto& entry = g_rook_magics[static_cast<std::size_t>(sq)];
 
   // Fast path: Magic bitboards
@@ -491,6 +504,9 @@ Bitboard bishop_attacks_magic(int sq, Bitboard occ) {
   // Use slow reference implementation in tests.
   return bishop_attacks_slow(sq, occ);
 #else
+  if (g_magic_mode.load(std::memory_order_relaxed) == MagicBitboardsMode::Slow) {
+    return bishop_attacks_slow(sq, occ);
+  }
   const auto& entry = g_bishop_magics[static_cast<std::size_t>(sq)];
 
   // Fast path: Magic bitboards

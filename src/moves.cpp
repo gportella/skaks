@@ -7,6 +7,7 @@
 #include "chess/history.hpp"
 #include "chess/move_ordering.hpp"
 #include "chess/piece_values.hpp"
+#include "chess/pins.hpp"
 #include "chess/pst_tables.hpp"
 #include "chess/scoring_rules.hpp"
 #include "chess/types.hpp"
@@ -127,9 +128,102 @@ generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count) {
   std::array<uint32_t, kMaxMovementCount> legal_moves{};
   uint16_t legal_move_count = 0;
   auto pseudo_moves = generate_all_moves(board, stm, move_count);
+  const bool in_check = is_check(board, stm);
+  PinnedMapByPiece pinned_map{};
+  bool use_pin_fastpath = false;
+  if (!in_check) {
+    const char* enable_pin = std::getenv("SKAKS_ENABLE_PIN_FASTPATH");
+    const auto side_idx = to_index(stm);
+    if (enable_pin && *enable_pin && board.king_list[side_idx].count > 0 &&
+        board.king_positions[side_idx] >= 0) {
+      build_pinned_map_into(board, stm, pinned_map);
+      use_pin_fastpath = true;
+    }
+  }
 
   for (uint16_t i = 0; i < move_count; ++i) {
     Move m = decode_move(pseudo_moves[i]);
+    if (use_pin_fastpath) {
+      const OccupancyType king_piece =
+          (stm == SideToMove::White) ? OccupancyType::wK : OccupancyType::bK;
+      const bool is_king_move = (m.moving_pc == king_piece);
+      const bool is_ep = flag_is_ep(m.flags);
+      if (!is_king_move && !is_ep) {
+        const auto side_idx = to_index(stm);
+        const int king_sq = board.king_positions[side_idx];
+        if (king_sq >= 0) {
+          const Bitboard from_mask = Bitboard(1) << m.from;
+          const auto& rook_rays = ROOK_RAYS[static_cast<std::size_t>(king_sq)];
+          const auto& bishop_rays =
+              BISHOP_RAYS[static_cast<std::size_t>(king_sq)];
+          const Bitboard rook_lines = rook_rays.north | rook_rays.south |
+                                      rook_rays.east | rook_rays.west;
+          const Bitboard bishop_lines =
+              bishop_rays.northeast | bishop_rays.northwest |
+              bishop_rays.southeast | bishop_rays.southwest;
+          if ((from_mask & (rook_lines | bishop_lines)) != 0) {
+            // Moving a piece that sits on a king ray can expose check.
+            // Fall back to full legality check.
+            goto full_legality_check;
+          }
+        }
+        const std::size_t from = static_cast<std::size_t>(m.from);
+        bool pinned = false;
+        Bitboard pin_mask = 0;
+
+        switch (m.moving_pc) {
+        case OccupancyType::wB:
+        case OccupancyType::bB: {
+          const auto& entry = pinned_map.bishop_pins[from];
+          pinned = entry.mask != 0;
+          pin_mask = entry.mask;
+          break;
+        }
+        case OccupancyType::wR:
+        case OccupancyType::bR: {
+          const auto& entry = pinned_map.rook_pins[from];
+          pinned = entry.mask != 0;
+          pin_mask = entry.mask;
+          break;
+        }
+        case OccupancyType::wQ:
+        case OccupancyType::bQ: {
+          const auto& entry = pinned_map.queen_pins[from];
+          pinned = entry.mask != 0;
+          pin_mask = entry.mask;
+          break;
+        }
+        case OccupancyType::wP:
+        case OccupancyType::bP: {
+          const auto& entry = pinned_map.pawn_pins[from];
+          pinned = entry.mask != 0;
+          pin_mask = entry.mask;
+          break;
+        }
+        case OccupancyType::wN:
+        case OccupancyType::bN: {
+          const auto& entry = pinned_map.knight_pins[from];
+          pinned = (entry.mask == 0);
+          pin_mask = entry.mask;
+          break;
+        }
+        default:
+          break;
+        }
+
+        if (pinned) {
+          const Bitboard to_mask = Bitboard(1) << m.to;
+          if ((pin_mask & to_mask) == 0) {
+            continue;
+          }
+        }
+
+        legal_moves[legal_move_count++] = pseudo_moves[i];
+        continue;
+      }
+    }
+
+  full_legality_check:
     Undo u = make_move(board, m);
     if (!is_check(board, stm)) {
       legal_moves[legal_move_count++] = pseudo_moves[i];

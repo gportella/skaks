@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 SNAPSHOT_RE = re.compile(r"=== perf snapshot (.+) ===")
 VERSION_RE = re.compile(r"skaks version\s+(.+)")
+VERSION_RE_N = re.compile(r"ŝ𝕜𝕒𝕜ŝ version\s+(.+)")
 CASE_RE = re.compile(r"\[case\]\s+(.+)")
 THREAD_HEADER_RE = re.compile(r"threads:\s+(\d+)")
 THREAD_VALUE_RE = re.compile(r"threads=(\d+)")
@@ -60,6 +61,10 @@ def parse_log(path: Path) -> list[PerfRow]:
                 current_threads = int(thread_header.group(1))
                 continue
             version_match = VERSION_RE.match(line)
+            if version_match:
+                version = version_match.group(1).strip()
+                continue
+            version_match = VERSION_RE_N.match(line)
             if version_match:
                 version = version_match.group(1).strip()
                 continue

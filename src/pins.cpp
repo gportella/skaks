@@ -81,6 +81,12 @@ void build_pinned_map_into(const Board& board, SideToMove stm,
                            PinnedMapByPiece& pinned_map) {
   reset_pin_map(pinned_map);
 
+  const auto side_idx = to_index(stm);
+  if (board.king_list[side_idx].count == 0 ||
+      board.king_positions[side_idx] < 0) {
+    return;
+  }
+
   const auto pick_index = [](Bitboard mask, Edge edge) {
     return static_cast<u_int8_t>(edge == Edge::Forward
                                      ? to_index(lsb_index(mask))

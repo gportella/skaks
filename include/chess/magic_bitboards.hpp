@@ -19,6 +19,11 @@ void init_magic_bitboards();
  */
 bool magic_bitboards_ready();
 
+enum class MagicBitboardsMode { Auto, Slow };
+
+MagicBitboardsMode magic_bitboards_mode();
+void set_magic_bitboards_mode(MagicBitboardsMode mode);
+
 /**
  * @brief Get rook attacks using magic bitboards.
  */

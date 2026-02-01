@@ -2,6 +2,7 @@
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/evaluation_params.hpp"
+#include "chess/magic_bitboards.hpp"
 #include "chess/moves.hpp"
 #include "chess/search.hpp"
 #include "chess/search_params.hpp"
@@ -174,6 +175,59 @@ PinPair parse_pin_pair(const py::handle& obj, const char* key) {
     return {py::cast<int>(d["base"]), py::cast<int>(d["mobility"])};
   }
   throw std::invalid_argument(std::string(key) + " must be sequence[2] or dict");
+}
+
+py::dict bench_movegen(const std::vector<std::string>& fens, int iterations,
+                       std::string mode) {
+  if (fens.empty()) {
+    throw std::invalid_argument("fens must be non-empty");
+  }
+  if (iterations <= 0) {
+    throw std::invalid_argument("iterations must be > 0");
+  }
+
+  chess::MagicBitboardsMode prev_mode = chess::magic_bitboards_mode();
+  chess::MagicBitboardsMode next_mode = chess::MagicBitboardsMode::Auto;
+  if (mode == "slow") {
+    next_mode = chess::MagicBitboardsMode::Slow;
+  } else if (mode == "auto" || mode == "magic") {
+    next_mode = chess::MagicBitboardsMode::Auto;
+  } else {
+    throw std::invalid_argument("mode must be 'auto' or 'slow'");
+  }
+
+  std::vector<chess::Board> boards;
+  boards.reserve(fens.size());
+  for (const auto& fen : fens) {
+    boards.emplace_back(chess::initial_board(fen));
+  }
+
+  chess::set_magic_bitboards_mode(next_mode);
+  const auto start = std::chrono::steady_clock::now();
+
+  std::uint64_t total_moves = 0;
+  for (int it = 0; it < iterations; ++it) {
+    for (auto& board : boards) {
+      std::uint16_t move_count = 0;
+      auto moves =
+          chess::generate_legal_moves(board, board.side_to_move, move_count);
+      (void)moves;
+      total_moves += move_count;
+    }
+  }
+
+  const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - start)
+                              .count();
+  chess::set_magic_bitboards_mode(prev_mode);
+
+  const double elapsed_sec = std::max(1.0, elapsed_ms / 1000.0);
+  const double moves_per_sec = static_cast<double>(total_moves) / elapsed_sec;
+
+  return py::dict("iterations"_a = iterations,
+                  "positions"_a = static_cast<int>(boards.size()),
+                  "total_moves"_a = total_moves, "elapsed_ms"_a = elapsed_ms,
+                  "moves_per_sec"_a = moves_per_sec, "mode"_a = mode);
 }
 
 chess::EngineParams params_from_dict(const py::dict& root) {
@@ -1119,6 +1173,10 @@ PYBIND11_MODULE(skaks_eval, m) {
   m.def("eval_fen", &eval_fen_single, py::arg("fen"),
         py::arg("params") = std::nullopt,
         "Evaluate a single FEN. Returns {ok, cp or error}.");
+
+  m.def("bench_movegen", &bench_movegen, py::arg("fens"),
+        py::arg("iterations") = 1000, py::arg("mode") = "auto",
+        "Benchmark move generation for a list of FENs. mode: 'auto' or 'slow'.");
 
   m.def(
       "selfplay",

@@ -1,5 +1,7 @@
 # Skaks chess engine
 
+![skaks](skaks_pict.png)
+
 Simple toy chess engine, for learning and fun. 
 
 > Uses Stockfish NNUE as I was tired of tuning my eval. There's at least 200 ELO point difference between the classical heuristic and the NNUE version. The incremental eval for NNUE is ok, though done via an adaptor. Even with the Stockfish NNUE and all my efforts to improve search, it's not a very strong engine, 2000 ELO tops.
