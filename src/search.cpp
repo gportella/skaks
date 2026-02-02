@@ -78,7 +78,7 @@ bool should_retry_pvs(SideToMove stm, int child_score, int narrow_alpha,
 namespace {
 
 constexpr int kMaxAspirationAttempts = 24;
-constexpr int kSingularMinDepth = 6;
+constexpr int kSingularMinDepth = 8;
 constexpr int kSingularMarginPerDepth = 8;
 constexpr int kSingularSearchDivisor = 2;
 constexpr int kNegativeExtension = 1;
@@ -370,7 +370,8 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
       irreversible ? (ctx.ply + 1) : ctx.repetition_start;
 
   const bool in_check_after_move = is_check(board, flip_side(ctx.stm));
-  if (in_check_after_move && ctx.ply < static_cast<int>(MAX_PLY) - 1) {
+  if (in_check_after_move && ctx.depth >= 2 &&
+      ctx.ply < static_cast<int>(MAX_PLY) - 1) {
     child_depth += CHECK_EXTENSION;
   }
 
@@ -993,6 +994,11 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     }
   }
 
+  // IIR: if move ordering is still weak at PV nodes, reduce depth by 1.
+  if (!has_cached_move && is_pv && depth >= 2) {
+    depth -= 1;
+  }
+
   uint32_t tt_code = 0;
   if (has_cached_move) {
     if (is_excluded_move(cached_move)) {
@@ -1068,8 +1074,17 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
           std::min(null_move_reduction, sparams.null_move_reduction);
     }
     null_move_reduction = std::min(null_move_reduction, std::max(0, depth - 1));
+    int alpha_nm = alpha;
+    int beta_nm = beta;
+    if (stm == SideToMove::White) {
+      alpha_nm = beta - 1;
+      beta_nm = beta;
+    } else {
+      alpha_nm = alpha;
+      beta_nm = alpha + 1;
+    }
     SearchResult null_result = alphabeta_minimax(
-        board, std::max(0, depth - 1 - null_move_reduction), beta - 1, beta,
+        board, std::max(0, depth - 1 - null_move_reduction), alpha_nm, beta_nm,
         flip_side(stm), evaluator, scratch, ply + 1, repetition_start,
         ply_from_root + 1, false, nodes, nullptr, nullptr, nullptr, 0);
     if (null_result.aborted) {
@@ -1080,7 +1095,8 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     const int score_after_null = normalize_mate_score(null_result.score, ply);
     undo_null_move(board, undo_null);
     scratch.nnue_adapter->pop_null();
-    if (score_after_null >= beta) {
+    if ((stm == SideToMove::White && score_after_null >= beta) ||
+        (stm == SideToMove::Black && score_after_null <= alpha)) {
       if (search_stats_enabled()) {
         search_stats().null_move_cutoffs.fetch_add(1, std::memory_order_relaxed);
       }
@@ -1134,13 +1150,22 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   int static_eval = 0;
   int static_eval_normalized = 0;
   int static_eval_corrected = 0;
-  const std::uint64_t pkey = pawn_key(board);
-  const std::uint64_t npkey = nonpawn_key(board);
+  std::uint64_t pkey = 0;
+  std::uint64_t npkey = 0;
+  bool corr_keys_ready = false;
+  auto ensure_corr_keys = [&]() {
+    if (!corr_keys_ready) {
+      pkey = pawn_key(board);
+      npkey = nonpawn_key(board);
+      corr_keys_ready = true;
+    }
+  };
 
   // reverse futility pruning: early cutoff in non-PV, non-check nodes
   if (!is_pv && depth >= 3 && depth <= 8 && !is_check(board, stm)) {
     const int eval =
         evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
+    ensure_corr_keys();
     const int corr = correction_delta(scratch, stm, parent_move, pkey, npkey);
     const int margin_idx = std::min(depth, 3);
     const int margin =
@@ -1175,6 +1200,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     if (!static_eval_ready) {
       const int eval =
           evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
+      ensure_corr_keys();
       const int corr = correction_delta(scratch, stm, parent_move, pkey, npkey);
       static_eval = eval;
       static_eval_normalized = normalize_mate_score(eval, ply);
@@ -1279,13 +1305,14 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
    * we can prune the node early. This saves eval work at deeper time controls
    * while retaining tactical reliability.
    */
-  if (!is_pv && depth >= 6 && !is_check(board, stm)) {
+  if (!is_pv && depth >= 7 && !is_check(board, stm)) {
     const int probcut_depth = depth - sparams.probcut_reduction;
     if (probcut_depth >= 1) {
       if (!static_eval_ready) {
         static_eval =
             evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
         static_eval_normalized = normalize_mate_score(static_eval, ply);
+        ensure_corr_keys();
         static_eval_corrected =
             static_eval_normalized +
             correction_delta(scratch, stm, parent_move, pkey, npkey);
@@ -1382,7 +1409,8 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     if (ply >= 2) {
       const int prev =
           scratch.corr->static_eval_history[static_cast<std::size_t>(ply - 2)];
-      is_improving = static_eval_corrected > prev;
+      is_improving = (stm == SideToMove::White) ? (static_eval_corrected > prev)
+                                                : (static_eval_corrected < prev);
     }
   }
 
@@ -1537,12 +1565,13 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     }
     // futility pruning for quiet moves in non-PV nodes
     // conditions for futility pruning
-    if (!is_pv && quiet_like && child_depth_lmp <= 3 && child_depth_lmp > 0 &&
+    if (!is_pv && quiet_like && child_depth_lmp <= 3 && child_depth_lmp >= 0 &&
         !parent_in_check) {
       if (!static_eval_ready) {
         static_eval =
             evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
         static_eval_normalized = normalize_mate_score(static_eval, ply);
+        ensure_corr_keys();
         static_eval_corrected =
             static_eval_normalized +
             correction_delta(scratch, stm, parent_move, pkey, npkey);
@@ -1551,9 +1580,9 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
       const auto margin =
           search_params()
               .futility_margins[static_cast<std::size_t>(child_depth_lmp)];
-      const int adjusted_eval = static_eval_corrected + margin;
-      if ((stm == SideToMove::White && adjusted_eval <= alpha) ||
-          (stm == SideToMove::Black && adjusted_eval >= beta)) {
+      if ((stm == SideToMove::White &&
+           static_eval_corrected + margin <= alpha) ||
+          (stm == SideToMove::Black && static_eval_corrected - margin >= beta)) {
         if (search_stats_enabled()) {
           search_stats().futility_prunes.fetch_add(1, std::memory_order_relaxed);
         }
@@ -1676,6 +1705,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
       best.best_move.moving_pc != OccupancyType::empty) {
     const int normalized_best = normalize_mate_score(best.score, ply);
     const int diff = normalized_best - static_eval_corrected;
+    ensure_corr_keys();
     update_correction_history(scratch, stm, parent_move, pkey, npkey, depth,
                               diff);
   }
