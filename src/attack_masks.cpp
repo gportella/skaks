@@ -164,165 +164,173 @@ PawnMasks gen_pawn_masks(const Board& board, SideToMove stm) {
  */
 void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
                            std::array<uint32_t, kMaxMovementCount>& out,
-                           uint16_t& move_count) {
+                           uint16_t& move_count, MoveGenType::Type type) {
   const Bitboard pawns = b.pieces_bb[static_cast<std::size_t>(Piece::wP)];
+  const bool emit_quiets =
+      (type == MoveGenType::QuietMovesOnly || type == MoveGenType::AllMoves);
+  const bool emit_captures =
+      (type == MoveGenType::CapturesOnly || type == MoveGenType::AllMoves);
 
   // Single pushes (non-promo)
-  {
-    Bitboard dst = pm.single_push;
-    while (dst) {
-      int to = poplsb(dst);
-      int from = to - 8;
-      uint32_t m = encode_move(from, to,
-                               /*piece=*/OccupancyType::wP,
-                               /*captured=*/OccupancyType::empty,
-                               /*promo=*/OccupancyType::empty,
-                               /*flags=*/kFlagQuiet); // optional quiet flag
+  if (emit_quiets) {
+    {
+      Bitboard dst = pm.single_push;
+      while (dst) {
+        int to = poplsb(dst);
+        int from = to - 8;
+        uint32_t m = encode_move(from, to,
+                                 /*piece=*/OccupancyType::wP,
+                                 /*captured=*/OccupancyType::empty,
+                                 /*promo=*/OccupancyType::empty,
+                                 /*flags=*/kFlagQuiet); // optional quiet flag
 
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] = m;
-    }
-  }
-
-  // Double pushes
-  {
-    Bitboard dst = pm.double_push;
-    while (dst) {
-      int to = poplsb(dst);
-      int from = to - 16;
-      uint32_t m =
-          encode_move(from, to,
-                      /*piece=*/OccupancyType::wP,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagDoublePush); // double-pawn-push flag
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] = m;
-    }
-  }
-
-  // Non-promo captures
-  {
-    Bitboard dst = pm.captures;
-    while (dst) {
-      int to = poplsb(dst);
-
-      // Capture from file-right (origin to-7), guard destination not on file H
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
-        int from = to - 7;
-        if ((pawns >> from) & 1ULL) {
-          uint32_t m =
-              encode_move(from, to,
-                          /*piece=*/OccupancyType::wP,
-                          /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                          /*promo=*/OccupancyType::empty,
-                          /*flags=*/0);
-          assert(move_count < kMaxMovementCount);
-          out[move_count++] = m;
-        }
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] = m;
       }
-      // Capture from file-left (origin to-9), guard destination not on file A
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
-        int from = to - 9;
-        if ((pawns >> from) & 1ULL) {
-          uint32_t m =
-              encode_move(from, to,
-                          /*piece=*/OccupancyType::wP,
-                          /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                          /*promo=*/OccupancyType::empty,
-                          /*flags=*/0);
-          assert(move_count < kMaxMovementCount);
-          out[move_count++] = m;
-        }
+    }
+
+    // Double pushes
+    {
+      Bitboard dst = pm.double_push;
+      while (dst) {
+        int to = poplsb(dst);
+        int from = to - 16;
+        uint32_t m =
+            encode_move(from, to,
+                        /*piece=*/OccupancyType::wP,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagDoublePush); // double-pawn-push flag
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] = m;
       }
     }
   }
 
-  // Promotions by push (4 options)
-  {
-    Bitboard dst = pm.promo_push;
-    while (dst) {
-      int to = poplsb(dst);
-      int from = to - 8;
-      assert(move_count + 4 < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::wQ, 0);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::wR, 0);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::wB, 0);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::wN, 0);
-    }
-  }
+  if (emit_captures) {
+    // Non-promo captures
+    {
+      Bitboard dst = pm.captures;
+      while (dst) {
+        int to = poplsb(dst);
 
-  // Promotions by capture (4 options)
-  {
-    Bitboard dst = pm.promo_captures;
-    while (dst) {
-      int to = poplsb(dst);
-
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
-        int from = to - 7;
-        if ((pawns >> from) & 1ULL) {
-          OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
-          assert(move_count + 4 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wQ, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wR, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wB, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wN, 0);
+        // Capture from file-right (origin to-7), guard destination not on file H
+        if ((Bitboard(1) << to) & NOT_FILE_H) {
+          int from = to - 7;
+          if ((pawns >> from) & 1ULL) {
+            uint32_t m =
+                encode_move(from, to,
+                            /*piece=*/OccupancyType::wP,
+                            /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                            /*promo=*/OccupancyType::empty,
+                            /*flags=*/0);
+            assert(move_count < kMaxMovementCount);
+            out[move_count++] = m;
+          }
         }
-      }
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
-        int from = to - 9;
-        if ((pawns >> from) & 1ULL) {
-          OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
-          assert(move_count + 4 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wQ, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wR, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wB, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
-                                          OccupancyType::wN, 0);
+        // Capture from file-left (origin to-9), guard destination not on file A
+        if ((Bitboard(1) << to) & NOT_FILE_A) {
+          int from = to - 9;
+          if ((pawns >> from) & 1ULL) {
+            uint32_t m =
+                encode_move(from, to,
+                            /*piece=*/OccupancyType::wP,
+                            /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                            /*promo=*/OccupancyType::empty,
+                            /*flags=*/0);
+            assert(move_count < kMaxMovementCount);
+            out[move_count++] = m;
+          }
         }
       }
     }
-  }
 
-  // En passant captures
-  {
-    Bitboard dst = pm.ep_captures;
-    while (dst) {
-      int to = poplsb(dst);
+    // Promotions by push (4 options)
+    {
+      Bitboard dst = pm.promo_push;
+      while (dst) {
+        int to = poplsb(dst);
+        int from = to - 8;
+        assert(move_count + 4 < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::wQ, 0);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::wR, 0);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::wB, 0);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::wP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::wN, 0);
+      }
+    }
 
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
-        int from = to - 7;
-        if ((pawns >> from) & 1ULL) {
-          assert(move_count + 1 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP,
-                                          /*captured=*/OccupancyType::empty,
-                                          /*promo=*/OccupancyType::empty,
-                                          /*flags=*/kFlagEnPassant); // EP flag
+    // Promotions by capture (4 options)
+    {
+      Bitboard dst = pm.promo_captures;
+      while (dst) {
+        int to = poplsb(dst);
+
+        if ((Bitboard(1) << to) & NOT_FILE_H) {
+          int from = to - 7;
+          if ((pawns >> from) & 1ULL) {
+            OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
+            assert(move_count + 4 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wQ, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wR, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wB, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wN, 0);
+          }
+        }
+        if ((Bitboard(1) << to) & NOT_FILE_A) {
+          int from = to - 9;
+          if ((pawns >> from) & 1ULL) {
+            OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
+            assert(move_count + 4 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wQ, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wR, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wB, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP, cap,
+                                            OccupancyType::wN, 0);
+          }
         }
       }
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
-        int from = to - 9;
-        if ((pawns >> from) & 1ULL) {
-          assert(move_count + 1 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::wP,
-                                          /*captured=*/OccupancyType::empty,
-                                          /*promo=*/OccupancyType::empty,
-                                          /*flags=*/kFlagEnPassant); // EP flag
+    }
+
+    // En passant captures
+    {
+      Bitboard dst = pm.ep_captures;
+      while (dst) {
+        int to = poplsb(dst);
+
+        if ((Bitboard(1) << to) & NOT_FILE_H) {
+          int from = to - 7;
+          if ((pawns >> from) & 1ULL) {
+            assert(move_count + 1 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP,
+                                            /*captured=*/OccupancyType::empty,
+                                            /*promo=*/OccupancyType::empty,
+                                            /*flags=*/kFlagEnPassant); // EP flag
+          }
+        }
+        if ((Bitboard(1) << to) & NOT_FILE_A) {
+          int from = to - 9;
+          if ((pawns >> from) & 1ULL) {
+            assert(move_count + 1 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::wP,
+                                            /*captured=*/OccupancyType::empty,
+                                            /*promo=*/OccupancyType::empty,
+                                            /*flags=*/kFlagEnPassant); // EP flag
+          }
         }
       }
     }
@@ -331,164 +339,173 @@ void emit_white_pawn_moves(const Board& b, const PawnMasks& pm,
 
 void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
                            std::array<uint32_t, kMaxMovementCount>& out,
-                           uint16_t& move_count) {
+                           uint16_t& move_count, MoveGenType::Type type) {
   const Bitboard pawns = b.pieces_bb[static_cast<std::size_t>(Piece::bP)];
+  const bool emit_quiets =
+      (type == MoveGenType::QuietMovesOnly || type == MoveGenType::AllMoves);
+  const bool emit_captures =
+      (type == MoveGenType::CapturesOnly || type == MoveGenType::AllMoves);
 
   // Single pushes (non-promo)
-  {
-    Bitboard dst = pm.single_push;
-    while (dst) {
-      int to = poplsb(dst);
-      int from = to + 8;
-      uint32_t m = encode_move(from, to,
-                               /*piece=*/OccupancyType::bP,
-                               /*captured=*/OccupancyType::empty,
-                               /*promo=*/OccupancyType::empty,
-                               /*flags=*/kFlagQuiet); // optional quiet flag
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] = m;
-    }
-  }
+  if (emit_quiets) {
 
-  // Double pushes
-  {
-    Bitboard dst = pm.double_push;
-    while (dst) {
-      int to = poplsb(dst);
-      int from = to + 16;
-      uint32_t m =
-          encode_move(from, to,
-                      /*piece=*/OccupancyType::bP,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagDoublePush); // double-pawn-push flag
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] = m;
-    }
-  }
-
-  // Non-promo captures
-  {
-    Bitboard dst = pm.captures;
-    while (dst) {
-      int to = poplsb(dst);
-
-      // Capture from file-left (origin to+9), guard destination not on file H
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
-        int from = to + 9;
-        if ((pawns >> from) & 1ULL) {
-          uint32_t m =
-              encode_move(from, to,
-                          /*piece=*/OccupancyType::bP,
-                          /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                          /*promo=*/OccupancyType::empty,
-                          /*flags=*/0);
-          assert(move_count < kMaxMovementCount);
-          out[move_count++] = m;
-        }
+    {
+      Bitboard dst = pm.single_push;
+      while (dst) {
+        int to = poplsb(dst);
+        int from = to + 8;
+        uint32_t m = encode_move(from, to,
+                                 /*piece=*/OccupancyType::bP,
+                                 /*captured=*/OccupancyType::empty,
+                                 /*promo=*/OccupancyType::empty,
+                                 /*flags=*/kFlagQuiet); // optional quiet flag
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] = m;
       }
-      // Capture from file-right (origin to+7), guard destination not on file A
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
-        int from = to + 7;
-        if ((pawns >> from) & 1ULL) {
-          uint32_t m =
-              encode_move(from, to,
-                          /*piece=*/OccupancyType::bP,
-                          /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                          /*promo=*/OccupancyType::empty,
-                          /*flags=*/0);
-          assert(move_count < kMaxMovementCount);
-          out[move_count++] = m;
-        }
+    }
+
+    // Double pushes
+    {
+      Bitboard dst = pm.double_push;
+      while (dst) {
+        int to = poplsb(dst);
+        int from = to + 16;
+        uint32_t m =
+            encode_move(from, to,
+                        /*piece=*/OccupancyType::bP,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagDoublePush); // double-pawn-push flag
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] = m;
       }
     }
   }
 
-  // Promotions by push (4 options)
-  {
-    Bitboard dst = pm.promo_push;
-    while (dst) {
-      int to = poplsb(dst);
-      int from = to + 8;
-      assert(move_count + 4 < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::bQ, 0);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::bR, 0);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::bB, 0);
-      out[move_count++] =
-          encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
-                      /*promo=*/OccupancyType::bN, 0);
-    }
-  }
+  if (emit_captures) {
+    // Non-promo captures
+    {
+      Bitboard dst = pm.captures;
+      while (dst) {
+        int to = poplsb(dst);
 
-  // Promotions by capture (4 options)
-  {
-    Bitboard dst = pm.promo_captures;
-    while (dst) {
-      int to = poplsb(dst);
-
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
-        int from = to + 9;
-        if ((pawns >> from) & 1ULL) {
-          OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
-          assert(move_count + 4 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bQ, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bR, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bB, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bN, 0);
+        // Capture from file-left (origin to+9), guard destination not on file H
+        if ((Bitboard(1) << to) & NOT_FILE_H) {
+          int from = to + 9;
+          if ((pawns >> from) & 1ULL) {
+            uint32_t m =
+                encode_move(from, to,
+                            /*piece=*/OccupancyType::bP,
+                            /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                            /*promo=*/OccupancyType::empty,
+                            /*flags=*/0);
+            assert(move_count < kMaxMovementCount);
+            out[move_count++] = m;
+          }
         }
-      }
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
-        int from = to + 7;
-        if ((pawns >> from) & 1ULL) {
-          OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
-          assert(move_count + 4 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bQ, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bR, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bB, 0);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
-                                          OccupancyType::bN, 0);
+        // Capture from file-right (origin to+7), guard destination not on file A
+        if ((Bitboard(1) << to) & NOT_FILE_A) {
+          int from = to + 7;
+          if ((pawns >> from) & 1ULL) {
+            uint32_t m =
+                encode_move(from, to,
+                            /*piece=*/OccupancyType::bP,
+                            /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                            /*promo=*/OccupancyType::empty,
+                            /*flags=*/0);
+            assert(move_count < kMaxMovementCount);
+            out[move_count++] = m;
+          }
         }
       }
     }
-  }
 
-  // En passant captures
-  {
-    Bitboard dst = pm.ep_captures;
-    while (dst) {
-      int to = poplsb(dst);
+    // Promotions by push (4 options)
+    {
+      Bitboard dst = pm.promo_push;
+      while (dst) {
+        int to = poplsb(dst);
+        int from = to + 8;
+        assert(move_count + 4 < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::bQ, 0);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::bR, 0);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::bB, 0);
+        out[move_count++] =
+            encode_move(from, to, OccupancyType::bP, OccupancyType::empty,
+                        /*promo=*/OccupancyType::bN, 0);
+      }
+    }
 
-      if ((Bitboard(1) << to) & NOT_FILE_H) {
-        int from = to + 9;
-        if ((pawns >> from) & 1ULL) {
-          assert(move_count + 1 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP,
-                                          /*captured=*/OccupancyType::empty,
-                                          /*promo=*/OccupancyType::empty,
-                                          /*flags=*/kFlagEnPassant); // EP flag
+    // Promotions by capture (4 options)
+    {
+      Bitboard dst = pm.promo_captures;
+      while (dst) {
+        int to = poplsb(dst);
+
+        if ((Bitboard(1) << to) & NOT_FILE_H) {
+          int from = to + 9;
+          if ((pawns >> from) & 1ULL) {
+            OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
+            assert(move_count + 4 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bQ, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bR, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bB, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bN, 0);
+          }
+        }
+        if ((Bitboard(1) << to) & NOT_FILE_A) {
+          int from = to + 7;
+          if ((pawns >> from) & 1ULL) {
+            OccupancyType cap = b.pieces[static_cast<std::size_t>(to)];
+            assert(move_count + 4 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bQ, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bR, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bB, 0);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP, cap,
+                                            OccupancyType::bN, 0);
+          }
         }
       }
-      if ((Bitboard(1) << to) & NOT_FILE_A) {
-        int from = to + 7;
-        if ((pawns >> from) & 1ULL) {
-          assert(move_count + 1 < kMaxMovementCount);
-          out[move_count++] = encode_move(from, to, OccupancyType::bP,
-                                          /*captured=*/OccupancyType::empty,
-                                          /*promo=*/OccupancyType::empty,
-                                          /*flags=*/kFlagEnPassant); // EP flag
+    }
+
+    // En passant captures
+    {
+      Bitboard dst = pm.ep_captures;
+      while (dst) {
+        int to = poplsb(dst);
+
+        if ((Bitboard(1) << to) & NOT_FILE_H) {
+          int from = to + 9;
+          if ((pawns >> from) & 1ULL) {
+            assert(move_count + 1 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP,
+                                            /*captured=*/OccupancyType::empty,
+                                            /*promo=*/OccupancyType::empty,
+                                            /*flags=*/kFlagEnPassant); // EP flag
+          }
+        }
+        if ((Bitboard(1) << to) & NOT_FILE_A) {
+          int from = to + 7;
+          if ((pawns >> from) & 1ULL) {
+            assert(move_count + 1 < kMaxMovementCount);
+            out[move_count++] = encode_move(from, to, OccupancyType::bP,
+                                            /*captured=*/OccupancyType::empty,
+                                            /*promo=*/OccupancyType::empty,
+                                            /*flags=*/kFlagEnPassant); // EP flag
+          }
         }
       }
     }
@@ -504,8 +521,12 @@ void emit_black_pawn_moves(const Board& b, const PawnMasks& pm,
  */
 void emit_knight_moves(const Board& b, SideToMove stm,
                        std::array<uint32_t, kMaxMovementCount>& out,
-                       uint16_t& move_count) {
+                       uint16_t& move_count, MoveGenType::Type type) {
   const bool white = (stm == SideToMove::White);
+  const bool emit_quiets =
+      (type == MoveGenType::QuietMovesOnly || type == MoveGenType::AllMoves);
+  const bool emit_captures =
+      (type == MoveGenType::CapturesOnly || type == MoveGenType::AllMoves);
   const Bitboard my_occ = b.occupancy[to_index(stm)];
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
   const Bitboard empty = ~(my_occ | their_occ);
@@ -519,29 +540,33 @@ void emit_knight_moves(const Board& b, SideToMove stm,
     Bitboard atk = KNIGHT_ATTACKS[static_cast<std::size_t>(from)];
 
     // Quiet
-    Bitboard q = atk & empty;
-    while (q) {
-      int to = poplsb(q);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wN : OccupancyType::bN,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagQuiet); // optional quiet flag
+    if (emit_quiets) {
+      Bitboard q = atk & empty;
+      while (q) {
+        int to = poplsb(q);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wN : OccupancyType::bN,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagQuiet); // optional quiet flag
+      }
     }
 
     // Captures
-    Bitboard c = atk & their_occ;
-    while (c) {
-      int to = poplsb(c);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wN : OccupancyType::bN,
-                      /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/0);
+    if (emit_captures) {
+      Bitboard c = atk & their_occ;
+      while (c) {
+        int to = poplsb(c);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wN : OccupancyType::bN,
+                        /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/0);
+      }
     }
   }
 }
@@ -555,8 +580,12 @@ void emit_knight_moves(const Board& b, SideToMove stm,
  */
 void emit_bishop_moves(const Board& b, SideToMove stm,
                        std::array<uint32_t, kMaxMovementCount>& out,
-                       uint16_t& move_count) {
+                       uint16_t& move_count, MoveGenType::Type type) {
   const bool white = (stm == SideToMove::White);
+  const bool emit_quiets =
+      (type == MoveGenType::QuietMovesOnly || type == MoveGenType::AllMoves);
+  const bool emit_captures =
+      (type == MoveGenType::CapturesOnly || type == MoveGenType::AllMoves);
   const Bitboard my_occ = b.occupancy[to_index(stm)];
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
   const Bitboard occ = b.occupancy[to_index(PieceColor::Both)];
@@ -570,30 +599,32 @@ void emit_bishop_moves(const Board& b, SideToMove stm,
     Bitboard atk = bishop_attacks_from(static_cast<u_int8_t>(from), occ);
     atk &= ~my_occ;
 
-    // Quiet
-    Bitboard q = atk & ~their_occ;
-    while (q) {
-      int to = poplsb(q);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wB : OccupancyType::bB,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagQuiet); // optional quiet flag
+    if (emit_quiets) {
+      Bitboard q = atk & ~their_occ;
+      while (q) {
+        int to = poplsb(q);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wB : OccupancyType::bB,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagQuiet); // optional quiet flag
+      }
     }
 
-    // Captures
-    Bitboard c = atk & their_occ;
-    while (c) {
-      int to = poplsb(c);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wB : OccupancyType::bB,
-                      /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/0);
+    if (emit_captures) {
+      Bitboard c = atk & their_occ;
+      while (c) {
+        int to = poplsb(c);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wB : OccupancyType::bB,
+                        /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/0);
+      }
     }
   }
 }
@@ -603,8 +634,12 @@ void emit_bishop_moves(const Board& b, SideToMove stm,
  */
 void emit_rook_moves(const Board& b, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out,
-                     uint16_t& move_count) {
+                     uint16_t& move_count, MoveGenType::Type type) {
   const bool white = (stm == SideToMove::White);
+  const bool emit_quiets =
+      (type == MoveGenType::QuietMovesOnly || type == MoveGenType::AllMoves);
+  const bool emit_captures =
+      (type == MoveGenType::CapturesOnly || type == MoveGenType::AllMoves);
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
   const Bitboard occ = b.occupancy[to_index(PieceColor::Both)];
   const Bitboard my_occ = b.occupancy[to_index(stm)];
@@ -616,28 +651,32 @@ void emit_rook_moves(const Board& b, SideToMove stm,
     Bitboard atk = rook_attacks_from(static_cast<u_int8_t>(from), occ);
     atk &= ~my_occ;
 
-    Bitboard quiet = atk & ~their_occ;
-    while (quiet) {
-      int to = poplsb(quiet);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wR : OccupancyType::bR,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagQuiet); // optional quiet flag
+    if (emit_quiets) {
+      Bitboard quiet = atk & ~their_occ;
+      while (quiet) {
+        int to = poplsb(quiet);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wR : OccupancyType::bR,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagQuiet); // optional quiet flag
+      }
     }
 
-    Bitboard captures = atk & their_occ;
-    while (captures) {
-      int to = poplsb(captures);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wR : OccupancyType::bR,
-                      /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/0);
+    if (emit_captures) {
+      Bitboard captures = atk & their_occ;
+      while (captures) {
+        int to = poplsb(captures);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wR : OccupancyType::bR,
+                        /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/0);
+      }
     }
   }
 }
@@ -651,8 +690,12 @@ void emit_rook_moves(const Board& b, SideToMove stm,
  */
 void emit_queen_moves(const Board& b, SideToMove stm,
                       std::array<uint32_t, kMaxMovementCount>& out,
-                      uint16_t& move_count) {
+                      uint16_t& move_count, MoveGenType::Type type) {
   const bool white = (stm == SideToMove::White);
+  const bool emit_quiets =
+      (type == MoveGenType::QuietMovesOnly || type == MoveGenType::AllMoves);
+  const bool emit_captures =
+      (type == MoveGenType::CapturesOnly || type == MoveGenType::AllMoves);
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
   const Bitboard occ = b.occupancy[to_index(PieceColor::Both)];
   const Bitboard my_occ = b.occupancy[to_index(stm)];
@@ -665,28 +708,31 @@ void emit_queen_moves(const Board& b, SideToMove stm,
                    bishop_attacks_from(static_cast<u_int8_t>(from), occ);
     atk &= ~my_occ;
 
-    Bitboard q = atk & ~their_occ;
-    while (q) {
-      int to = poplsb(q);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wQ : OccupancyType::bQ,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagQuiet); // optional quiet flag
+    if (emit_quiets) {
+      Bitboard q = atk & ~their_occ;
+      while (q) {
+        int to = poplsb(q);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wQ : OccupancyType::bQ,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagQuiet); // optional quiet flag
+      }
     }
-    // Captures
-    Bitboard c = atk & their_occ;
-    while (c) {
-      int to = poplsb(c);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wQ : OccupancyType::bQ,
-                      /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/0);
+    if (emit_captures) {
+      Bitboard c = atk & their_occ;
+      while (c) {
+        int to = poplsb(c);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wQ : OccupancyType::bQ,
+                        /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/0);
+      }
     }
   }
 }
@@ -696,8 +742,12 @@ void emit_queen_moves(const Board& b, SideToMove stm,
  */
 void emit_king_moves(const Board& b, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out,
-                     uint16_t& move_count) {
+                     uint16_t& move_count, MoveGenType::Type type) {
   const bool white = (stm == SideToMove::White);
+  const bool emit_quiets =
+      (type == MoveGenType::QuietMovesOnly || type == MoveGenType::AllMoves);
+  const bool emit_captures =
+      (type == MoveGenType::CapturesOnly || type == MoveGenType::AllMoves);
   const Bitboard my_occ = b.occupancy[to_index(stm)];
   const Bitboard their_occ = b.occupancy[to_index(flip_side(stm))];
   const auto& castle_cfg = kCastlingSideConfigs[to_index(stm)];
@@ -708,58 +758,62 @@ void emit_king_moves(const Board& b, SideToMove stm,
     int from = poplsb(kings);
     Bitboard atk = KING_ATTACKS[static_cast<std::size_t>(from)] & ~my_occ;
 
-    Bitboard quiet = atk & ~their_occ;
-    while (quiet) {
-      int to = poplsb(quiet);
-      if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
-        continue; // cannot move into check
+    if (emit_quiets) {
+      Bitboard quiet = atk & ~their_occ;
+      while (quiet) {
+        int to = poplsb(quiet);
+        if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
+          continue; // cannot move into check
+        }
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagQuiet); // optional quiet flag
       }
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagQuiet); // optional quiet flag
+
+      CastlingRights castle_rights = king_castle_rights(b, stm);
+      // Kingside castling --> remember to also move the rook in make_move()
+      if (has_rights(castle_rights, castle_cfg.king_flag)) {
+        int to = static_cast<int>(castle_cfg.king_kingside_target);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagCastle); // kingside castle flag
+      }
+      // Queenside castling --> remember to also move the rook in make_move()
+      if (has_rights(castle_rights, castle_cfg.queen_flag)) {
+        int to = static_cast<int>(castle_cfg.king_queenside_target);
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
+                        /*captured=*/OccupancyType::empty,
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/kFlagCastleLong); // queenside castle flag
+      }
     }
 
-    Bitboard captures = atk & their_occ;
-    while (captures) {
-      int to = poplsb(captures);
-      if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
-        continue; // cannot move into check
+    if (emit_captures) {
+      Bitboard captures = atk & their_occ;
+      while (captures) {
+        int to = poplsb(captures);
+        if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
+          continue; // cannot move into check
+        }
+        assert(move_count < kMaxMovementCount);
+        out[move_count++] =
+            encode_move(from, to,
+                        /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
+                        /*captured=*/b.pieces[static_cast<std::size_t>(to)],
+                        /*promo=*/OccupancyType::empty,
+                        /*flags=*/0);
       }
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
-                      /*captured=*/b.pieces[static_cast<std::size_t>(to)],
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/0);
-    }
-
-    CastlingRights castle_rights = king_castle_rights(b, stm);
-    // Kingside castling --> remember to also move the rook in make_move()
-    if (has_rights(castle_rights, castle_cfg.king_flag)) {
-      int to = static_cast<int>(castle_cfg.king_kingside_target);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagCastle); // kingside castle flag
-    }
-    // Queenside castling --> remember to also move the rook in make_move()
-    if (has_rights(castle_rights, castle_cfg.queen_flag)) {
-      int to = static_cast<int>(castle_cfg.king_queenside_target);
-      assert(move_count < kMaxMovementCount);
-      out[move_count++] =
-          encode_move(from, to,
-                      /*piece=*/white ? OccupancyType::wK : OccupancyType::bK,
-                      /*captured=*/OccupancyType::empty,
-                      /*promo=*/OccupancyType::empty,
-                      /*flags=*/kFlagCastleLong); // queenside castle flag
     }
   }
 }
@@ -967,52 +1021,20 @@ CastlingRights king_castle_rights(const Board& board, SideToMove stm) {
   return rights;
 }
 
-// int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
-//   static const int scores[13] = {
-//       0,   100, 320, 330, 500, 900,  20000, // empty, P, N, B, R, Q, K
-//       100, 320, 330, 500, 900, 20000        // empty, p, n, b, r, q, k
-//   };
-//   return scores[static_cast<std::size_t>(captured)] * 10 -
-//   scores[static_cast<std::size_t>(piece)];
-// }
-
-// void sort_moves(std::array<uint32_t, kMaxMovementCount>& moves, uint16_t
-// move_count) {
-//   // Simple bubble sort based on MVV-LVA heuristic
-//   for (uint16_t i = 0; i < move_count; ++i) {
-//     for (uint16_t j = 0; j < move_count - i - 1; ++j) {
-//       uint32_t m1 = moves[j];
-//       uint32_t m2 = moves[j + 1];
-
-//       OccupancyType cap1 = static_cast<OccupancyType>(move_captured(m1));
-//       OccupancyType cap2 = static_cast<OccupancyType>(move_captured(m2));
-//       OccupancyType piece1 = static_cast<OccupancyType>(move_piece(m1));
-//       OccupancyType piece2 = static_cast<OccupancyType>(move_piece(m2));
-
-//       int score1 = mvv_lva_score(cap1, piece1);
-//       int score2 = mvv_lva_score(cap2, piece2);
-
-//       if (score1 < score2) {
-//         std::swap(moves[j], moves[j + 1]);
-//       }
-//     }
-//   }
-// }
-
 void emit_all_moves(const Board& board, SideToMove stm,
                     std::array<uint32_t, kMaxMovementCount>& out,
-                    uint16_t& move_count) {
+                    uint16_t& move_count, MoveGenType::Type gen_type) {
   PawnMasks pm = gen_pawn_masks(board, stm);
   if (stm == SideToMove::White) {
-    emit_white_pawn_moves(board, pm, out, move_count);
+    emit_white_pawn_moves(board, pm, out, move_count, gen_type);
   } else {
-    emit_black_pawn_moves(board, pm, out, move_count);
+    emit_black_pawn_moves(board, pm, out, move_count, gen_type);
   }
-  emit_knight_moves(board, stm, out, move_count);
-  emit_bishop_moves(board, stm, out, move_count);
-  emit_rook_moves(board, stm, out, move_count);
-  emit_queen_moves(board, stm, out, move_count);
-  emit_king_moves(board, stm, out, move_count);
+  emit_knight_moves(board, stm, out, move_count, gen_type);
+  emit_bishop_moves(board, stm, out, move_count, gen_type);
+  emit_rook_moves(board, stm, out, move_count, gen_type);
+  emit_queen_moves(board, stm, out, move_count, gen_type);
+  emit_king_moves(board, stm, out, move_count, gen_type);
 }
 
 } // namespace chess

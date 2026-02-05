@@ -18,7 +18,7 @@ inline constexpr int MATE_THRESHOLD = MATE_VALUE - static_cast<int>(MAX_PLY);
 inline constexpr int MOBILITY_SCALING = 15;
 
 inline constexpr int ASPIRATION_WINDOW_INITIAL = 100;
-inline constexpr int ASPIRATION_WINDOW_MAX = 1200;
+inline constexpr int ASPIRATION_WINDOW_MAX = 800;
 inline constexpr int QUIESCENCE_DELTA_MARGIN = 250;
 inline constexpr int QUIESCENCE_MAX_PLY = 8;
 inline constexpr int QUIESCENCE_MAX_NOISY_MOVES = 10;

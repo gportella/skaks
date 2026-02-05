@@ -172,30 +172,38 @@ Bitboard king_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
 
 void emit_white_pawn_moves(const Board& board, const PawnMasks& masks,
                            std::array<uint32_t, kMaxMovementCount>& out,
-                           std::uint16_t& move_count);
+                           std::uint16_t& move_count,
+                           MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_black_pawn_moves(const Board& board, const PawnMasks& masks,
                            std::array<uint32_t, kMaxMovementCount>& out,
-                           std::uint16_t& move_count);
+                           std::uint16_t& move_count,
+                           MoveGenType::Type type = MoveGenType::AllMoves);
 
 void emit_knight_moves(const Board& board, SideToMove stm,
                        std::array<uint32_t, kMaxMovementCount>& out,
-                       std::uint16_t& move_count);
+                       std::uint16_t& move_count,
+                       MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_bishop_moves(const Board& board, SideToMove stm,
                        std::array<uint32_t, kMaxMovementCount>& out,
-                       std::uint16_t& move_count);
+                       std::uint16_t& move_count,
+                       MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_rook_moves(const Board& board, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out,
-                     std::uint16_t& move_count);
+                     std::uint16_t& move_count,
+                     MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_queen_moves(const Board& board, SideToMove stm,
                       std::array<uint32_t, kMaxMovementCount>& out,
-                      std::uint16_t& move_count);
+                      std::uint16_t& move_count,
+                      MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_king_moves(const Board& board, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out,
-                     std::uint16_t& move_count);
+                     std::uint16_t& move_count,
+                     MoveGenType::Type type = MoveGenType::AllMoves);
 
 void emit_all_moves(const Board& board, SideToMove stm,
                     std::array<uint32_t, kMaxMovementCount>& out,
-                    std::uint16_t& move_count);
+                    std::uint16_t& move_count,
+                    MoveGenType::Type type = MoveGenType::AllMoves);
 CastlingRights king_castle_rights(const Board& board, SideToMove stm);
 bool is_square_attacked(const Board& board, u_int8_t sq,
                         SideToMove attacker_side);

@@ -14,25 +14,26 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 add_executable(chess_engine_tests
+  attack_tests.cpp
   board_tests.cpp
+  cli_tests.cpp
   engine_tests.cpp
+  exchange_tests.cpp
   incremental_tests.cpp
-  nnue_adapter_tests.cpp
+  magic_bitboards_tests.cpp
+  movepicker_tests.cpp
   move_tests.cpp
   move_ordering_tests.cpp
-  scoring_tests.cpp
-  attack_tests.cpp
-  magic_bitboards_tests.cpp
-  exchange_tests.cpp
+  nnue_adapter_tests.cpp
+  params_loader_tests.cpp
   pin_tests.cpp
   polyglot_tests.cpp
-  cli_tests.cpp
+  scoring_tests.cpp
   search_tests.cpp
   time_manager_tests.cpp
-  zobrist_tests.cpp
-  params_loader_tests.cpp
   uci_tests.cpp
   syzygy_tests.cpp
+  zobrist_tests.cpp
 )
 
 target_link_libraries(chess_engine_tests

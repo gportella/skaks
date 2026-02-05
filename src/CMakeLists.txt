@@ -11,6 +11,7 @@ add_library(chess_engine_core STATIC
   exchange.cpp
   cli.cpp
   magic_bitboards.cpp
+  move_picker.cpp
   nnue_sf.cpp
   moves.cpp
     move_ordering.cpp

@@ -6,9 +6,9 @@
 namespace chess {
 
 inline constexpr std::string_view kEngineName = "ŝ𝕜𝕒𝕜ŝ";
-inline constexpr std::string_view kEngineVersion = "0.20.8";
+inline constexpr std::string_view kEngineVersion = "0.20.11";
 
-inline constexpr std::array<std::string_view, 22> kOptimizationFeatures{
+inline constexpr std::array<std::string_view, 23> kOptimizationFeatures{
     "Bitboard generation with precomputed attack masks and magic bitboards",
     "Alpha-beta search, tuneable size transposition table caching",
     "Zobrist hashing for incremental board state keys",
@@ -30,6 +30,7 @@ inline constexpr std::array<std::string_view, 22> kOptimizationFeatures{
     "Futility, reverse futility and SEE pruning in search",
     "Syzygy tablebase probing support",
     "Singular/negative extensions, ProbCut refinements, and LMR tweaks",
+    "New move picker test, see if we are faster",
     "Eval correction history and quiescence pruning upgrades"};
 
 } // namespace chess

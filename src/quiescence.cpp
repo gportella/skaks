@@ -1,6 +1,7 @@
 #include "chess/quiescence.hpp"
 
 #include "chess/exchange.hpp"
+#include "chess/move_picker.hpp"
 #include "chess/moves.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
@@ -181,71 +182,12 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   }
 
   // Generate candidate moves (all if in check, otherwise noisy only)
-  uint16_t move_count = 0;
-  std::array<uint32_t, kMaxMovementCount> moves{};
-  if (in_check) {
-    if (search_stats_enabled()) {
-      const auto start = std::chrono::steady_clock::now();
-      moves = generate_legal_moves(board, stm, move_count);
-      const auto end = std::chrono::steady_clock::now();
-      const std::uint64_t elapsed = static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
-              .count());
-      auto& stats = search_stats();
-      stats.movegen_calls.fetch_add(1, std::memory_order_relaxed);
-      stats.movegen_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
-    } else {
-      moves = generate_legal_moves(board, stm, move_count);
-    }
-  } else {
-    if (search_stats_enabled()) {
-      const auto start = std::chrono::steady_clock::now();
-      moves = generate_all_moves(board, stm, move_count);
-      const auto end = std::chrono::steady_clock::now();
-      const std::uint64_t elapsed = static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
-              .count());
-      auto& stats = search_stats();
-      stats.movegen_calls.fetch_add(1, std::memory_order_relaxed);
-      stats.movegen_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
-    } else {
-      moves = generate_all_moves(board, stm, move_count);
-    }
-    uint16_t write_idx = 0;
-    // filter only legal captures and promotions
-    for (uint16_t i = 0; i < move_count; ++i) {
-      Move m = decode_move(moves[i]);
-      const bool is_capture = m.captured_pc != OccupancyType::empty;
-      const bool is_promo = m.promo_pc != OccupancyType::empty;
-      if (!(is_capture || is_promo)) {
-        continue;
-      }
-      Undo u = make_move(board, m);
-      if (nnue_adapter) {
-        nnue_adapter->push_move(m);
-      }
-      const bool legal = !is_check(board, flip_side(board.side_to_move));
-      undo_move(board, u);
-      if (nnue_adapter) {
-        nnue_adapter->pop_move();
-      }
-      if (legal) {
-        moves[write_idx++] = moves[i];
-      }
-    }
-    move_count = write_idx;
-  }
-
-  // Order captures/promotions for better cutoffs
-  sort_moves(board, moves, move_count, 0);
-
-  // Hard cap noisy moves per node when not in check to avoid explosion
-  if (!in_check && move_count > sparams.quiescence_max_noisy_moves) {
-    move_count = static_cast<uint16_t>(sparams.quiescence_max_noisy_moves);
-  }
+  MovePicker picker(board, stm, nullptr, nullptr, nullptr, -1, 0, nullptr,
+                    nullptr, in_check, true);
+  Move move = picker.nextMove();
 
   // If no moves, return mate/draw/stand-pat depending on check
-  if (move_count == 0) {
+  if (move.moving_pc == OccupancyType::empty) {
     if (in_check) {
       const int mate = (stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE;
       if (tt)
@@ -299,8 +241,16 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     return false;
   };
 
-  for (uint16_t i = 0; i < move_count; ++i) {
-    Move move = decode_move(moves[i]);
+  // Iterate noisy moves (and all moves if in check)
+  uint16_t noisy_seen = 0;
+  uint16_t move_index = 0;
+  for (; move.moving_pc != OccupancyType::empty; move = picker.nextMove()) {
+    if (!in_check && sparams.quiescence_max_noisy_moves > 0 &&
+        noisy_seen >= sparams.quiescence_max_noisy_moves) {
+      break;
+    }
+    ++noisy_seen;
+    const uint16_t i = move_index++;
 
     if (move.captured_pc != OccupancyType::empty) {
       const int see = static_exchange_eval(board, move);
@@ -388,10 +338,10 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       const uint16_t quiet_count = collect_quiet_checks(board, stm, quiet_checks,
                                                         nnue_adapter, quiet_cap);
       for (uint16_t i = 0; i < quiet_count; ++i) {
-        Move move = decode_move(quiet_checks[i]);
-        Undo undo = make_move(board, move);
+        Move quiet_move = decode_move(quiet_checks[i]);
+        Undo undo = make_move(board, quiet_move);
         if (nnue_adapter) {
-          nnue_adapter->push_move(move);
+          nnue_adapter->push_move(quiet_move);
         }
         const int score =
             quiescence(board, alpha, beta, flip_side(stm), evaluator,
@@ -400,7 +350,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         if (nnue_adapter) {
           nnue_adapter->pop_move();
         }
-        if (process_score(move, score)) {
+        if (process_score(quiet_move, score)) {
           return score;
         }
       }
