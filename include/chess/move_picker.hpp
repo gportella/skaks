@@ -49,6 +49,8 @@ private:
 
   std::array<uint32_t, kMaxMovementCount> good_captures_{};
   std::array<uint32_t, kMaxMovementCount> bad_captures_{};
+  std::array<int, kMaxMovementCount> good_capture_keys_{};
+  std::array<int, kMaxMovementCount> bad_capture_keys_{};
   uint16_t good_capture_count_ = 0;
   uint16_t bad_capture_count_ = 0;
   uint16_t good_capture_index_ = 0;

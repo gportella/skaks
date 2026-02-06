@@ -80,6 +80,42 @@ void MovePicker::sort_quiets() {
   }
 }
 
+namespace {
+inline int mvv_lva_score(OccupancyType captured, OccupancyType piece) {
+  static const int scores[13] = {0,   100, 320, 330, 500, 900,  20000,
+                                 100, 320, 330, 500, 900, 20000};
+  return scores[static_cast<size_t>(captured)] * 10 -
+         scores[static_cast<size_t>(piece)];
+}
+
+void sort_capture_list_with_keys(std::array<uint32_t, kMaxMovementCount>& list,
+                                 std::array<int, kMaxMovementCount>& keys,
+                                 uint16_t count) {
+  struct CapKey {
+    uint32_t code;
+    int key;
+    uint16_t order;
+  };
+  std::array<CapKey, kMaxMovementCount> cap_keys{};
+
+  for (uint16_t i = 0; i < count; ++i) {
+    cap_keys[i] = {list[i], keys[i], i};
+  }
+
+  std::sort(cap_keys.begin(), cap_keys.begin() + count,
+            [](const CapKey& a, const CapKey& b) {
+              if (a.key == b.key) {
+                return a.order < b.order;
+              }
+              return a.key > b.key;
+            });
+
+  for (uint16_t i = 0; i < count; ++i) {
+    list[i] = cap_keys[i].code;
+  }
+}
+} // namespace
+
 void MovePicker::ensure_quiets_generated() {
   if (in_check_ || quiets_generated_) {
     return;
@@ -138,12 +174,24 @@ Move MovePicker::nextMove() {
             good_captures_[good_capture_count_++] = m;
             continue;
           }
+          const auto cap = static_cast<OccupancyType>(move_captured(m));
+          const auto pc = static_cast<OccupancyType>(move_piece(m));
+          const int mvv = mvv_lva_score(cap, pc);
           const int see = static_exchange_eval(*board_, decode_move(m));
+          const int key = 1'000'000 + mvv + see * 100;
           if (see >= 0) {
-            good_captures_[good_capture_count_++] = m;
+            good_captures_[good_capture_count_] = m;
+            good_capture_keys_[good_capture_count_++] = key;
           } else {
-            bad_captures_[bad_capture_count_++] = m;
+            bad_captures_[bad_capture_count_] = m;
+            bad_capture_keys_[bad_capture_count_++] = key;
           }
+        }
+        if (!in_check_) {
+          sort_capture_list_with_keys(good_captures_, good_capture_keys_,
+                                      good_capture_count_);
+          sort_capture_list_with_keys(bad_captures_, bad_capture_keys_,
+                                      bad_capture_count_);
         }
         captures_generated_ = true;
       }
