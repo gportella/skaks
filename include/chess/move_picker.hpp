@@ -33,6 +33,8 @@ public:
   Move nextMove();
 
 private:
+  static constexpr uint16_t kInvalidIndex = static_cast<uint16_t>(-1);
+
   uint32_t tt_code_ = 0;
   Move* tt_move_{};
   bool tt_returned_ = false;
@@ -62,6 +64,10 @@ private:
   uint16_t quiet_index_ = 0;
   bool quiets_generated_ = false;
   bool quiets_sorted_ = false;
+  bool quiet_cache_valid_ = false;
+  uint16_t quiet_primary_idx_ = kInvalidIndex;
+  uint16_t quiet_secondary_idx_ = kInvalidIndex;
+  uint16_t quiet_counter_idx_ = kInvalidIndex;
 
   void ensure_quiets_generated();
   void ensure_quiets_sorted();

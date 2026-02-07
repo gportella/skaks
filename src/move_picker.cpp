@@ -124,6 +124,7 @@ void MovePicker::ensure_quiets_generated() {
                                  MoveGenType::QuietMovesOnly);
   quiet_index_ = 0;
   remove_tt_from_quiets();
+  quiet_cache_valid_ = false;
   quiets_generated_ = true;
   quiets_sorted_ = false;
 }
@@ -218,25 +219,50 @@ Move MovePicker::nextMove() {
         // generating quiets; only fall back to quiet generation if needed.
         ensure_quiets_generated();
 
+        auto ensure_quiet_cache = [&](uint32_t primary, uint32_t secondary) {
+          if (quiet_cache_valid_) {
+            return;
+          }
+          quiet_primary_idx_ = kInvalidIndex;
+          quiet_secondary_idx_ = kInvalidIndex;
+          quiet_counter_idx_ = kInvalidIndex;
+          for (uint16_t i = 0; i < quiet_count_; ++i) {
+            const uint32_t m = quiets_[i];
+            if (m == 0) {
+              continue;
+            }
+            if (primary != 0 && m == primary) {
+              quiet_primary_idx_ = i;
+            } else if (secondary != 0 && m == secondary) {
+              quiet_secondary_idx_ = i;
+            } else if (counter_code_ != 0 && m == counter_code_) {
+              quiet_counter_idx_ = i;
+            }
+          }
+          quiet_cache_valid_ = true;
+        };
+
         if (killers_ != nullptr && ply_ >= 0 && ply_ < MAX_PLY) {
           const uint32_t primary =
               killers_->primary[static_cast<std::size_t>(ply_)];
           if (primary != 0 && primary != tt_code_) {
-            for (uint16_t i = 0; i < quiet_count_; ++i) {
-              if (quiets_[i] == primary) {
-                quiets_[i] = 0;
-                return decode_move(primary);
-              }
+            const uint32_t secondary =
+                killers_->secondary[static_cast<std::size_t>(ply_)];
+            ensure_quiet_cache(primary, secondary);
+            if (quiet_primary_idx_ != kInvalidIndex) {
+              quiets_[quiet_primary_idx_] = 0;
+              quiet_primary_idx_ = kInvalidIndex;
+              return decode_move(primary);
             }
           }
           const uint32_t secondary =
               killers_->secondary[static_cast<std::size_t>(ply_)];
           if (secondary != 0 && secondary != tt_code_) {
-            for (uint16_t i = 0; i < quiet_count_; ++i) {
-              if (quiets_[i] == secondary) {
-                quiets_[i] = 0;
-                return decode_move(secondary);
-              }
+            ensure_quiet_cache(primary, secondary);
+            if (quiet_secondary_idx_ != kInvalidIndex) {
+              quiets_[quiet_secondary_idx_] = 0;
+              quiet_secondary_idx_ = kInvalidIndex;
+              return decode_move(secondary);
             }
           }
         }
@@ -248,12 +274,42 @@ Move MovePicker::nextMove() {
       if (!in_check_) {
         ensure_quiets_generated();
 
-        if (counter_code_ != 0 && counter_code_ != tt_code_) {
+        auto ensure_quiet_cache = [&](uint32_t primary, uint32_t secondary) {
+          if (quiet_cache_valid_) {
+            return;
+          }
+          quiet_primary_idx_ = kInvalidIndex;
+          quiet_secondary_idx_ = kInvalidIndex;
+          quiet_counter_idx_ = kInvalidIndex;
           for (uint16_t i = 0; i < quiet_count_; ++i) {
-            if (quiets_[i] == counter_code_) {
-              quiets_[i] = 0;
-              return decode_move(counter_code_);
+            const uint32_t m = quiets_[i];
+            if (m == 0) {
+              continue;
             }
+            if (primary != 0 && m == primary) {
+              quiet_primary_idx_ = i;
+            } else if (secondary != 0 && m == secondary) {
+              quiet_secondary_idx_ = i;
+            } else if (counter_code_ != 0 && m == counter_code_) {
+              quiet_counter_idx_ = i;
+            }
+          }
+          quiet_cache_valid_ = true;
+        };
+
+        uint32_t primary = 0;
+        uint32_t secondary = 0;
+        if (killers_ != nullptr && ply_ >= 0 && ply_ < MAX_PLY) {
+          primary = killers_->primary[static_cast<std::size_t>(ply_)];
+          secondary = killers_->secondary[static_cast<std::size_t>(ply_)];
+        }
+        ensure_quiet_cache(primary, secondary);
+
+        if (counter_code_ != 0 && counter_code_ != tt_code_) {
+          if (quiet_counter_idx_ != kInvalidIndex) {
+            quiets_[quiet_counter_idx_] = 0;
+            quiet_counter_idx_ = kInvalidIndex;
+            return decode_move(counter_code_);
           }
         }
       }
