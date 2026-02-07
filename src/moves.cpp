@@ -116,18 +116,20 @@ void sort_moves(const Board& board,
 }
 
 std::array<uint32_t, kMaxMovementCount>
-generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count) {
+generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count,
+                   MoveGenType::Type type) {
   std::array<uint32_t, kMaxMovementCount> moves{};
   move_count = 0;
-  emit_all_moves(board, stm, moves, move_count);
+  emit_all_moves(board, stm, moves, move_count, type);
   return moves;
 }
 
 std::array<uint32_t, kMaxMovementCount>
-generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count) {
+generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count,
+                     MoveGenType::Type type) {
   std::array<uint32_t, kMaxMovementCount> legal_moves{};
   uint16_t legal_move_count = 0;
-  auto pseudo_moves = generate_all_moves(board, stm, move_count);
+  auto pseudo_moves = generate_all_moves(board, stm, move_count, type);
   const bool in_check = is_check(board, stm);
   PinnedMapByPiece pinned_map{};
   bool use_pin_fastpath = false;

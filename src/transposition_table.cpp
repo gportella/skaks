@@ -113,6 +113,13 @@ void TranspositionTable::store(std::uint64_t key, int depth, int score,
     return;
   }
 
+  // Prevent overwriting a deeper search result with a shallower one (e.g.
+  // QSearch overwriting PV) unless we are updating the same position.
+  if (replacement->key.load(std::memory_order_relaxed) != key &&
+      replacement->depth > depth) {
+    return;
+  }
+
   const int normalized = normalize_mate_score(score, ply);
   replacement->best_move = move;
   replacement->depth = depth;

@@ -187,9 +187,11 @@ void undo_move(Board& b, const Undo& u);
 UndoSEE make_see_move(Board& b, const Move& m);
 void undo_see_move(Board& b, const UndoSEE& u);
 std::array<uint32_t, kMaxMovementCount>
-generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count);
+generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count,
+                   MoveGenType::Type type = MoveGenType::AllMoves);
 std::array<uint32_t, kMaxMovementCount>
-generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count);
+generate_legal_moves(Board& board, SideToMove stm, uint16_t& move_count,
+                     MoveGenType::Type type = MoveGenType::AllMoves);
 bool is_quiet_position(Board& board, SideToMove stm);
 inline bool is_quiet_position(Board& board) {
   return is_quiet_position(board, board.side_to_move);

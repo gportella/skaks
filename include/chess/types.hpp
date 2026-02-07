@@ -37,6 +37,15 @@ enum class CastlingRights {
   BlackQueenside = 8
 };
 
+struct MoveGenType {
+  enum Type {
+    AllMoves,
+    CapturesOnly,
+    QuietMovesOnly,
+    EvasionMoves,
+  };
+};
+
 inline constexpr CastlingRights WK = CastlingRights::WhiteKingside;
 inline constexpr CastlingRights WQ = CastlingRights::WhiteQueenside;
 inline constexpr CastlingRights BK = CastlingRights::BlackKingside;

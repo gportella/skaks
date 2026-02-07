@@ -4,6 +4,7 @@
 #include "chess/complexity.hpp"
 #include "chess/exchange.hpp"
 #include "chess/move_ordering.hpp"
+#include "chess/move_picker.hpp"
 #include "chess/moves.hpp"
 #include "chess/nnue_sf.hpp"
 #include "chess/piece_values.hpp"
@@ -1011,12 +1012,14 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     }
   }
 
+  const bool in_check = is_check(board, stm);
+
   int tt_extension = 0;
   int tt_negative_extension = 0;
   const bool tt_would_fail_high =
       (stm == SideToMove::White) ? (tt_score >= beta) : (tt_score <= alpha);
   if (has_cached_move && tt_lower_bound && tt_would_fail_high &&
-      depth >= kSingularMinDepth && !is_pv && !is_check(board, stm) &&
+      depth >= kSingularMinDepth && !is_pv && !in_check &&
       !is_excluded_move(cached_move)) {
     const int singular_beta =
         search_detail::singular_beta(tt_score, depth, kSingularMarginPerDepth);
@@ -1112,19 +1115,11 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   int alpha_base = alpha;
   int beta_base = beta;
 
-  bool do_quiescence = true;
   // QUIESCENCE SEARCH
   if (depth == 0) {
 
-    int qs_raw = 0;
-    if (do_quiescence) {
-      qs_raw = quiescence(board, alpha, beta, stm, evaluator,
-                          scratch.nnue_adapter, nodes, tt, ply);
-    } else {
-      int eval =
-          evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
-      qs_raw = eval;
-    }
+    int qs_raw = quiescence(board, alpha, beta, stm, evaluator,
+                            scratch.nnue_adapter, nodes, tt, ply);
     const int qs = normalize_mate_score(qs_raw, ply);
     if (tt) {
       TranspositionEntry entry;
@@ -1162,7 +1157,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   };
 
   // reverse futility pruning: early cutoff in non-PV, non-check nodes
-  if (!is_pv && depth >= 3 && depth <= 8 && !is_check(board, stm)) {
+  if (!is_pv && depth >= 3 && depth <= 8 && !in_check) {
     const int eval =
         evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
     ensure_corr_keys();
@@ -1196,7 +1191,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
 
   // razor pruning: shallow check before full search at low depth in non-PV
   // nodes to save eval calls when the position is already far below alpha.
-  if (!is_pv && depth <= 3 && !is_check(board, stm)) {
+  if (!is_pv && depth <= 3 && !in_check) {
     if (!static_eval_ready) {
       const int eval =
           evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
@@ -1273,7 +1268,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
 
   // out of moves: check for checkmate or stalemate
   if (move_count == 0) {
-    if (is_check(board, stm)) {
+    if (in_check) {
       const int mate_score = normalize_mate_score(
           (stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE, ply);
       if (tt) {
@@ -1305,7 +1300,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
    * we can prune the node early. This saves eval work at deeper time controls
    * while retaining tactical reliability.
    */
-  if (!is_pv && depth >= 7 && !is_check(board, stm)) {
+  if (!is_pv && depth >= 7 && !in_check) {
     const int probcut_depth = depth - sparams.probcut_reduction;
     if (probcut_depth >= 1) {
       if (!static_eval_ready) {
@@ -1392,6 +1387,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   sort_moves(board, moves, move_count, tt_code, scratch.killers, history_matrix,
              ply, counter_code, scratch.ordering.continuation_table(),
              parent_move);
+  // Move ordering is handled by MovePicker below.
 
   // MAIN SEARCH LOOP, after move generation and ordering
   SearchResult best{};
@@ -1399,7 +1395,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   best.outcome = SearchResult::Outcome::InProgress;
   best.pv_length = 0;
 
-  const bool parent_in_check = is_check(board, stm);
+  const bool parent_in_check = in_check;
   int moves_tried = 0;
 
   bool is_improving = false;
@@ -1505,7 +1501,30 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     return cutoff_now;
   };
 
+  // Move tt_move_local{};
+  // Move* tt_ptr = nullptr;
+  // if (tt_code != 0) {
+  //   tt_move_local = decode_move(tt_code);
+  //   tt_ptr = &tt_move_local;
+  // }
+  // MovePicker picker(board, stm, tt_ptr, scratch.killers, history_matrix, ply,
+  //                   counter_code, scratch.ordering.continuation_table(),
+  //                   parent_move, in_check);
+  // auto next_move = [&](Move& out_move, uint32_t& out_code) -> bool {
+  //   out_move = picker.nextMove();
+  //   if (out_move.moving_pc == OccupancyType::empty) {
+  //     return false;
+  //   }
+  //   out_code =
+  //       encode_move(out_move.from, out_move.to, out_move.moving_pc,
+  //                   out_move.captured_pc, out_move.promo_pc, out_move.flags);
+  //   return true;
+  // };
+
   // Iterate over all generated moves
+  // Move move{};
+  // uint32_t move_code = 0;
+  // while (next_move(move, move_code)) {
   for (uint16_t i = 0; i < move_count; ++i) {
     const uint32_t move_code = moves[i];
     Move move = decode_move(move_code);

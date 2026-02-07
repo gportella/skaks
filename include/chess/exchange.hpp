@@ -8,6 +8,6 @@
 
 namespace chess {
 
-int static_exchange_eval(Board b, const Move& move);
+int static_exchange_eval(const Board& board, const Move& move);
 
 } // namespace chess

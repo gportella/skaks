@@ -162,6 +162,16 @@ struct SmallestAttacker {
 
 bool is_square_attacked(const Board& board, u_int8_t sq,
                         SideToMove attacker_side);
+// Returns a bitboard of all pieces (both sides) that attack the given square
+// through the provided occupancy mask.
+uint64_t get_all_attackers(const Board& board, int sq, uint64_t occupancy);
+// Returns slider attacks revealed through the (updated) occupancy mask.
+uint64_t get_xray_attackers(const Board& board, int target_sq,
+                            uint64_t occupancy);
+// Returns a single-bit bitboard of the least valuable attacker belonging to
+// `stm` within the `attackers` mask.  Returns 0 if none found.
+uint64_t get_smallest_attacker_from_mask(const Board& board, uint64_t attackers,
+                                         SideToMove stm);
 
 PawnMasks gen_pawn_masks(const Board& board, SideToMove stm);
 Bitboard knight_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
@@ -172,30 +182,38 @@ Bitboard king_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);
 
 void emit_white_pawn_moves(const Board& board, const PawnMasks& masks,
                            std::array<uint32_t, kMaxMovementCount>& out,
-                           std::uint16_t& move_count);
+                           std::uint16_t& move_count,
+                           MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_black_pawn_moves(const Board& board, const PawnMasks& masks,
                            std::array<uint32_t, kMaxMovementCount>& out,
-                           std::uint16_t& move_count);
+                           std::uint16_t& move_count,
+                           MoveGenType::Type type = MoveGenType::AllMoves);
 
 void emit_knight_moves(const Board& board, SideToMove stm,
                        std::array<uint32_t, kMaxMovementCount>& out,
-                       std::uint16_t& move_count);
+                       std::uint16_t& move_count,
+                       MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_bishop_moves(const Board& board, SideToMove stm,
                        std::array<uint32_t, kMaxMovementCount>& out,
-                       std::uint16_t& move_count);
+                       std::uint16_t& move_count,
+                       MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_rook_moves(const Board& board, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out,
-                     std::uint16_t& move_count);
+                     std::uint16_t& move_count,
+                     MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_queen_moves(const Board& board, SideToMove stm,
                       std::array<uint32_t, kMaxMovementCount>& out,
-                      std::uint16_t& move_count);
+                      std::uint16_t& move_count,
+                      MoveGenType::Type type = MoveGenType::AllMoves);
 void emit_king_moves(const Board& board, SideToMove stm,
                      std::array<uint32_t, kMaxMovementCount>& out,
-                     std::uint16_t& move_count);
+                     std::uint16_t& move_count,
+                     MoveGenType::Type type = MoveGenType::AllMoves);
 
 void emit_all_moves(const Board& board, SideToMove stm,
                     std::array<uint32_t, kMaxMovementCount>& out,
-                    std::uint16_t& move_count);
+                    std::uint16_t& move_count,
+                    MoveGenType::Type type = MoveGenType::AllMoves);
 CastlingRights king_castle_rights(const Board& board, SideToMove stm);
 bool is_square_attacked(const Board& board, u_int8_t sq,
                         SideToMove attacker_side);

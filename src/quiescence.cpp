@@ -81,6 +81,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     return evaluator(static_cast<const Board&>(board), nnue_adapter);
   }
 
+  uint32_t tt_move_code = 0;
+
   // TT probe: tighten window or return cached cutoff/score
   if (tt) {
     TranspositionEntry e;
@@ -102,6 +104,12 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       hit = tt->probe(board.position_key, e);
     }
     if (hit) {
+      if (e.best_move.moving_pc != OccupancyType::empty) {
+        tt_move_code = encode_move(
+            e.best_move.from, e.best_move.to, e.best_move.moving_pc,
+            e.best_move.captured_pc, e.best_move.promo_pc, e.best_move.flags);
+      }
+
       const int tscore = TranspositionTable::decode_score(e.score, ply);
       if (e.flag == TranspositionFlag::Exact) {
         if (search_stats_enabled()) {
@@ -184,52 +192,16 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   uint16_t move_count = 0;
   std::array<uint32_t, kMaxMovementCount> moves{};
   if (in_check) {
-    if (search_stats_enabled()) {
-      const auto start = std::chrono::steady_clock::now();
-      moves = generate_legal_moves(board, stm, move_count);
-      const auto end = std::chrono::steady_clock::now();
-      const std::uint64_t elapsed = static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
-              .count());
-      auto& stats = search_stats();
-      stats.movegen_calls.fetch_add(1, std::memory_order_relaxed);
-      stats.movegen_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
-    } else {
-      moves = generate_legal_moves(board, stm, move_count);
-    }
+    moves = generate_legal_moves(board, stm, move_count);
   } else {
-    if (search_stats_enabled()) {
-      const auto start = std::chrono::steady_clock::now();
-      moves = generate_all_moves(board, stm, move_count);
-      const auto end = std::chrono::steady_clock::now();
-      const std::uint64_t elapsed = static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
-              .count());
-      auto& stats = search_stats();
-      stats.movegen_calls.fetch_add(1, std::memory_order_relaxed);
-      stats.movegen_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
-    } else {
-      moves = generate_all_moves(board, stm, move_count);
-    }
+    moves = generate_all_moves(board, stm, move_count);
     uint16_t write_idx = 0;
-    // filter only legal captures and promotions
+    // filter only captures and promotions (pseudo-legal)
     for (uint16_t i = 0; i < move_count; ++i) {
-      Move m = decode_move(moves[i]);
+      const Move m = decode_move(moves[i]);
       const bool is_capture = m.captured_pc != OccupancyType::empty;
       const bool is_promo = m.promo_pc != OccupancyType::empty;
-      if (!(is_capture || is_promo)) {
-        continue;
-      }
-      Undo u = make_move(board, m);
-      if (nnue_adapter) {
-        nnue_adapter->push_move(m);
-      }
-      const bool legal = !is_check(board, flip_side(board.side_to_move));
-      undo_move(board, u);
-      if (nnue_adapter) {
-        nnue_adapter->pop_move();
-      }
-      if (legal) {
+      if (is_capture || is_promo) {
         moves[write_idx++] = moves[i];
       }
     }
@@ -237,7 +209,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   }
 
   // Order captures/promotions for better cutoffs
-  sort_moves(board, moves, move_count, 0);
+  sort_moves(board, moves, move_count, tt_move_code);
 
   // Hard cap noisy moves per node when not in check to avoid explosion
   if (!in_check && move_count > sparams.quiescence_max_noisy_moves) {
@@ -302,12 +274,9 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   for (uint16_t i = 0; i < move_count; ++i) {
     Move move = decode_move(moves[i]);
 
-    if (move.captured_pc != OccupancyType::empty) {
+    if (!in_check && move.captured_pc != OccupancyType::empty) {
       const int see = static_exchange_eval(board, move);
       if (see < 0) {
-        if (search_stats_enabled()) {
-          search_stats().see_prunes.fetch_add(1, std::memory_order_relaxed);
-        }
         continue;
       }
     }
@@ -366,6 +335,15 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     if (nnue_adapter) {
       nnue_adapter->push_move(move);
     }
+
+    if (!in_check && is_check(board, stm)) {
+      undo_move(board, undo);
+      if (nnue_adapter) {
+        nnue_adapter->pop_move();
+      }
+      continue;
+    }
+
     const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
                                  nnue_adapter, nodes, tt, ply + 1);
     undo_move(board, undo);
