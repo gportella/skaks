@@ -162,6 +162,16 @@ struct SmallestAttacker {
 
 bool is_square_attacked(const Board& board, u_int8_t sq,
                         SideToMove attacker_side);
+// Returns a bitboard of all pieces (both sides) that attack the given square
+// through the provided occupancy mask.
+uint64_t get_all_attackers(const Board& board, int sq, uint64_t occupancy);
+// Returns slider attacks revealed through the (updated) occupancy mask.
+uint64_t get_xray_attackers(const Board& board, int target_sq,
+                            uint64_t occupancy);
+// Returns a single-bit bitboard of the least valuable attacker belonging to
+// `stm` within the `attackers` mask.  Returns 0 if none found.
+uint64_t get_smallest_attacker_from_mask(const Board& board, uint64_t attackers,
+                                         SideToMove stm);
 
 PawnMasks gen_pawn_masks(const Board& board, SideToMove stm);
 Bitboard knight_attack_bm(Board board, u_int8_t sq, SideToMove sidetm);

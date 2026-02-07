@@ -894,6 +894,74 @@ find_smallest_attacker(const Board& board, u_int8_t sq,
   return std::nullopt;
 }
 
+// Returns a bitboard of all pieces (both sides) that attack the given square
+// through the provided occupancy mask.
+uint64_t get_all_attackers(const Board& board, int sq, uint64_t occupancy) {
+  const auto usq = static_cast<u_int8_t>(sq);
+  const uint64_t target = 1ULL << sq;
+  // White pawns that attack sq (they sit below-left / below-right)
+  uint64_t attackers =
+      (((target & NOT_FILE_H) >> 7) | ((target & NOT_FILE_A) >> 9)) &
+      board.pieces_bb[static_cast<std::size_t>(Piece::wP)];
+  // Black pawns that attack sq
+  attackers |= (((target & NOT_FILE_A) << 7) | ((target & NOT_FILE_H) << 9)) &
+               board.pieces_bb[static_cast<std::size_t>(Piece::bP)];
+  // Knights
+  attackers |= KNIGHT_ATTACKS[static_cast<std::size_t>(sq)] &
+               (board.pieces_bb[static_cast<std::size_t>(Piece::wN)] |
+                board.pieces_bb[static_cast<std::size_t>(Piece::bN)]);
+  // Diagonal sliders (bishops + queens)
+  const uint64_t diag = bishop_attacks_from(usq, occupancy);
+  attackers |= diag & (board.pieces_bb[static_cast<std::size_t>(Piece::wB)] |
+                       board.pieces_bb[static_cast<std::size_t>(Piece::bB)] |
+                       board.pieces_bb[static_cast<std::size_t>(Piece::wQ)] |
+                       board.pieces_bb[static_cast<std::size_t>(Piece::bQ)]);
+  // Straight sliders (rooks + queens)
+  const uint64_t straight = rook_attacks_from(usq, occupancy);
+  attackers |= straight & (board.pieces_bb[static_cast<std::size_t>(Piece::wR)] |
+                           board.pieces_bb[static_cast<std::size_t>(Piece::bR)] |
+                           board.pieces_bb[static_cast<std::size_t>(Piece::wQ)] |
+                           board.pieces_bb[static_cast<std::size_t>(Piece::bQ)]);
+  // Kings
+  attackers |= KING_ATTACKS[static_cast<std::size_t>(sq)] &
+               (board.pieces_bb[static_cast<std::size_t>(Piece::wK)] |
+                board.pieces_bb[static_cast<std::size_t>(Piece::bK)]);
+  return attackers;
+}
+
+// Returns slider attacks revealed through the (updated) occupancy mask.
+uint64_t get_xray_attackers(const Board& board, int target_sq,
+                            uint64_t occupancy) {
+  const auto usq = static_cast<u_int8_t>(target_sq);
+  const uint64_t bishops = board.pieces_bb[static_cast<std::size_t>(Piece::wB)] |
+                           board.pieces_bb[static_cast<std::size_t>(Piece::bB)];
+  const uint64_t rooks = board.pieces_bb[static_cast<std::size_t>(Piece::wR)] |
+                         board.pieces_bb[static_cast<std::size_t>(Piece::bR)];
+  const uint64_t queens = board.pieces_bb[static_cast<std::size_t>(Piece::wQ)] |
+                          board.pieces_bb[static_cast<std::size_t>(Piece::bQ)];
+  return (bishop_attacks_from(usq, occupancy) & (bishops | queens)) |
+         (rook_attacks_from(usq, occupancy) & (rooks | queens));
+}
+
+// Returns a single-bit bitboard of the least valuable attacker belonging to
+// `stm` within the `attackers` mask.  Returns 0 if none found.
+uint64_t get_smallest_attacker_from_mask(const Board& board, uint64_t attackers,
+                                         SideToMove stm) {
+  static constexpr Piece white_order[] = {Piece::wP, Piece::wN, Piece::wB,
+                                          Piece::wR, Piece::wQ, Piece::wK};
+  static constexpr Piece black_order[] = {Piece::bP, Piece::bN, Piece::bB,
+                                          Piece::bR, Piece::bQ, Piece::bK};
+  const auto* order = (stm == SideToMove::White) ? white_order : black_order;
+  for (int i = 0; i < 6; ++i) {
+    uint64_t subset =
+        attackers & board.pieces_bb[static_cast<std::size_t>(order[i])];
+    if (subset) {
+      return 1ULL << lsb_index(subset);
+    }
+  }
+  return 0;
+}
+
 bool is_square_attacked(const Board& board, u_int8_t sq,
                         SideToMove attacker_side) {
   // Check for pawn attacks

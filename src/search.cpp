@@ -1115,19 +1115,11 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   int alpha_base = alpha;
   int beta_base = beta;
 
-  bool do_quiescence = true;
   // QUIESCENCE SEARCH
   if (depth == 0) {
 
-    int qs_raw = 0;
-    if (do_quiescence) {
-      qs_raw = quiescence(board, alpha, beta, stm, evaluator,
-                          scratch.nnue_adapter, nodes, tt, ply);
-    } else {
-      int eval =
-          evaluator(static_cast<const Board&>(board), scratch.nnue_adapter);
-      qs_raw = eval;
-    }
+    int qs_raw = quiescence(board, alpha, beta, stm, evaluator,
+                            scratch.nnue_adapter, nodes, tt, ply);
     const int qs = normalize_mate_score(qs_raw, ply);
     if (tt) {
       TranspositionEntry entry;

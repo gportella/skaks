@@ -1,7 +1,6 @@
 #include "chess/quiescence.hpp"
 
 #include "chess/exchange.hpp"
-#include "chess/move_picker.hpp"
 #include "chess/moves.hpp"
 #include "chess/piece_values.hpp"
 #include "chess/score.hpp"
@@ -82,6 +81,8 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     return evaluator(static_cast<const Board&>(board), nnue_adapter);
   }
 
+  uint32_t tt_move_code = 0;
+
   // TT probe: tighten window or return cached cutoff/score
   if (tt) {
     TranspositionEntry e;
@@ -103,6 +104,12 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       hit = tt->probe(board.position_key, e);
     }
     if (hit) {
+      if (e.best_move.moving_pc != OccupancyType::empty) {
+        tt_move_code = encode_move(
+            e.best_move.from, e.best_move.to, e.best_move.moving_pc,
+            e.best_move.captured_pc, e.best_move.promo_pc, e.best_move.flags);
+      }
+
       const int tscore = TranspositionTable::decode_score(e.score, ply);
       if (e.flag == TranspositionFlag::Exact) {
         if (search_stats_enabled()) {
@@ -182,12 +189,35 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
   }
 
   // Generate candidate moves (all if in check, otherwise noisy only)
-  MovePicker picker(board, stm, nullptr, nullptr, nullptr, -1, 0, nullptr,
-                    nullptr, in_check, true);
-  Move move = picker.nextMove();
+  uint16_t move_count = 0;
+  std::array<uint32_t, kMaxMovementCount> moves{};
+  if (in_check) {
+    moves = generate_legal_moves(board, stm, move_count);
+  } else {
+    moves = generate_all_moves(board, stm, move_count);
+    uint16_t write_idx = 0;
+    // filter only captures and promotions (pseudo-legal)
+    for (uint16_t i = 0; i < move_count; ++i) {
+      const Move m = decode_move(moves[i]);
+      const bool is_capture = m.captured_pc != OccupancyType::empty;
+      const bool is_promo = m.promo_pc != OccupancyType::empty;
+      if (is_capture || is_promo) {
+        moves[write_idx++] = moves[i];
+      }
+    }
+    move_count = write_idx;
+  }
+
+  // Order captures/promotions for better cutoffs
+  sort_moves(board, moves, move_count, tt_move_code);
+
+  // Hard cap noisy moves per node when not in check to avoid explosion
+  if (!in_check && move_count > sparams.quiescence_max_noisy_moves) {
+    move_count = static_cast<uint16_t>(sparams.quiescence_max_noisy_moves);
+  }
 
   // If no moves, return mate/draw/stand-pat depending on check
-  if (move.moving_pc == OccupancyType::empty) {
+  if (move_count == 0) {
     if (in_check) {
       const int mate = (stm == SideToMove::White) ? -MATE_VALUE : MATE_VALUE;
       if (tt)
@@ -241,23 +271,12 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     return false;
   };
 
-  // Iterate noisy moves (and all moves if in check)
-  uint16_t noisy_seen = 0;
-  uint16_t move_index = 0;
-  for (; move.moving_pc != OccupancyType::empty; move = picker.nextMove()) {
-    if (!in_check && sparams.quiescence_max_noisy_moves > 0 &&
-        noisy_seen >= sparams.quiescence_max_noisy_moves) {
-      break;
-    }
-    ++noisy_seen;
-    const uint16_t i = move_index++;
+  for (uint16_t i = 0; i < move_count; ++i) {
+    Move move = decode_move(moves[i]);
 
-    if (move.captured_pc != OccupancyType::empty) {
+    if (!in_check && move.captured_pc != OccupancyType::empty) {
       const int see = static_exchange_eval(board, move);
       if (see < 0) {
-        if (search_stats_enabled()) {
-          search_stats().see_prunes.fetch_add(1, std::memory_order_relaxed);
-        }
         continue;
       }
     }
@@ -316,6 +335,15 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     if (nnue_adapter) {
       nnue_adapter->push_move(move);
     }
+
+    if (!in_check && is_check(board, stm)) {
+      undo_move(board, undo);
+      if (nnue_adapter) {
+        nnue_adapter->pop_move();
+      }
+      continue;
+    }
+
     const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
                                  nnue_adapter, nodes, tt, ply + 1);
     undo_move(board, undo);
@@ -338,10 +366,10 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
       const uint16_t quiet_count = collect_quiet_checks(board, stm, quiet_checks,
                                                         nnue_adapter, quiet_cap);
       for (uint16_t i = 0; i < quiet_count; ++i) {
-        Move quiet_move = decode_move(quiet_checks[i]);
-        Undo undo = make_move(board, quiet_move);
+        Move move = decode_move(quiet_checks[i]);
+        Undo undo = make_move(board, move);
         if (nnue_adapter) {
-          nnue_adapter->push_move(quiet_move);
+          nnue_adapter->push_move(move);
         }
         const int score =
             quiescence(board, alpha, beta, flip_side(stm), evaluator,
@@ -350,7 +378,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         if (nnue_adapter) {
           nnue_adapter->pop_move();
         }
-        if (process_score(quiet_move, score)) {
+        if (process_score(move, score)) {
           return score;
         }
       }
