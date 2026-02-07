@@ -8,7 +8,7 @@
 namespace chess {
 
 inline constexpr std::uint16_t MAX_PLY = 1024;
-inline constexpr int REPETITION_PENALTY = 250;
+inline constexpr int REPETITION_PENALTY = 0;
 inline constexpr int INF = 1000000;
 inline constexpr int MATE_SCORE = 90000;
 inline constexpr int CHECK_EXTENSION = 1;
