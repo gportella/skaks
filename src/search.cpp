@@ -1384,6 +1384,9 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   const uint32_t counter_code =
       parent_move ? scratch.ordering.counter_move(*parent_move) : 0;
 
+  sort_moves(board, moves, move_count, tt_code, scratch.killers, history_matrix,
+             ply, counter_code, scratch.ordering.continuation_table(),
+             parent_move);
   // Move ordering is handled by MovePicker below.
 
   // MAIN SEARCH LOOP, after move generation and ordering
@@ -1498,30 +1501,33 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     return cutoff_now;
   };
 
-  Move tt_move_local{};
-  Move* tt_ptr = nullptr;
-  if (tt_code != 0) {
-    tt_move_local = decode_move(tt_code);
-    tt_ptr = &tt_move_local;
-  }
-  MovePicker picker(board, stm, tt_ptr, scratch.killers, history_matrix, ply,
-                    counter_code, scratch.ordering.continuation_table(),
-                    parent_move, in_check);
-  auto next_move = [&](Move& out_move, uint32_t& out_code) -> bool {
-    out_move = picker.nextMove();
-    if (out_move.moving_pc == OccupancyType::empty) {
-      return false;
-    }
-    out_code =
-        encode_move(out_move.from, out_move.to, out_move.moving_pc,
-                    out_move.captured_pc, out_move.promo_pc, out_move.flags);
-    return true;
-  };
+  // Move tt_move_local{};
+  // Move* tt_ptr = nullptr;
+  // if (tt_code != 0) {
+  //   tt_move_local = decode_move(tt_code);
+  //   tt_ptr = &tt_move_local;
+  // }
+  // MovePicker picker(board, stm, tt_ptr, scratch.killers, history_matrix, ply,
+  //                   counter_code, scratch.ordering.continuation_table(),
+  //                   parent_move, in_check);
+  // auto next_move = [&](Move& out_move, uint32_t& out_code) -> bool {
+  //   out_move = picker.nextMove();
+  //   if (out_move.moving_pc == OccupancyType::empty) {
+  //     return false;
+  //   }
+  //   out_code =
+  //       encode_move(out_move.from, out_move.to, out_move.moving_pc,
+  //                   out_move.captured_pc, out_move.promo_pc, out_move.flags);
+  //   return true;
+  // };
 
   // Iterate over all generated moves
-  Move move{};
-  uint32_t move_code = 0;
-  while (next_move(move, move_code)) {
+  // Move move{};
+  // uint32_t move_code = 0;
+  // while (next_move(move, move_code)) {
+  for (uint16_t i = 0; i < move_count; ++i) {
+    const uint32_t move_code = moves[i];
+    Move move = decode_move(move_code);
     if (is_excluded_move(move)) {
       continue;
     }
