@@ -102,6 +102,7 @@ struct SearchScratch {
   TimeManager* time_manager = nullptr;
   std::uint64_t node_limit = 0;
   bool use_nodes = false;
+  int max_ply = 0;
   std::atomic<bool>* abort_requested = nullptr;
   std::atomic<bool>* local_abort = nullptr;
   LazySmpThread* thread = nullptr;
@@ -429,7 +430,7 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
         board, depth_to_use, a_val, b_val, flip_side(ctx.stm), evaluator,
         scratch, ctx.ply + 1, next_repetition_start, ctx.ply_from_root + 1,
         pv_flag, nodes, &move, nullptr, nullptr, 0);
-    res.score = normalize_mate_score(res.score, ctx.ply);
+    res.score = normalize_mate_score(res.score, ctx.ply + 1);
     return res;
   };
 
@@ -823,6 +824,10 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     return make_aborted_result();
   }
 
+  if (ply > scratch.max_ply) {
+    scratch.max_ply = ply;
+  }
+
   MoveHistory* history = scratch.history;
   TranspositionTable* tt = scratch.tt;
 
@@ -1119,7 +1124,8 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   if (depth == 0) {
 
     int qs_raw = quiescence(board, alpha, beta, stm, evaluator,
-                            scratch.nnue_adapter, nodes, tt, ply);
+                scratch.nnue_adapter, nodes, tt, ply,
+                &scratch.max_ply);
     const int qs = normalize_mate_score(qs_raw, ply);
     if (tt) {
       TranspositionEntry entry;
@@ -1213,10 +1219,10 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
       do_razor = static_eval_corrected - razor_margin >= beta;
     }
     if (do_razor) {
-      const int qs =
-          normalize_mate_score(quiescence(board, alpha, beta, stm, evaluator,
-                                          scratch.nnue_adapter, nodes, tt, ply),
-                               ply);
+        const int qs = normalize_mate_score(
+          quiescence(board, alpha, beta, stm, evaluator,
+               scratch.nnue_adapter, nodes, tt, ply, &scratch.max_ply),
+          ply);
       if (stm == SideToMove::White) {
         if (qs <= alpha) {
           SearchResult prune{};
@@ -1957,12 +1963,14 @@ SearchResult search_position(Board& board, SideToMove stm,
         const bool is_pv = true;
         // call the actual search function via alphabeta_minimax
         // this will recurse down the tree and return the result
+        scratch.max_ply = start_ply;
         result = alphabeta_minimax(
             board, current_depth, alpha, beta, stm, evaluator, scratch,
             start_ply, repetition_start, 0, is_pv, nodes, nullptr, nullptr,
             excluded_count ? excluded_moves.data() : nullptr, excluded_count);
         result.searched_depth = current_depth;
-        result.selective_depth = current_depth;
+        const int seldepth = std::max(0, scratch.max_ply - start_ply + 1);
+        result.selective_depth = std::max(current_depth, seldepth);
         if (result.aborted) {
           abort_requested.store(true, std::memory_order_relaxed);
           break;

@@ -68,8 +68,13 @@ uint16_t collect_quiet_checks(Board& board, SideToMove stm,
 // extends search in "noisy" positions to avoid horizon effect
 int quiescence(Board& board, int alpha, int beta, SideToMove stm,
                const EvaluatorFn& evaluator, NnueAdapter* nnue_adapter,
-               std::uint64_t& nodes, TranspositionTable* tt, int ply) {
+               std::uint64_t& nodes, TranspositionTable* tt, int ply,
+               int* max_ply) {
   ++nodes;
+
+  if (max_ply && ply > *max_ply) {
+    *max_ply = ply;
+  }
 
   if (search_stats_enabled()) {
     search_stats().quiescence_nodes.fetch_add(1, std::memory_order_relaxed);
@@ -345,7 +350,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
     }
 
     const int score = quiescence(board, alpha, beta, flip_side(stm), evaluator,
-                                 nnue_adapter, nodes, tt, ply + 1);
+                                 nnue_adapter, nodes, tt, ply + 1, max_ply);
     undo_move(board, undo);
     if (nnue_adapter) {
       nnue_adapter->pop_move();
@@ -373,7 +378,7 @@ int quiescence(Board& board, int alpha, int beta, SideToMove stm,
         }
         const int score =
             quiescence(board, alpha, beta, flip_side(stm), evaluator,
-                       nnue_adapter, nodes, tt, ply + 1);
+                       nnue_adapter, nodes, tt, ply + 1, max_ply);
         undo_move(board, undo);
         if (nnue_adapter) {
           nnue_adapter->pop_move();

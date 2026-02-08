@@ -184,8 +184,6 @@ bool allow_null_move(Board& b, int depth, int min_depth);
 Undo make_move(Board& b, const Move& m);
 int update_castling_rights(Board& b, const Move&);
 void undo_move(Board& b, const Undo& u);
-UndoSEE make_see_move(Board& b, const Move& m);
-void undo_see_move(Board& b, const UndoSEE& u);
 std::array<uint32_t, kMaxMovementCount>
 generate_all_moves(const Board& board, SideToMove stm, uint16_t& move_count,
                    MoveGenType::Type type = MoveGenType::AllMoves);

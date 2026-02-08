@@ -13,5 +13,5 @@ namespace chess {
 int quiescence(Board& board, int alpha, int beta, SideToMove stm,
                const EvaluatorFn& evaluator, NnueAdapter* nnue_adapter,
                std::uint64_t& nodes, TranspositionTable* tt = nullptr,
-               int ply = 0);
+               int ply = 0, int* max_ply = nullptr);
 }

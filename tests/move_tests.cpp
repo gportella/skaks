@@ -429,66 +429,6 @@ TEST(MoveApplication, QueenCaptureAndUndoRestoresState) {
   EXPECT_EQ(queen_bb, expected);
 }
 
-TEST(MoveSEE, CaptureMakeAndUndoRestoresBoard) {
-  auto board = make_board("4k3/8/4p3/3P4/8/8/4K3/8 w - - 0 1");
-  const auto original = board;
-
-  const chess::Move move{static_cast<std::uint16_t>(to_index(chess::Square::D5)),
-                         static_cast<std::uint16_t>(to_index(chess::Square::E6)),
-                         chess::OccupancyType::wP,
-                         chess::OccupancyType::bP,
-                         chess::OccupancyType::empty,
-                         0};
-
-  const chess::UndoSEE undo = chess::make_see_move(board, move);
-
-  EXPECT_EQ(board.pieces[to_index(chess::Square::D5)],
-            chess::OccupancyType::empty);
-  EXPECT_EQ(board.pieces[to_index(chess::Square::E6)], chess::OccupancyType::wP);
-
-  chess::undo_see_move(board, undo);
-
-  EXPECT_EQ(board.pieces, original.pieces);
-  EXPECT_EQ(board.pieces_bb, original.pieces_bb);
-  EXPECT_EQ(board.occupancy[0], original.occupancy[0]);
-  EXPECT_EQ(board.occupancy[1], original.occupancy[1]);
-  EXPECT_EQ(board.occupancy[2], original.occupancy[2]);
-  EXPECT_EQ(board.rook_list[0].count, original.rook_list[0].count);
-  EXPECT_EQ(board.rook_list[1].count, original.rook_list[1].count);
-  EXPECT_EQ(board.king_positions, original.king_positions);
-  EXPECT_EQ(board.king_captured, original.king_captured);
-}
-
-TEST(MoveSEE, PromotionCaptureMakeAndUndoRestoresBoard) {
-  auto board = make_board("4k2r/6P1/8/8/8/8/4K3/8 w - - 0 1");
-  const auto original = board;
-
-  const chess::Move move{static_cast<std::uint16_t>(to_index(chess::Square::G7)),
-                         static_cast<std::uint16_t>(to_index(chess::Square::H8)),
-                         chess::OccupancyType::wP,
-                         chess::OccupancyType::bR,
-                         chess::OccupancyType::wQ,
-                         0};
-
-  const chess::UndoSEE undo = chess::make_see_move(board, move);
-
-  EXPECT_EQ(board.pieces[to_index(chess::Square::G7)],
-            chess::OccupancyType::empty);
-  EXPECT_EQ(board.pieces[to_index(chess::Square::H8)], chess::OccupancyType::wQ);
-
-  chess::undo_see_move(board, undo);
-
-  EXPECT_EQ(board.pieces, original.pieces);
-  EXPECT_EQ(board.pieces_bb, original.pieces_bb);
-  EXPECT_EQ(board.occupancy[0], original.occupancy[0]);
-  EXPECT_EQ(board.occupancy[1], original.occupancy[1]);
-  EXPECT_EQ(board.occupancy[2], original.occupancy[2]);
-  EXPECT_EQ(board.rook_list[0].count, original.rook_list[0].count);
-  EXPECT_EQ(board.rook_list[1].count, original.rook_list[1].count);
-  EXPECT_EQ(board.king_positions, original.king_positions);
-  EXPECT_EQ(board.king_captured, original.king_captured);
-}
-
 TEST(MoveApplication, DoublePushCreatesEnPassantTargetForOpponent) {
   auto board = make_board("4k3/3p4/8/4P3/8/8/8/4K3 b - - 0 1");
 
