@@ -342,6 +342,24 @@ void handle_position(Board& board, Engine& engine, std::string_view args) {
         return;
       }
     }
+    auto strip_edge_quote = [](std::string& text) {
+      if (text.empty()) {
+        return;
+      }
+      const char first = text.front();
+      if (first == '"' || first == '\'') {
+        text.erase(text.begin());
+      }
+      if (!text.empty()) {
+        const char last = text.back();
+        if (last == '"' || last == '\'') {
+          text.pop_back();
+        }
+      }
+    };
+    // Allow a quoted FEN string (e.g. position fen "...") by trimming quotes.
+    strip_edge_quote(fen_parts.front());
+    strip_edge_quote(fen_parts.back());
     std::ostringstream fen;
     for (std::size_t i = 0; i < fen_parts.size(); ++i) {
       if (i != 0)

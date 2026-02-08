@@ -762,9 +762,6 @@ void emit_king_moves(const Board& b, SideToMove stm,
       Bitboard quiet = atk & ~their_occ;
       while (quiet) {
         int to = poplsb(quiet);
-        if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
-          continue; // cannot move into check
-        }
         assert(move_count < kMaxMovementCount);
         out[move_count++] =
             encode_move(from, to,
@@ -803,9 +800,6 @@ void emit_king_moves(const Board& b, SideToMove stm,
       Bitboard captures = atk & their_occ;
       while (captures) {
         int to = poplsb(captures);
-        if (is_square_attacked(b, static_cast<u_int8_t>(to), flip_side(stm))) {
-          continue; // cannot move into check
-        }
         assert(move_count < kMaxMovementCount);
         out[move_count++] =
             encode_move(from, to,

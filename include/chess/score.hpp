@@ -12,10 +12,12 @@ inline constexpr bool is_mate_score(int score) {
 
 inline int normalize_mate_score(int score, int ply) {
   if (score >= MATE_THRESHOLD) {
-    return MATE_VALUE - ply;
+    const int normalized = MATE_VALUE - ply;
+    return std::min(score, normalized);
   }
   if (score <= -MATE_THRESHOLD) {
-    return -MATE_VALUE + ply;
+    const int normalized = -MATE_VALUE + ply;
+    return std::max(score, normalized);
   }
   return score;
 }
