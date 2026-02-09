@@ -10,7 +10,6 @@
 #include "chess/piece_values.hpp"
 #include "chess/quiescence.hpp"
 #include "chess/score.hpp"
-#include "chess/scoring_rules.hpp"
 #include "chess/search_detail.hpp"
 #include "chess/search_params.hpp"
 #include "chess/search_stats.hpp"
@@ -1123,9 +1122,9 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   // QUIESCENCE SEARCH
   if (depth == 0) {
 
-    int qs_raw = quiescence(board, alpha, beta, stm, evaluator,
-                scratch.nnue_adapter, nodes, tt, ply,
-                &scratch.max_ply);
+    int qs_raw =
+        quiescence(board, alpha, beta, stm, evaluator, scratch.nnue_adapter,
+                   nodes, tt, ply, &scratch.max_ply);
     const int qs = normalize_mate_score(qs_raw, ply);
     if (tt) {
       TranspositionEntry entry;
@@ -1219,9 +1218,9 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
       do_razor = static_eval_corrected - razor_margin >= beta;
     }
     if (do_razor) {
-        const int qs = normalize_mate_score(
-          quiescence(board, alpha, beta, stm, evaluator,
-               scratch.nnue_adapter, nodes, tt, ply, &scratch.max_ply),
+      const int qs = normalize_mate_score(
+          quiescence(board, alpha, beta, stm, evaluator, scratch.nnue_adapter,
+                     nodes, tt, ply, &scratch.max_ply),
           ply);
       if (stm == SideToMove::White) {
         if (qs <= alpha) {
@@ -2352,8 +2351,10 @@ SearchResult search_position_parallel(Board& board, SideToMove stm,
 // used when no Engine is provided, uses default eval
 namespace {
 int default_evaluator(const Board& board, NnueAdapter* adapter) {
-  (void)adapter;
-  return evaluate_board(board);
+  if (adapter) {
+    return evaluate_nnue_stockfish_incremental(*adapter);
+  }
+  return evaluate_nnue_stockfish(board);
 }
 } // namespace
 

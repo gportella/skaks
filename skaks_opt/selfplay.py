@@ -15,7 +15,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import yaml
 
 from skaks_opt.params import DEFAULT_PARAMS
-from skaks_opt.pst import apply_pst_symmetry
 
 try:
     from rich.console import Console
@@ -99,7 +98,6 @@ class SelfPlayConfig:
     output: Optional[Path]
     include_prefix: Optional[List[str]]
     exclude_prefix: Optional[List[str]]
-    phase_weights_only: bool
     games: int
     iterations: int
     repeats: int
@@ -142,7 +140,6 @@ def _normalize_params(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         merged = deepcopy(DEFAULT_PARAMS)
     else:
         merged = _deep_merge(DEFAULT_PARAMS, payload)
-    apply_pst_symmetry(merged)
     return merged
 
 
@@ -857,11 +854,8 @@ def run_selfplay(config: SelfPlayConfig) -> Path:
     best_score = -1.0
 
     include_prefixes = list(config.include_prefix or [])
-    if config.phase_weights_only:
-        include_prefixes = [
-            "evaluation.phase_weights_mg",
-            "evaluation.phase_weights_eg",
-        ]
+    if not include_prefixes:
+        include_prefixes = ["search_nnue"]
 
     if config.output:
         best_path = config.output.resolve()

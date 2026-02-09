@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "chess/engine.hpp"
 
-#include "chess/eval_mode.hpp"
 #include "chess/moves.hpp"
 #include "chess/nnue_sf.hpp"
-#include "chess/scoring_rules.hpp"
 #include "chess/search_stats.hpp"
 #include "chess/time_manager.hpp"
 #include "evaluate.h"
@@ -55,19 +53,11 @@ void Engine::init_nnue() {
   Stockfish::Probe::init(big, small);
 }
 
-void Engine::set_evaluation_mode(EvaluationMode mode) {
-  evaluation_mode_ = mode;
-}
-
-int Engine::evaluate(const Board& board, EvaluationMode mode,
-                     NnueAdapter* adapter) const {
-  if (mode == EvaluationMode::Stockfish) {
-    if (adapter) {
-      return evaluate_nnue_stockfish_incremental(*adapter);
-    }
-    return evaluate_nnue_stockfish(board);
+int Engine::evaluate(const Board& board, NnueAdapter* adapter) const {
+  if (adapter) {
+    return evaluate_nnue_stockfish_incremental(*adapter);
   }
-  return evaluate_board(board);
+  return evaluate_nnue_stockfish(board);
 }
 
 void Engine::set_thread_count(int count) {
@@ -116,8 +106,7 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
                                               NnueAdapter* adapter) {
     if (search_stats_enabled()) {
       const auto start = std::chrono::steady_clock::now();
-      const int score =
-          eng_ptr->evaluate(state, eng_ptr->evaluation_mode(), adapter);
+      const int score = eng_ptr->evaluate(state, adapter);
       const auto end = std::chrono::steady_clock::now();
       const std::uint64_t elapsed = static_cast<std::uint64_t>(
           std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
@@ -127,7 +116,7 @@ SearchResult Engine::SearchSession::run(const SearchParameters& params) {
       stats.eval_time_ns.fetch_add(elapsed, std::memory_order_relaxed);
       return score;
     }
-    return eng_ptr->evaluate(state, eng_ptr->evaluation_mode(), adapter);
+    return eng_ptr->evaluate(state, adapter);
   };
 
   const int base_ply = history.ply_count;

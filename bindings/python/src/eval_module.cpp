@@ -1,7 +1,6 @@
 #include "chess/board.hpp"
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
-#include "chess/evaluation_params.hpp"
 #include "chess/magic_bitboards.hpp"
 #include "chess/moves.hpp"
 #include "chess/search.hpp"
@@ -85,98 +84,6 @@ void assign_array_if_present(const py::dict& src, const char* key,
   }
 }
 
-constexpr std::array<const char*, 6> kPstPieceNames = {
-    "pawn", "knight", "bishop", "rook", "queen", "king"};
-
-chess::Pst pst_from_sequence(const py::handle& obj, const char* key) {
-  if (!py::isinstance<py::sequence>(obj) || py::isinstance<py::str>(obj)) {
-    throw std::invalid_argument(std::string(key) +
-                                " must be a sequence (64 or 8x8 entries)");
-  }
-  chess::Pst table{};
-  auto seq = py::cast<py::sequence>(obj);
-  if (seq.size() == static_cast<py::ssize_t>(table.size())) {
-    for (py::ssize_t i = 0; i < seq.size(); ++i) {
-      table[static_cast<std::size_t>(i)] = py::cast<int>(seq[i]);
-    }
-    return table;
-  }
-  if (seq.size() == 8) {
-    std::size_t idx = 0;
-    for (py::ssize_t row = 0; row < 8; ++row) {
-      auto row_seq = py::cast<py::sequence>(seq[row]);
-      if (row_seq.size() != 8) {
-        throw std::invalid_argument(std::string(key) +
-                                    " rows must have 8 entries");
-      }
-      for (py::ssize_t col = 0; col < 8; ++col) {
-        table[idx++] = py::cast<int>(row_seq[col]);
-      }
-    }
-    return table;
-  }
-  throw std::invalid_argument(std::string(key) +
-                              " must have 64 entries or an 8x8 grid");
-}
-
-void assign_pst_tables_if_present(const py::dict& src, const char* key,
-                                  std::array<chess::Pst, 6>& target) {
-  if (!src.contains(key)) {
-    return;
-  }
-  py::handle handle = src[key];
-  if (py::isinstance<py::dict>(handle)) {
-    auto table = py::cast<py::dict>(handle);
-    for (std::size_t i = 0; i < kPstPieceNames.size(); ++i) {
-      if (!table.contains(kPstPieceNames[i])) {
-        throw std::invalid_argument(std::string(key) + " missing piece '" +
-                                    kPstPieceNames[i] + "'");
-      }
-      target[i] = pst_from_sequence(table[kPstPieceNames[i]], kPstPieceNames[i]);
-    }
-    return;
-  }
-  if (py::isinstance<py::sequence>(handle) && !py::isinstance<py::str>(handle)) {
-    auto seq = py::cast<py::sequence>(handle);
-    if (seq.size() != static_cast<py::ssize_t>(target.size())) {
-      throw std::invalid_argument(std::string(key) +
-                                  " must contain 6 PST planes");
-    }
-    for (py::ssize_t i = 0; i < seq.size(); ++i) {
-      target[static_cast<std::size_t>(i)] = pst_from_sequence(
-          seq[i], (std::string(key) + "[" + std::to_string(i) + "]").c_str());
-    }
-    return;
-  }
-  throw std::invalid_argument(std::string(key) +
-                              " must be a dict or sequence of PST planes");
-}
-
-struct PinPair {
-  int base;
-  int mobility;
-};
-
-PinPair parse_pin_pair(const py::handle& obj, const char* key) {
-  // Accept either a sequence of length 2 or a dict with base/mobility.
-  if (py::isinstance<py::sequence>(obj) && !py::isinstance<py::str>(obj)) {
-    auto seq = py::cast<py::sequence>(obj);
-    if (seq.size() != 2) {
-      throw std::invalid_argument(std::string(key) + " needs 2 elements");
-    }
-    return {py::cast<int>(seq[0]), py::cast<int>(seq[1])};
-  }
-  if (py::isinstance<py::dict>(obj)) {
-    auto d = py::cast<py::dict>(obj);
-    if (!d.contains("base") || !d.contains("mobility")) {
-      throw std::invalid_argument(std::string(key) +
-                                  " dict needs base and mobility");
-    }
-    return {py::cast<int>(d["base"]), py::cast<int>(d["mobility"])};
-  }
-  throw std::invalid_argument(std::string(key) + " must be sequence[2] or dict");
-}
-
 py::dict bench_movegen(const std::vector<std::string>& fens, int iterations,
                        std::string mode) {
   if (fens.empty()) {
@@ -232,104 +139,6 @@ py::dict bench_movegen(const std::vector<std::string>& fens, int iterations,
 
 chess::EngineParams params_from_dict(const py::dict& root) {
   chess::EngineParams params = chess::default_engine_params();
-
-  if (root.contains("evaluation")) {
-    auto ev = py::cast<py::dict>(root["evaluation"]);
-    assign_if_present(ev, "check_penalty", params.evaluation.check_penalty);
-    assign_if_present(ev, "pawn_shield_bonus",
-                      params.evaluation.pawn_shield_bonus);
-    assign_if_present(ev, "castling_bonus", params.evaluation.castling_bonus);
-    assign_if_present(ev, "tempo_bonus", params.evaluation.tempo_bonus);
-    assign_if_present(ev, "threat_weight", params.evaluation.threat_weight);
-    assign_if_present(ev, "passed_pawn_base",
-                      params.evaluation.passed_pawn_base);
-    assign_if_present(ev, "passed_pawn_advance",
-                      params.evaluation.passed_pawn_advance);
-    assign_if_present(ev, "hanging_divisor", params.evaluation.hanging_divisor);
-    assign_if_present(ev, "hanging_min_penalty",
-                      params.evaluation.hanging_min_penalty);
-    assign_if_present(ev, "king_ring_base", params.evaluation.king_ring_base);
-    assign_if_present(ev, "king_ring_defended_scale",
-                      params.evaluation.king_ring_defended_scale);
-    assign_if_present(ev, "king_ring_enemy_occupier",
-                      params.evaluation.king_ring_enemy_occupier);
-    assign_if_present(ev, "king_ring_enemy_piece_material_scale",
-                      params.evaluation.king_ring_enemy_piece_material_scale);
-    assign_if_present(ev, "bishop_pair_bonus",
-                      params.evaluation.bishop_pair_bonus);
-    assign_if_present(ev, "rook_open_file_bonus",
-                      params.evaluation.rook_open_file_bonus);
-    assign_if_present(ev, "rook_semi_open_file_bonus",
-                      params.evaluation.rook_semi_open_file_bonus);
-    assign_if_present(ev, "mobility_scaling",
-                      params.evaluation.mobility_scaling);
-    assign_if_present(ev, "knight_dev_bonus",
-                      params.evaluation.knight_dev_bonus);
-    assign_if_present(ev, "bishop_dev_bonus",
-                      params.evaluation.bishop_dev_bonus);
-    assign_if_present(ev, "connect_rooks_bonus",
-                      params.evaluation.connect_rooks_bonus);
-    assign_if_present(ev, "central_pawn_bonus",
-                      params.evaluation.central_pawn_bonus);
-    assign_if_present(ev, "castle_urgency", params.evaluation.castle_urgency);
-    assign_if_present(ev, "early_queen_penalty",
-                      params.evaluation.early_queen_penalty);
-    assign_if_present(ev, "flank_pawn_penalty",
-                      params.evaluation.flank_pawn_penalty);
-    assign_if_present(ev, "knight_mobility_scale",
-                      params.evaluation.knight_mobility_scale);
-    assign_if_present(ev, "bishop_mobility_scale",
-                      params.evaluation.bishop_mobility_scale);
-    assign_if_present(ev, "rook_mobility_scale",
-                      params.evaluation.rook_mobility_scale);
-    assign_if_present(ev, "queen_mobility_scale",
-                      params.evaluation.queen_mobility_scale);
-    assign_if_present(ev, "doubled_pawn_penalty",
-                      params.evaluation.doubled_pawn_penalty);
-    assign_if_present(ev, "isolated_pawn_penalty",
-                      params.evaluation.isolated_pawn_penalty);
-    assign_if_present(ev, "backward_pawn_penalty",
-                      params.evaluation.backward_pawn_penalty);
-    assign_if_present(ev, "eval_quiet_cap", params.evaluation.eval_quiet_cap);
-    assign_array_if_present(ev, "king_attack_weights",
-                            params.evaluation.king_attack_weights);
-    assign_array_if_present(ev, "threat_base", params.evaluation.threat_base);
-    assign_array_if_present(ev, "phase_weights_mg",
-                            params.evaluation.phase_weights_mg);
-    assign_array_if_present(ev, "phase_weights_eg",
-                            params.evaluation.phase_weights_eg);
-    assign_pst_tables_if_present(ev, "pst_midgame",
-                                 params.evaluation.pst_midgame);
-    assign_pst_tables_if_present(ev, "pst_endgame",
-                                 params.evaluation.pst_endgame);
-    if (ev.contains("bishop_pin_penalty")) {
-      auto pair = parse_pin_pair(ev["bishop_pin_penalty"], "bishop_pin_penalty");
-      params.evaluation.bishop_pin_penalty.base = pair.base;
-      params.evaluation.bishop_pin_penalty.mobility = pair.mobility;
-    }
-    if (ev.contains("rook_pin_penalty")) {
-      auto pair = parse_pin_pair(ev["rook_pin_penalty"], "rook_pin_penalty");
-      params.evaluation.rook_pin_penalty.base = pair.base;
-      params.evaluation.rook_pin_penalty.mobility = pair.mobility;
-    }
-    if (ev.contains("knight_pin_penalty")) {
-      auto pair = parse_pin_pair(ev["knight_pin_penalty"], "knight_pin_penalty");
-      params.evaluation.knight_pin_penalty.base = pair.base;
-      params.evaluation.knight_pin_penalty.mobility = pair.mobility;
-    }
-    if (ev.contains("pawn_pin_straight_penalty")) {
-      auto pair = parse_pin_pair(ev["pawn_pin_straight_penalty"],
-                                 "pawn_pin_straight_penalty");
-      params.evaluation.pawn_pin_straight_penalty.base = pair.base;
-      params.evaluation.pawn_pin_straight_penalty.mobility = pair.mobility;
-    }
-    if (ev.contains("pawn_pin_diagonal_penalty")) {
-      auto pair = parse_pin_pair(ev["pawn_pin_diagonal_penalty"],
-                                 "pawn_pin_diagonal_penalty");
-      params.evaluation.pawn_pin_diagonal_penalty.base = pair.base;
-      params.evaluation.pawn_pin_diagonal_penalty.mobility = pair.mobility;
-    }
-  }
 
   if (root.contains("search")) {
     auto s = py::cast<py::dict>(root["search"]);
@@ -405,12 +214,13 @@ struct EvalOneResult {
   std::string error;
 };
 
-EvalOneResult eval_one(const std::string& fen, chess::EvaluationMode mode) {
+EvalOneResult eval_one(const std::string& fen) {
   EvalOneResult res{};
   try {
     chess::Board b = chess::initial_board(fen);
     chess::Engine engine;
-    res.cp = engine.evaluate(b, mode, nullptr);
+    engine.init_nnue();
+    res.cp = engine.evaluate(b, nullptr);
   } catch (const std::exception& ex) {
     res.error = ex.what();
   }
@@ -422,13 +232,8 @@ py::dict eval_fens(const std::vector<std::string>& fens,
   chess::EngineParams p =
       params ? params_from_dict(*params) : chess::default_engine_params();
   chess::set_engine_params(p);
-  const bool use_nnue = p.use_search_nnue;
-  if (use_nnue) {
-    chess::Engine engine_init;
-    engine_init.init_nnue();
-  }
-  const auto mode = use_nnue ? chess::EvaluationMode::Stockfish
-                             : chess::EvaluationMode::Native;
+  chess::Engine engine_init;
+  engine_init.init_nnue();
 
   const std::size_t n = fens.size();
   std::vector<int> scores(n, 0);
@@ -453,7 +258,7 @@ py::dict eval_fens(const std::vector<std::string>& fens,
         for (std::size_t i = start; i < end; ++i) {
           try {
             chess::Board b = chess::initial_board(fens[i]);
-            scores[i] = engine.evaluate(b, mode, nullptr);
+            scores[i] = engine.evaluate(b, nullptr);
             errors[i].clear();
           } catch (const std::exception& ex) {
             errors[i] = ex.what();
@@ -489,14 +294,9 @@ py::object eval_fen_single(const std::string& fen,
   chess::EngineParams p =
       params ? params_from_dict(*params) : chess::default_engine_params();
   chess::set_engine_params(p);
-  const bool use_nnue = p.use_search_nnue;
-  if (use_nnue) {
-    chess::Engine engine_init;
-    engine_init.init_nnue();
-  }
-  const auto mode = use_nnue ? chess::EvaluationMode::Stockfish
-                             : chess::EvaluationMode::Native;
-  auto res = eval_one(fen, mode);
+  chess::Engine engine_init;
+  engine_init.init_nnue();
+  auto res = eval_one(fen);
   if (!res.error.empty()) {
     return py::dict("ok"_a = false, "error"_a = res.error);
   }
@@ -594,14 +394,9 @@ SelfPlayResult selfplay_many(const std::vector<std::string>& start_fens,
 
   chess::EngineParams p =
       params ? params_from_dict(*params) : chess::default_engine_params();
-  const bool use_nnue = p.use_search_nnue;
-  if (use_nnue) {
-    chess::Engine engine_init;
-    engine_init.init_nnue();
-  }
-  const auto mode = use_nnue ? chess::EvaluationMode::Stockfish
-                             : chess::EvaluationMode::Native;
-  chess::set_engine_params_for_mode(p, mode);
+  chess::Engine engine_init;
+  engine_init.init_nnue();
+  chess::set_engine_params(p);
 
   SelfPlayResult out{};
   const chess::SearchParameters search_params = make_search_params(opts);
@@ -678,16 +473,14 @@ ArenaResult arena_selfplay(const std::vector<std::string>& start_fens,
                                         : chess::default_engine_params();
   chess::EngineParams cand_params =
       cand_params_dict ? params_from_dict(*cand_params_dict) : base_params;
-  const bool base_nnue = base_params.use_search_nnue;
-  const bool cand_nnue = cand_params.use_search_nnue;
-  if (base_nnue || cand_nnue) {
-    chess::Engine engine_init;
-    engine_init.init_nnue();
-  }
+  chess::Engine engine_init;
+  engine_init.init_nnue();
   const bool trace_params = std::getenv("SKAKS_ARENA_TRACE_PARAMS") != nullptr;
   if (trace_params) {
-    trace_search_params("base", base_params, base_nnue, node_limit);
-    trace_search_params("cand", cand_params, cand_nnue, node_limit);
+    trace_search_params("base", base_params, base_params.use_search_nnue,
+                        node_limit);
+    trace_search_params("cand", cand_params, cand_params.use_search_nnue,
+                        node_limit);
   }
 
   ArenaResult res{};
@@ -709,19 +502,13 @@ ArenaResult arena_selfplay(const std::vector<std::string>& start_fens,
                                     ? cand_white
                                     : !cand_white;
       if (cand_to_move) {
-        const auto mode = cand_nnue ? chess::EvaluationMode::Stockfish
-                                    : chess::EvaluationMode::Native;
-        engine.set_evaluation_mode(mode);
-        chess::set_engine_params_for_mode(cand_params, mode);
+        chess::set_engine_params(cand_params);
         if (trace_params && !logged_cand) {
           trace_active_search_params("cand", node_limit);
           logged_cand = true;
         }
       } else {
-        const auto mode = base_nnue ? chess::EvaluationMode::Stockfish
-                                    : chess::EvaluationMode::Native;
-        engine.set_evaluation_mode(mode);
-        chess::set_engine_params_for_mode(base_params, mode);
+        chess::set_engine_params(base_params);
         if (trace_params && !logged_base) {
           trace_active_search_params("base", node_limit);
           logged_base = true;
@@ -819,16 +606,14 @@ ArenaResult arena_selfplay_clock(const std::vector<std::string>& start_fens,
                                         : chess::default_engine_params();
   chess::EngineParams cand_params =
       cand_params_dict ? params_from_dict(*cand_params_dict) : base_params;
-  const bool base_nnue = base_params.use_search_nnue;
-  const bool cand_nnue = cand_params.use_search_nnue;
-  if (base_nnue || cand_nnue) {
-    chess::Engine engine_init;
-    engine_init.init_nnue();
-  }
+  chess::Engine engine_init;
+  engine_init.init_nnue();
   const bool trace_params = std::getenv("SKAKS_ARENA_TRACE_PARAMS") != nullptr;
   if (trace_params) {
-    trace_search_params("base", base_params, base_nnue, node_limit);
-    trace_search_params("cand", cand_params, cand_nnue, node_limit);
+    trace_search_params("base", base_params, base_params.use_search_nnue,
+                        node_limit);
+    trace_search_params("cand", cand_params, cand_params.use_search_nnue,
+                        node_limit);
   }
 
   ArenaResult res{};
@@ -860,19 +645,13 @@ ArenaResult arena_selfplay_clock(const std::vector<std::string>& start_fens,
                                     ? cand_white
                                     : !cand_white;
       if (cand_to_move) {
-        const auto mode = cand_nnue ? chess::EvaluationMode::Stockfish
-                                    : chess::EvaluationMode::Native;
-        engine.set_evaluation_mode(mode);
-        chess::set_engine_params_for_mode(cand_params, mode);
+        chess::set_engine_params(cand_params);
         if (trace_params && !logged_cand) {
           trace_active_search_params("cand", node_limit);
           logged_cand = true;
         }
       } else {
-        const auto mode = base_nnue ? chess::EvaluationMode::Stockfish
-                                    : chess::EvaluationMode::Native;
-        engine.set_evaluation_mode(mode);
-        chess::set_engine_params_for_mode(base_params, mode);
+        chess::set_engine_params(base_params);
         if (trace_params && !logged_base) {
           trace_active_search_params("base", node_limit);
           logged_base = true;
@@ -1005,16 +784,14 @@ arena_selfplay_clock_perf(const std::vector<std::string>& start_fens,
                                         : chess::default_engine_params();
   chess::EngineParams cand_params =
       cand_params_dict ? params_from_dict(*cand_params_dict) : base_params;
-  const bool base_nnue = base_params.use_search_nnue;
-  const bool cand_nnue = cand_params.use_search_nnue;
-  if (base_nnue || cand_nnue) {
-    chess::Engine engine_init;
-    engine_init.init_nnue();
-  }
+  chess::Engine engine_init;
+  engine_init.init_nnue();
   const bool trace_params = std::getenv("SKAKS_ARENA_TRACE_PARAMS") != nullptr;
   if (trace_params) {
-    trace_search_params("base", base_params, base_nnue, node_limit);
-    trace_search_params("cand", cand_params, cand_nnue, node_limit);
+    trace_search_params("base", base_params, base_params.use_search_nnue,
+                        node_limit);
+    trace_search_params("cand", cand_params, cand_params.use_search_nnue,
+                        node_limit);
   }
 
   ArenaPerfResult out{};
@@ -1046,19 +823,13 @@ arena_selfplay_clock_perf(const std::vector<std::string>& start_fens,
                                     ? cand_white
                                     : !cand_white;
       if (cand_to_move) {
-        const auto mode = cand_nnue ? chess::EvaluationMode::Stockfish
-                                    : chess::EvaluationMode::Native;
-        engine.set_evaluation_mode(mode);
-        chess::set_engine_params_for_mode(cand_params, mode);
+        chess::set_engine_params(cand_params);
         if (trace_params && !logged_cand) {
           trace_active_search_params("cand", node_limit);
           logged_cand = true;
         }
       } else {
-        const auto mode = base_nnue ? chess::EvaluationMode::Stockfish
-                                    : chess::EvaluationMode::Native;
-        engine.set_evaluation_mode(mode);
-        chess::set_engine_params_for_mode(base_params, mode);
+        chess::set_engine_params(base_params);
         if (trace_params && !logged_base) {
           trace_active_search_params("base", node_limit);
           logged_base = true;
@@ -1168,7 +939,7 @@ PYBIND11_MODULE(skaks_eval, m) {
   m.def("eval_fens", &eval_fens, py::arg("fens"),
         py::arg("params") = std::nullopt, py::arg("threads") = 0,
         "Evaluate many FENs in parallel. params is an optional dict with"
-        " 'evaluation'/'search' overrides.");
+        " 'search'/'search_nnue' overrides.");
 
   m.def("eval_fen", &eval_fen_single, py::arg("fen"),
         py::arg("params") = std::nullopt,

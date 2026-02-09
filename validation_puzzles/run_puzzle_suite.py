@@ -414,11 +414,6 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Report progress every N puzzles (default: 10)",
     )
     parser.add_argument(
-        "--no-nnue",
-        action="store_true",
-        help="Disable NNUE evaluation when running skaks",
-    )
-    parser.add_argument(
         "--show-failures", action="store_true", help="Print details for failed puzzles"
     )
     return parser.parse_args(argv)
@@ -436,8 +431,6 @@ def main(argv: List[str]) -> int:
 
     try:
         extra_args: List[str] = []
-        if not args.stockfish and args.no_nnue:
-            extra_args.append("--no-nnue")
         with UciEngine(engine_path, args.timeout, extra_args=extra_args) as engine:
             solved, total, failures = run_suite(
                 puzzles, directory, engine, args.depth, args.progress_interval

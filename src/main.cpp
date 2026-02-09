@@ -11,7 +11,6 @@
 #include "chess/perf.hpp"
 #include "chess/polyglot.hpp"
 #include "chess/pst_tables.hpp"
-#include "chess/scoring_rules.hpp"
 #include "chess/search.hpp"
 #include "chess/search_stats.hpp"
 #include "chess/syzygy.hpp"
@@ -35,16 +34,6 @@
 #include <vector>
 
 namespace {
-
-#if SKAKS_ENABLE_HCE
-constexpr std::array<const char*, static_cast<std::size_t>(chess::TermId::Count)>
-    kTermNames = {"Material",      "PawnCenter",   "CenterControl",
-                  "Attacking",     "KingSafety",   "KingMobility",
-                  "Pins",          "PstMg",        "PstEg",
-                  "PassedPawns",   "Initiative",   "Hanging",
-                  "KingRing",      "BishopPair",   "RookFiles",
-                  "MinorMobility", "PawnStructure"};
-#endif
 
 bool suppress_info_strings() {
   static bool initialized = false;
@@ -105,14 +94,10 @@ struct ArenaSummary {
 ArenaSummary run_internal_arena(const chess::CliOptions& opts,
                                 const chess::EngineParams& base_params,
                                 const chess::EngineParams& cand_params,
-                                chess::EvaluationMode eval_mode,
                                 bool show_progress, int thread_count) {
   chess::Engine engine;
   engine.set_thread_count(std::max(thread_count, 1));
-  engine.set_evaluation_mode(eval_mode);
-  if (eval_mode == chess::EvaluationMode::Stockfish) {
-    engine.init_nnue();
-  }
+  engine.init_nnue();
   ArenaSummary summary{};
 
   const bool use_time = opts.time_control.enabled;
@@ -136,9 +121,9 @@ ArenaSummary run_internal_arena(const chess::CliOptions& opts,
                                     ? cand_white
                                     : !cand_white;
       if (cand_to_move) {
-        chess::set_engine_params_for_mode(cand_params, eval_mode);
+        chess::set_engine_params(cand_params);
       } else {
-        chess::set_engine_params_for_mode(base_params, eval_mode);
+        chess::set_engine_params(base_params);
       }
 
       chess::SearchParameters params{};
@@ -234,9 +219,6 @@ int main(int argc, char** argv) {
       for (const auto feature : chess::kOptimizationFeatures) {
         std::cout << " - " << feature << "\n";
       }
-      if (chess::kCompiledWithNeon) {
-        std::cout << " - Compiled with NEON eval_linear path" << "\n";
-      }
     } else {
       std::cout << "Use -vv for details.\n";
     }
@@ -271,20 +253,13 @@ int main(int argc, char** argv) {
 
   chess::Engine engine;
   engine.set_thread_count(thread_count);
-  const chess::EvaluationMode eval_mode = cli.options.use_nnue
-                                              ? chess::EvaluationMode::Stockfish
-                                              : chess::EvaluationMode::Native;
-  engine.set_evaluation_mode(eval_mode);
-  if (eval_mode == chess::EvaluationMode::Stockfish) {
-    engine.init_nnue();
-  }
-  chess::set_engine_params_for_mode(candidate_params, eval_mode);
+  engine.init_nnue();
+  chess::set_engine_params(candidate_params);
 
   if (cli.options.arena_mode) {
     try {
-      const auto summary =
-          run_internal_arena(cli.options, baseline_params, candidate_params,
-                             eval_mode, true, thread_count);
+      const auto summary = run_internal_arena(
+          cli.options, baseline_params, candidate_params, true, thread_count);
       std::cout << "{\"score\":" << summary.score << ","
                 << "\"wins\":" << summary.wins << ","
                 << "\"losses\":" << summary.losses << ","
@@ -297,7 +272,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (cli.options.static_eval || cli.options.eval_breakdown) {
+  if (cli.options.static_eval) {
     chess::Board board{};
     try {
       board = chess::initial_board(cli.options.fen);
@@ -308,51 +283,7 @@ int main(int argc, char** argv) {
 
     engine.reset_history(board);
 
-#if SKAKS_ENABLE_HCE
-    const chess::EvalVector eval_vec = chess::compute_eval_vector(board);
-    const int raw_linear = chess::eval_linear(eval_vec, chess::phase_weights());
-    const int white_eval = engine.evaluate(board, eval_mode, nullptr);
-    const int stm_eval = (board.side_to_move == chess::SideToMove::White)
-                             ? white_eval
-                             : -white_eval;
-
-    if (cli.options.eval_breakdown) {
-      const double mg_ratio = static_cast<double>(eval_vec.mg_phase) /
-                              static_cast<double>(chess::kPstPhaseMax);
-      const double eg_ratio = 1.0 - mg_ratio;
-      std::cout << "eval_terms {\"mg_phase\":" << eval_vec.mg_phase
-                << ",\"eg_phase\":" << eval_vec.eg_phase
-                << ",\"mg_ratio\":" << mg_ratio << ",\"eg_ratio\":" << eg_ratio
-                << ",\"raw_linear\":" << raw_linear
-                << ",\"static_eval_white\":" << white_eval
-                << ",\"static_eval_stm\":" << stm_eval << ",\"term_names\":[";
-      for (std::size_t i = 0; i < kTermNames.size(); ++i) {
-        if (i > 0) {
-          std::cout << ',';
-        }
-        std::cout << '\"' << kTermNames[i] << '\"';
-      }
-      std::cout << "],\"term_values\":[";
-      for (std::size_t i = 0; i < static_cast<std::size_t>(chess::TermId::Count);
-           ++i) {
-        if (i > 0) {
-          std::cout << ',';
-        }
-        std::cout << eval_vec.f[i];
-      }
-      std::cout << "]}" << "\n";
-    }
-
-    if (cli.options.static_eval) {
-      std::cout << "static_eval_white " << white_eval << "\n";
-      std::cout << "static_eval_stm " << stm_eval << "\n";
-    }
-#else
-    if (cli.options.eval_breakdown) {
-      std::cerr << "eval-breakdown requires SKAKS_ENABLE_HCE=ON" << "\n";
-      return EXIT_FAILURE;
-    }
-    const int white_eval = engine.evaluate(board, eval_mode, nullptr);
+    const int white_eval = engine.evaluate(board, nullptr);
     const int stm_eval = (board.side_to_move == chess::SideToMove::White)
                              ? white_eval
                              : -white_eval;
@@ -360,7 +291,6 @@ int main(int argc, char** argv) {
       std::cout << "static_eval_white " << white_eval << "\n";
       std::cout << "static_eval_stm " << stm_eval << "\n";
     }
-#endif
     return EXIT_SUCCESS;
   }
 

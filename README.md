@@ -8,7 +8,7 @@ Simple toy chess engine, for learning and fun.
 
 When executed, it does `UCI` by default (just run `skaks`, or `skaks --uci`). Other options available via cli, `skaks -h`.
 
-By default, the NNUE is active. To use the old heuristics (*aka* HCE), do `skaks --no-nnue --uci`, do use `--uci` or `-u` to enable `UCI` mode or else it starts self-play.
+Skaks uses the Stockfish NNUE evaluation by default.
 
 By default it uses as many threads as logical CPU cores, but you can change this via `--threads`. 
 
@@ -44,38 +44,14 @@ Optimizations:
  - Incremental eval NNUE from Stockfish
  - Extensive CLI modes for self-play, benchmarking, and profiling
  - Futility and SEE pruning in search
- - Compiled with NEON eval_linear path
 ```
 
 ![strip middle](assets/images/strip_mid.png)
 
-### HCE vs NNUE
+### NNUE
 
-
-I did not manage to improve the classical heuristics very much, I don't have the know-how, patience and computational resources to do so. Borrowed some PST from various engines and tried with `Texel`, but a good fit against the `win-lose-draw` curve from quiet positions obtained from millions of high-profile games did not really translate into great play for me. `SPSA` + poor-man's `SPRT` should do, but don't have the time and resources, and the evaluation parameters were improving very slowly. Did not want to add more terms to the mix. Therefore I took the approach to *borrow* Stockfish's NNUE, and spend the time coding search. The search params still need to be fine-tuned, though, just took values that seem reasonable. Overall, the change to NNUE was for the better; quick and dirty comparison with `fastchess`:
-
-```
-fastchess -rounds 1200 \
--engine cmd=skaks name=Skaks-NNUE \
--engine cmd=skaks_hce name=Skaks-HCE \
--openings file=lichess_elite_2015-09.pgn format=pgn order=random \ 
--repeat \
--concurrency 4 \
--sprt elo0=0 elo1=2 alpha=0.05 beta=0.05  
--each tc=5+0.1  
-
-[...]
---------------------------------------------------
-Results of Skaks-NNUE vs Skaks-HCE (5+0.1, 14t, NULL, lichess_elite_2015-09.pgn):
-Elo: 232.74 +/- 23.37, nElo: 292.26 +/- 22.05
-LOS: 100.00 %, DrawRatio: 40.04 %, PairsRatio: 285.00
-Games: 954, Wins: 739, Losses: 181, Draws: 34, Points: 756.0 (79.25 %)
-Ptnml(0-2): [1, 0, 191, 10, 275], WL/DD Ratio: 14.92
-LLR: 2.95 (100.0%) (-2.94, 2.94) [0.00, 2.00]
---------------------------------------------------
-SPRT ([0.00, 2.00]) completed - H1 was accepted
-```
-
+Skaks uses the Stockfish NNUE evaluation. The older handcrafted evaluation has
+been removed to keep the codebase focused on the NNUE path.
 
 #### Aditional helpers 
 

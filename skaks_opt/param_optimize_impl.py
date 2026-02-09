@@ -26,7 +26,6 @@ from skaks_opt import arena_runner
 from skaks_opt.dask_support import dask_client_from_args
 from skaks_opt.params import (DEFAULT_PARAMS, default_param_space,
                               param_set_prefixes)
-from skaks_opt.pst import apply_pst_symmetry
 from skaks_opt.replica_exchange import (ReplicaExchangeState, REXChain,
                                         build_temperatures)
 from skaks_opt.spsa import SPSAState
@@ -385,9 +384,6 @@ def _prepare_arena_params(
         Dict[str, Any],
         _coerce_params_for_arena(cand_params, *templates),
     )
-    if coerced_base is not None:
-        apply_pst_symmetry(coerced_base)
-    apply_pst_symmetry(coerced_cand)
     return coerced_base, coerced_cand
 
 
@@ -455,20 +451,6 @@ def _perturbation_scales(bounds: List[Tuple[float, float]]) -> List[float]:
         else:
             scales.append(1.0)
     return scales
-
-
-def _clamp_phase_weights(data: Dict[str, Any], low: float = -1.0, high: float = 1.0) -> None:
-    eval_section = data.get("evaluation") if isinstance(data, dict) else None
-    if not isinstance(eval_section, dict):
-        return
-    for key in ("phase_weights_mg", "phase_weights_eg"):
-        arr = eval_section.get(key)
-        if isinstance(arr, tuple):
-            arr = list(arr)
-        if isinstance(arr, list):
-            eval_section[key] = [
-                float(max(low, min(high, float(val)))) for val in arr
-            ]
 
 
 def _clamp_futility_margins(data: Dict[str, Any]) -> None:
@@ -1289,24 +1271,12 @@ def optimize_loop(args: argparse.Namespace) -> None:
             # If baseline evaluation fails we keep the default base_score
             pass
 
-    # Support the convenience alias --weights-only
-    if getattr(args, "weights_only", False):
-        args.phase_weights_only = True
-
     include_prefixes = args.include_prefix
     exclude_prefixes = list(args.exclude_prefix) if args.exclude_prefix else []
-    if getattr(args, "phase_weights_only", False):
-        include_prefixes = [
-            "evaluation.phase_weights_mg",
-            "evaluation.phase_weights_eg",
-        ]
-    elif getattr(args, "param_set", None):
-        if args.param_set != "full":
-            include_prefixes = param_set_prefixes(args.param_set)
-        else:
-            include_prefixes = include_prefixes or param_set_prefixes("full")
-    if getattr(args, "skip_pst", False):
-        exclude_prefixes.append("evaluation.pst_")
+    if not include_prefixes:
+        include_prefixes = param_set_prefixes(
+            getattr(args, "search_block", "search_nnue")
+        )
 
     tunable = _collect_numeric_leaves(
         best_data,
@@ -1455,7 +1425,6 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         include_prefixes=include_prefixes,
                         exclude_prefixes=exclude_prefixes,
                     )
-                    _clamp_phase_weights(cand_data)
                     _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
@@ -1587,7 +1556,6 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         scale = sigma * max(abs(val), 1.0)
                         vec.append(val + random.gauss(0.0, scale))
                     cand_data = _vector_to_params(template_data, paths, vec, is_int)
-                    _clamp_phase_weights(cand_data)
                     _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
@@ -1703,7 +1671,6 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         new_mean[idx] += weights[rank] * val
                 mean_vec = new_mean
                 best_data = _vector_to_params(template_data, paths, mean_vec, is_int)
-                _clamp_phase_weights(best_data)
                 _clamp_futility_margins(best_data)
                 beam = [(top_score, best_data)]
             elif args.strategy == "rex":  # Replica-exchange Monte Carlo
@@ -1742,7 +1709,6 @@ def optimize_loop(args: argparse.Namespace) -> None:
                         include_prefixes=include_prefixes,
                         exclude_prefixes=exclude_prefixes,
                     )
-                    _clamp_phase_weights(cand_data)
                     _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
@@ -1867,7 +1833,6 @@ def optimize_loop(args: argparse.Namespace) -> None:
 
                 def run_spsa_eval(label: str, vec: List[float]) -> Tuple[float, Dict[str, Any], Tuple[int, int, int], float]:
                     cand_data = _vector_to_params(best_data, paths, vec, is_int)
-                    _clamp_phase_weights(cand_data)
                     _clamp_futility_margins(cand_data)
                     cand_path = Path(tempfile.mkstemp(suffix="_cand.yaml")[1])
                     _save_params(cand_data, cand_path)
@@ -1955,7 +1920,6 @@ def optimize_loop(args: argparse.Namespace) -> None:
                     bounds=bounds,
                 )
                 best_data = _vector_to_params(best_data, paths, updated_vec, is_int)
-                _clamp_phase_weights(best_data)
                 _clamp_futility_margins(best_data)
                 if plus_score >= minus_score:
                     top_score, top_data, top_stats, wall = (
@@ -2253,34 +2217,15 @@ def configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
         help="Only tune params whose dotted path starts with this prefix (repeatable)",
     )
     parser.add_argument(
+        "--search-block",
+        choices=["search", "search_nnue", "both"],
+        default="search_nnue",
+        help="Select which search parameter block to tune",
+    )
+    parser.add_argument(
         "--exclude-prefix",
         action="append",
         help="Skip params whose dotted path starts with this prefix (repeatable)",
-    )
-    parser.add_argument(
-        "--phase-weights-only",
-        action="store_true",
-        help="Only tune evaluation.phase_weights_mg/eg arrays",
-    )
-    parser.add_argument(
-        "--weights-only",
-        action="store_true",
-        help="Alias for --phase-weights-only (tune only phase weight arrays)",
-    )
-    parser.add_argument(
-        "--param-set",
-        choices=["full", "phase", "offense", "defense", "pst"],
-        default="full",
-        help=(
-            "Select parameter subset to optimize: full (all evaluation params), "
-            "phase (phase weights only), offense/defense (subset of eval terms), "
-            "pst (piece-square tables only)"
-        ),
-    )
-    parser.add_argument(
-        "--skip-pst",
-        action="store_true",
-        help="Exclude PST tables from optimization",
     )
     parser.add_argument(
         "--strategy",

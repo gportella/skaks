@@ -26,7 +26,7 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
         description=(
             "Utility for taking a corpus of scored FENs and bucketing it by game "
             "phase, either into three separate CSVs or a single CSV with a phase "
-            "column. Handy when you need phase-specific datasets for fitting."
+            "column. Handy when you need phase-specific datasets for analysis."
         ),
     )
     parser.add_argument(

@@ -938,11 +938,8 @@ void run_uci_loop(Engine& engine, int default_depth,
         std::cout << line_out << '\n';
       }
       {
-        const char* eval_label =
-            (engine.evaluation_mode() == EvaluationMode::Stockfish) ? "nnue"
-                                                                    : "native";
         std::ostringstream info_line;
-        info_line << "info string eval_mode=" << eval_label;
+        info_line << "info string eval_mode=nnue";
         const std::string line_out = info_line.str();
         log_uci("out", line_out);
         std::cout << line_out << '\n';
@@ -1176,8 +1173,7 @@ void run_uci_loop(Engine& engine, int default_depth,
       stop_search(true);
       std::unique_ptr<NnueAdapter> nnue_adapter =
           std::make_unique<NnueAdapter>(board);
-      const int white_eval =
-          engine.evaluate(board, engine.evaluation_mode(), nnue_adapter.get());
+      const int white_eval = engine.evaluate(board, nnue_adapter.get());
       const int stm_eval =
           (board.side_to_move == SideToMove::White) ? white_eval : -white_eval;
       std::ostringstream oss;

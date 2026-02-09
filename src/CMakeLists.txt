@@ -20,7 +20,6 @@ add_library(chess_engine_core STATIC
   quiescence.cpp
   params_loader.cpp
   pst_tables.cpp
-  scoring_rules.cpp
   search.cpp
   syzygy.cpp
   transposition_table.cpp
@@ -95,9 +94,6 @@ target_include_directories(chess_engine_core SYSTEM PUBLIC
   ${YAML_CPP_INCLUDE_DIR}
 )
 
-target_compile_definitions(chess_engine_core PUBLIC
-  SKAKS_ENABLE_HCE=$<BOOL:${SKAKS_ENABLE_HCE}>
-)
 
 target_compile_features(chess_engine_core PUBLIC cxx_std_23)
 
@@ -143,9 +139,6 @@ target_link_directories(skaks PRIVATE
 
 target_compile_features(skaks PUBLIC cxx_std_23)
 
-target_compile_definitions(skaks PRIVATE
-  SKAKS_ENABLE_HCE=$<BOOL:${SKAKS_ENABLE_HCE}>
-)
 
 chess_set_default_warnings(skaks)
 chess_enable_sanitizers(skaks)

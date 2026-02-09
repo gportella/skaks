@@ -1,9 +1,7 @@
-"""
-skaks_opt: Unified optimization and fitting toolkit for Skaks chess engine.
-"""
+"""skaks_opt: Unified optimization toolkit for the Skaks chess engine."""
 
 # This module will provide:
-# - Unified CLI for parameter fitting, texel fitting, and self-play optimization
+# - Unified CLI for search parameter optimization and self-play runs
 # - Modular backend selection (arena, batch, external engine)
 # - Simple, maintainable interface for all parameter types (including clock/time controls)
 

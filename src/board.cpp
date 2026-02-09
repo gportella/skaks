@@ -4,8 +4,6 @@
 #include "chess/attack_masks.hpp"
 #include "chess/defaults.hpp"
 #include "chess/moves.hpp"
-#include "chess/piece_values.hpp"
-#include "chess/pst_tables.hpp"
 #include "chess/types.hpp"
 #include "chess/types_io.hpp"
 #include "chess/zobrist.hpp"
@@ -44,43 +42,6 @@ constexpr std::array<OccupancyType, 128> kPieceFromChar = [] {
 
 constexpr std::array<std::string_view, 13> kPieceGlyph = {
     "·", "♙", "♘", "♗", "♖", "♕", "♔", "♟", "♞", "♝", "♜", "♛", "♚"};
-
-void initialize_incremental_scores(Board& board) {
-  board.material_score = 0;
-  board.pst_midgame_score = 0;
-  board.pst_endgame_score = 0;
-  board.phase = 0;
-
-#if SKAKS_ENABLE_HCE
-
-  const auto& mg_tables = midgame_pst();
-  const auto& eg_tables = endgame_pst();
-
-  for (int sq = 0; sq < 64; ++sq) {
-    const auto piece = board.pieces[static_cast<std::size_t>(sq)];
-    if (piece == OccupancyType::empty)
-      continue;
-
-    // Material
-    board.material_score += piece_material_value(piece);
-
-    // PST
-    const bool white_piece = is_white(piece);
-    const int type_index = (static_cast<int>(piece) - 1) % 6;
-    const int oriented_sq = white_piece ? sq : mirror_rank(sq);
-
-    const int mg_entry = mg_tables[static_cast<std::size_t>(type_index)]
-                                  [static_cast<std::size_t>(oriented_sq)];
-    const int eg_entry = eg_tables[static_cast<std::size_t>(type_index)]
-                                  [static_cast<std::size_t>(oriented_sq)];
-
-    board.pst_midgame_score += white_piece ? mg_entry : -mg_entry;
-    board.pst_endgame_score += white_piece ? eg_entry : -eg_entry;
-
-    board.phase += kPstPhaseWeights[static_cast<std::size_t>(type_index)];
-  }
-#endif
-}
 
 Board parse_fen_string(std::string_view fen) {
   Board board{};
@@ -152,8 +113,6 @@ Board parse_fen_string(std::string_view fen) {
   board.side_to_move =
       (fields.side_to_move == "w") ? SideToMove::White : SideToMove::Black;
 
-  initialize_incremental_scores(board);
-
   // Minimal FEN parsing logic can be added here
   return board;
 }
@@ -172,9 +131,6 @@ Board initial_board(std::string_view fen) {
       calculate_occupancy(board, PieceColor::Black);
   board.occupancy[static_cast<std::size_t>(PieceColor::Both)] =
       calculate_occupancy(board, PieceColor::Both);
-
-  // Initialize material, PST scores, and phase counts now that pieces are set.
-  initialize_incremental_scores(board);
 
   for (std::size_t sq = 0; sq < 64; ++sq) {
     const OccupancyType occ = board.pieces[static_cast<std::size_t>(sq)];

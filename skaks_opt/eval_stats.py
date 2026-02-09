@@ -253,6 +253,9 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPa
 
 
 def run_eval_stats(args: argparse.Namespace) -> None:
+    raise SystemExit(
+        "eval-stats requires native evaluation terms, which are no longer supported"
+    )
     dataset_paths = _expand_dataset_inputs(args.dataset)
     rng = random.Random(args.seed)
 

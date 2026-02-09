@@ -1,4 +1,4 @@
-"""Unified CLI entry point for Skaks optimization, fitting, and tooling."""
+"""Unified CLI entry point for Skaks optimization and tooling."""
 
 import argparse
 import sys
@@ -16,16 +16,12 @@ from skaks_opt.eval_stats import run_eval_stats
 from skaks_opt.fen_phase_split import \
   add_subparser as add_fen_phase_split_subparser
 from skaks_opt.fen_phase_split import run_fen_phase_split
-from skaks_opt.fit import add_subparser as add_fit_subparser
-from skaks_opt.fit import run_fit
 from skaks_opt.param_optimize import \
   add_subparser as add_param_optimize_subparser
 from skaks_opt.param_optimize import run_param_optimize
 from skaks_opt.perf_pgn import add_subparser as add_perf_pgn_subparser
 from skaks_opt.perf_pgn import run_perf_pgn
 from skaks_opt.selfplay import SelfPlayConfig, run_selfplay
-from skaks_opt.texel import add_subparser as add_texel_subparser
-from skaks_opt.texel import run_texel
 
 CATEGORY_PARAMETER_TUNING = "Parameter tuning"
 CATEGORY_DATA_ANALYSIS = "Data & analysis"
@@ -130,7 +126,7 @@ def _extract_help(subparsers: argparse._SubParsersAction, name: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Skaks unified optimization/fitting CLI",
+        description="Skaks unified optimization/tooling CLI",
         formatter_class=CategorizedHelpFormatter,
     )
     subparsers = parser.add_subparsers(
@@ -150,7 +146,7 @@ def main():
         "selfplay",
         help=selfplay_help,
         description=(
-            "Modern self-play pipeline that perturbs evaluation/search parameters, "
+            "Modern self-play pipeline that perturbs search parameters, "
             "spawns arenas locally or via Dask, and keeps the best candidates. Use "
             "this when you want an end-to-end tuner with beam search or CMA-ES, "
             "as opposed to the arena-driven `param-optimize` loop."
@@ -233,12 +229,6 @@ def main():
         help="Tune the search_nnue parameter block instead of search",
     )
 
-    texel_parser = add_texel_subparser(subparsers)
-    _register_category(subparsers, "texel", texel_parser, CATEGORY_PARAMETER_TUNING)
-
-    fit_parser = add_fit_subparser(subparsers)
-    _register_category(subparsers, "fit", fit_parser, CATEGORY_PARAMETER_TUNING)
-
     # Data & analysis ------------------------------------------------------
     dataset_parser = add_dataset_subparser(subparsers)
     _register_category(
@@ -311,17 +301,15 @@ def main():
     selfplay_parser.add_argument(
         "--include-prefix",
         action="append",
-        help="Limit perturbations to parameters matching this prefix (repeatable)",
+        help=(
+            "Limit perturbations to parameters matching this prefix (repeatable). "
+            "Defaults to search_nnue.* when omitted."
+        ),
     )
     selfplay_parser.add_argument(
         "--exclude-prefix",
         action="append",
         help="Exclude parameters matching this prefix from perturbations (repeatable)",
-    )
-    selfplay_parser.add_argument(
-        "--phase-weights-only",
-        action="store_true",
-        help="Restrict tuning to phase weight parameters",
     )
     selfplay_parser.add_argument(
         "--games",
@@ -451,9 +439,7 @@ def main():
     )
 
     args = parser.parse_args()
-    if args.command == "texel":
-        run_texel(args)
-    elif args.command == "arena":
+    if args.command == "arena":
         try:
             exit_code = run_arena(args)
         except ValueError as exc:
@@ -467,8 +453,6 @@ def main():
         run_dataset(args)
     elif args.command == "fen-phase-split":
         run_fen_phase_split(args)
-    elif args.command == "fit":
-        run_fit(args)
     elif args.command == "eval-stats":
         run_eval_stats(args)
     elif args.command == "perf-pgn":
@@ -504,7 +488,6 @@ def main():
             output=_to_path(args.output) if args.output else None,
             include_prefix=include_prefixes,
             exclude_prefix=exclude_prefixes,
-            phase_weights_only=args.phase_weights_only,
             games=args.games,
             iterations=args.iterations,
             repeats=args.repeats,

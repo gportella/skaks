@@ -41,13 +41,11 @@ struct CliOptions {
   bool show_extended_version = false;
   int thread_count = 0; // 0 = auto
   bool static_eval = false;
-  bool eval_breakdown = false;
   std::string executable_path;
   bool best_move = false;
   bool arena_mode = false;
   int arena_games = 20;
   TimeControlOptions time_control;
-  bool use_nnue = true;
 };
 
 struct CliParseResult {

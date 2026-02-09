@@ -48,10 +48,12 @@ def locate_skaks() -> str:
     )
 
 
-def run_command(args):
+def run_command(args, env=None):
     """Run a command and surface stderr on failure."""
     try:
-        return subprocess.run(args, capture_output=True, text=True, check=True)
+        return subprocess.run(
+            args, capture_output=True, text=True, check=True, env=env
+        )
     except subprocess.CalledProcessError as exc:
         sys.stderr.write(f"Command failed: {' '.join(args)}\n")
         if exc.stdout:
@@ -77,12 +79,17 @@ def main():
     if args.threads < 0:
         raise SystemExit("--threads must be non-negative")
 
+    env = os.environ.copy()
+    if args.nnue:
+        env.setdefault("SKAKS_NNUE_BIG", args.nnue)
+        env.setdefault("SKAKS_NNUE_SMALL", args.nnue)
+
     lines = []
     lines.append(f"=== perf snapshot {timestamp} ===")
     lines.append(f"binary: {binary}")
     lines.append(f"threads: {args.threads}")
 
-    version_output = run_command([binary, "-vv"]).stdout.strip()
+    version_output = run_command([binary, "-vv"], env=env).stdout.strip()
     if args.nnue:
         version_output += f" NNUE: {args.nnue}"
     lines.append("--- version ---")
@@ -103,9 +110,7 @@ def main():
                 "--threads",
                 str(args.threads),
             ]
-            if args.nnue:
-                cmd.extend(["--nnue", args.nnue])
-            result = run_command(cmd)
+            result = run_command(cmd, env=env)
             lines.append(f"[case] {name}")
             lines.extend(result.stdout.strip().splitlines())
 

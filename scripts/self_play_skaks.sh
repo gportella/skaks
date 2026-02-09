@@ -2,8 +2,7 @@ python -m skaks_opt.cli param-optimize \
   --engine skaks \
   --baseline-params besty.yaml \
   --start-params besty.yaml \
-  --include-prefix evaluation \
-  --phase-weights-only \
+  --include-prefix search_nnue \
   --games 20 --iterations 200 --repeats 6 \
   --arena-pgn moves_pgn/LumbrasGigaBase_OTB_2025.pgn \
   --arena-workers 4 \

@@ -30,8 +30,6 @@ def build_command(script: Path, epd: Path, args: argparse.Namespace) -> List[str
         command.append("--stockfish")
     else:
         command.extend(["--engine", args.engine])
-        if args.no_nnue:
-            command.append("--no-nnue")
 
     if args.show_failures:
         command.append("--show-failures")
@@ -83,11 +81,6 @@ def main(argv: List[str]) -> int:
         "--stockfish",
         action="store_true",
         help="Use stockfish instead of the configured engine",
-    )
-    parser.add_argument(
-        "--no-nnue",
-        action="store_true",
-        help="Disable NNUE evaluation when running skaks",
     )
     parser.add_argument(
         "--show-failures",

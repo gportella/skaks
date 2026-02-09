@@ -71,12 +71,6 @@ struct Board {
   PieceList pawn_list[2];
   std::array<bool, 2> has_castled = {false, false};
 
-  // Incremental scores (White perspective)
-  int material_score = 0;
-  int pst_midgame_score = 0;
-  int pst_endgame_score = 0;
-  int phase = 0;
-
   bool is_terminal();
 };
 

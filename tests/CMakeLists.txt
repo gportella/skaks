@@ -19,7 +19,6 @@ add_executable(chess_engine_tests
   cli_tests.cpp
   engine_tests.cpp
   exchange_tests.cpp
-  incremental_tests.cpp
   magic_bitboards_tests.cpp
   movepicker_tests.cpp
   move_tests.cpp
@@ -28,7 +27,6 @@ add_executable(chess_engine_tests
   params_loader_tests.cpp
   pin_tests.cpp
   polyglot_tests.cpp
-  scoring_tests.cpp
   search_tests.cpp
   time_manager_tests.cpp
   uci_tests.cpp
@@ -58,7 +56,6 @@ target_include_directories(chess_engine_tests SYSTEM PUBLIC
 target_compile_definitions(chess_engine_tests
   PRIVATE
     TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data"
-    SKAKS_ENABLE_HCE=$<BOOL:${SKAKS_ENABLE_HCE}>
     SKAKS_TESTS=1
 )
 

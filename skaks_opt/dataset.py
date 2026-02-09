@@ -51,11 +51,11 @@ def add_subparser(
 ) -> argparse.ArgumentParser:
     parser = subparsers.add_parser(
         "dataset-sample",
-        help="Sample PGNs, annotate with Stockfish, and write Texel-ready CSV shards",
+        help="Sample PGNs, annotate with Stockfish, and write CSV shards",
         description=(
             "Walk PGN files/directories, sample plies with optional quiet filtering, "
-            "evaluate each position with Stockfish, and emit shardable CSVs that feed "
-            "Texel or supervised fitting."
+            "evaluate each position with Stockfish, and emit shardable CSVs for "
+            "analysis or search tuning workflows."
         ),
     )
     parser.add_argument(

@@ -37,18 +37,11 @@ CliParseResult parse_cli(int argc, char** argv) {
        cxxopts::value<std::string>())
       ("static-eval", "Print static evaluation for provided FEN",
        cxxopts::value<bool>()->default_value("false"))
-    #if SKAKS_ENABLE_HCE
-      ("eval-breakdown", "Print JSON evaluation term breakdown for provided FEN")
-    #endif
       ("o,onlyfen", "Print FEN only in self-play mode")
       ("s,self", "Run self-play CLI loop")
       ("arena", "Run built-in baseline-vs-params arena (no UCI)")
       ("arena-games", "Number of games for arena mode",
        cxxopts::value<int>()->default_value("20"))
-    #if SKAKS_ENABLE_HCE
-      ("nnue", "Enable Stockfish NNUE evaluation (default)")
-      ("no-nnue", "Disable NNUE evaluation")
-    #endif
       ("threads", "Search threads to use (0 = auto)",
        cxxopts::value<int>()->default_value("0"))
       ("bm,bestmove", "Print best move for the given FEN and exit")
@@ -120,25 +113,6 @@ CliParseResult parse_cli(int argc, char** argv) {
     result.options.only_fen = parsed.count("onlyfen") > 0;
     result.options.best_move = parsed.count("bestmove") > 0;
     result.options.static_eval = parsed.count("static-eval") > 0;
-#if SKAKS_ENABLE_HCE
-    result.options.eval_breakdown = parsed.count("eval-breakdown") > 0;
-#else
-    result.options.eval_breakdown = false;
-#endif
-
-#if SKAKS_ENABLE_HCE
-    const bool want_nnue = parsed.count("nnue") > 0;
-    const bool want_no_nnue = parsed.count("no-nnue") > 0;
-    if (want_nnue && want_no_nnue) {
-      result.parse_error = true;
-      result.message = "--nnue cannot be combined with --no-nnue";
-      return result;
-    }
-    result.options.use_nnue = want_no_nnue ? false : true;
-#else
-    result.options.use_nnue = true;
-#endif
-
     result.options.thread_count = parsed["threads"].as<int>();
     if (result.options.thread_count < 0) {
       result.parse_error = true;
@@ -311,12 +285,11 @@ CliParseResult parse_cli(int argc, char** argv) {
     const bool want_uci = parsed.count("uci") > 0;
     const bool want_self = parsed.count("self") > 0;
     const bool want_arena = parsed.count("arena") > 0;
-    const bool wants_eval_dump =
-        result.options.static_eval || result.options.eval_breakdown;
+    const bool wants_eval_dump = result.options.static_eval;
 
-    if (result.options.best_move && result.options.eval_breakdown) {
+    if (result.options.best_move && wants_eval_dump) {
       result.parse_error = true;
-      result.message = "--eval-breakdown cannot be combined with --bestmove";
+      result.message = "--static-eval cannot be combined with --bestmove";
       return result;
     }
 

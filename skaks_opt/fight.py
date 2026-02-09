@@ -109,11 +109,14 @@ class UciEngine:
         *,
         add_uci_arg: bool = False,
         extra_args: Optional[list[str]] = None,
+        extra_env: Optional[dict[str, str]] = None,
         suppress_info_strings: bool = False,
     ):
         env = os.environ.copy()
         if suppress_info_strings:
             env["SKAKS_SUPPRESS_INFO_STRINGS"] = "1"
+        if extra_env:
+            env.update(extra_env)
         argv = [binary]
         if add_uci_arg:
             argv.append("--uci")
@@ -323,22 +326,33 @@ def _extra_args(
     nnue_path: Optional[str],
     eval_mode: Optional[str],
     threads: Optional[int] = None,
-) -> Optional[list[str]]:
+    *,
+    binary: str,
+) -> tuple[Optional[list[str]], Optional[dict[str, str]]]:
     argv: list[str] = []
+    extra_env: dict[str, str] = {}
 
     resolved_eval = eval_mode
     if resolved_eval is None and nnue_path and Path(nnue_path).suffix == ".nnue":
         resolved_eval = "stockfish"
 
-    if resolved_eval:
+    if resolved_eval and not _is_skaks_binary(binary):
         argv.extend(["--eval", resolved_eval])
     if params_path:
         argv.extend(["--params", params_path])
     if nnue_path:
-        argv.extend(["--nnue", nnue_path])
+        if _is_skaks_binary(binary):
+            extra_env.setdefault("SKAKS_NNUE_BIG", nnue_path)
+            extra_env.setdefault("SKAKS_NNUE_SMALL", nnue_path)
+        else:
+            argv.extend(["--nnue", nnue_path])
     if threads is not None:
         argv.extend(["--threads", str(threads)])
-    return argv or None
+    return (argv or None), (extra_env or None)
+
+
+def _is_skaks_binary(binary: str) -> bool:
+    return Path(binary).name.lower().startswith("skaks")
 
 
 def _needs_uci_arg(binary: str) -> bool:
@@ -427,29 +441,35 @@ def run_game(
 
     move_limit_hit = False
     try:
+        opponent_args, opponent_env = _extra_args(
+            opponent_params,
+            opponent_nnue,
+            opponent_eval,
+            opponent_threads_arg,
+            binary=opponent_path,
+        )
+        reference_args, reference_env = _extra_args(
+            reference_params,
+            reference_nnue,
+            reference_eval,
+            reference_threads_arg,
+            binary=reference_path,
+        )
         with (
             UciEngine(
                 opponent_path,
                 timeout=240.0,
                 add_uci_arg=opponent_needs_uci,
-                extra_args=_extra_args(
-                    opponent_params,
-                    opponent_nnue,
-                    opponent_eval,
-                    opponent_threads_arg,
-                ),
+                extra_args=opponent_args,
+                extra_env=opponent_env,
                 suppress_info_strings=_should_suppress_info(opponent_path),
             ) as opponent,
             UciEngine(
                 reference_path,
                 timeout=240.0,
                 add_uci_arg=reference_needs_uci,
-                extra_args=_extra_args(
-                    reference_params,
-                    reference_nnue,
-                    reference_eval,
-                    reference_threads_arg,
-                ),
+                extra_args=reference_args,
+                extra_env=reference_env,
                 suppress_info_strings=_should_suppress_info(reference_path),
             ) as reference,
         ):
@@ -741,7 +761,10 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--engine-nnue",
         type=str,
-        help="Path to NNUE weights for the reference engine (passed as --nnue)",
+        help=(
+            "Path to NNUE weights for the reference engine "
+            "(passed as --nnue or SKAKS_NNUE_* for skaks)"
+        ),
     )
     parser.add_argument(
         "--engine-eval",
@@ -768,7 +791,10 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--opponent-nnue",
         type=str,
-        help="Path to NNUE weights for the opponent engine (passed as --nnue)",
+        help=(
+            "Path to NNUE weights for the opponent engine "
+            "(passed as --nnue or SKAKS_NNUE_* for skaks)"
+        ),
     )
     parser.add_argument(
         "--opponent-eval",
