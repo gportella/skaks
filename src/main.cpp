@@ -3,7 +3,6 @@
 #include "chess/build_config.hpp"
 #include "chess/cli.hpp"
 #include "chess/defaults.hpp"
-#include "chess/demo_debug.hpp"
 #include "chess/engine.hpp"
 #include "chess/engine_params.hpp"
 #include "chess/magic_bitboards.hpp"

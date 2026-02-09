@@ -6,7 +6,6 @@ add_library(chess_engine_core STATIC
   attack_masks.cpp
   board.cpp
   complexity.cpp
-  demo_debug.cpp
   engine.cpp
   exchange.cpp
   cli.cpp
