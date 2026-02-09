@@ -19,7 +19,6 @@ add_library(chess_engine_core STATIC
   polyglot.cpp
   quiescence.cpp
   params_loader.cpp
-  pst_tables.cpp
   search.cpp
   syzygy.cpp
   transposition_table.cpp

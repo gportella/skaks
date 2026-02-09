@@ -10,7 +10,6 @@
 #include "chess/params_loader.hpp"
 #include "chess/perf.hpp"
 #include "chess/polyglot.hpp"
-#include "chess/pst_tables.hpp"
 #include "chess/search.hpp"
 #include "chess/search_stats.hpp"
 #include "chess/syzygy.hpp"
