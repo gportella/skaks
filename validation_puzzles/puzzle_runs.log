@@ -2284,3 +2284,158 @@ Optimizations:
 [Lc0_Sf_test_suite_tcec15.epd] Solved 5/50 puzzles at depth 10 (10.0%)
 [brakto_kopec.epd] Solved 10/24 puzzles at depth 10 (41.7%)
 [eigennmann_rapid_engine.epd] Solved 17/50 puzzles at depth 10 (34.0%)
+=== perf snapshot 2026-02-10T21:41:35 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+ŝ𝕜𝕒𝕜ŝ version 0.20.4
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+--- perf ---
+[Lc0_Sf_test_suite_tcec15.epd] Solved 14/50 puzzles at depth 14 (28.0%)
+Overall solved 14/50 puzzles at depth 14
+=== perf snapshot 2026-02-10T21:42:38 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+ŝ𝕜𝕒𝕜ŝ version 0.20.4
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+--- perf ---
+[brakto_kopec.epd] Solved 14/24 puzzles at depth 14 (58.3%)
+Overall solved 14/24 puzzles at depth 14
+=== perf snapshot 2026-02-10T21:43:03 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+ŝ𝕜𝕒𝕜ŝ version 0.20.4
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+--- perf ---
+[eigennmann_rapid_engine.epd] Solved 17/50 puzzles at depth 14 (34.0%)
+Overall solved 17/50 puzzles at depth 14
+=== perf snapshot 2026-02-10T21:43:56 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+ŝ𝕜𝕒𝕜ŝ version 0.20.4
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+--- perf ---
+[lct_2.epd] Solved 15/35 puzzles at depth 14 (42.9%)
+Overall solved 15/35 puzzles at depth 14
+=== perf snapshot 2026-02-10T21:44:48 ===
+binary: skaks
+eval_mode: nnue
+--- version ---
+ŝ𝕜𝕒𝕜ŝ version 0.20.4
+Optimizations:
+ - Bitboard generation with precomputed attack masks and magic bitboards
+ - Alpha-beta search, tuneable size transposition table caching
+ - Zobrist hashing for incremental board state keys
+ - Repetition detection through historical position tracking
+ - Move ordering seeded by cached transposition moves
+ - PV search with some reductions
+ - Root move exclusion support for iterative deepening
+ - Quiescence search to reduce horizon effect
+ - Killer move heuristic for quiet move ordering
+ - Support for polyglot book of moves
+ - Null move pruning, 2-ply historical heuristic and SEE sorting
+ - Time management for search limits
+ - Added MVV-LVA and SEE for capture move ordering
+ - Threaded UCI search support, with pondering, go time, nodes and infinite
+ - Parameter loading from external file
+ - SIMD optimizations for bitboard operations and threads
+ - Incremental eval NNUE from Stockfish
+ - Extensive CLI modes for self-play, benchmarking, and profiling
+ - Futility, reverse futility and SEE pruning in search
+ - Syzygy tablebase probing support
+ - Singular/negative extensions, ProbCut refinements, and LMR tweaks
+ - Eval correction history and quiescence pruning upgrades
+--- perf ---
+[wacknew.epd] Solved 40/50 puzzles at depth 14 (80.0%)
+Overall solved 40/50 puzzles at depth 14

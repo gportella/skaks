@@ -163,17 +163,14 @@ def load_puzzles(
 ) -> Dict[str, List[Puzzle]]:
     epd_files = find_epd_files(directory=directory)
     out: Dict[str, List[Puzzle]] = {}
-    seen: set[Path] = set()
+    candidates: List[Path]
 
-    for candidate in epd_files + [path]:
-        if not candidate.exists():
-            continue
+    if path.exists():
+        candidates = [path]
+    else:
+        candidates = epd_files
 
-        resolved = candidate.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-
+    for candidate in candidates:
         suffix = candidate.suffix.lower()
         if suffix == ".epd":
             puzzles = load_puzzles_epd(candidate, limit)
@@ -265,23 +262,28 @@ def run_suite(
     depth: int,
     progress_interval: int,
 ) -> Tuple[int, int, List[Tuple[Puzzle, str]]]:
-    timestamp = datetime.datetime.now().isoformat(timespec="seconds")
-    lines = []
-    lines.append(f"=== perf snapshot {timestamp} ===")
-    lines.append(f"binary: {engine.binary}")
-    if engine.eval_mode:
-        lines.append(f"eval_mode: {engine.eval_mode}")
-    else:
-        lines.append("eval_mode: unknown")
+    log_enabled = "skaks" in engine.binary
+    log_handle = None
 
-    if "skaks" in engine.binary:
+    if log_enabled:
+        timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+        lines = []
+        lines.append(f"=== perf snapshot {timestamp} ===")
+        lines.append(f"binary: {engine.binary}")
+        if engine.eval_mode:
+            lines.append(f"eval_mode: {engine.eval_mode}")
+        else:
+            lines.append("eval_mode: unknown")
+
         version_output = run_command([engine.binary, "-vv"]).stdout.strip()
         lines.append("--- version ---")
         lines.extend(version_output.splitlines())
 
-    lines.append("--- perf ---")
-    with OUTPUT_FILE.open("a", encoding="utf-8") as handle:
-        handle.write("\n".join(lines) + "\n")
+        lines.append("--- perf ---")
+        log_handle = OUTPUT_FILE.open("a", encoding="utf-8")
+        log_handle.write("\n".join(lines) + "\n")
+
+    try:
         overall_solved = 0
         overall_total = 0
         failures: List[Tuple[Puzzle, str]] = []
@@ -358,12 +360,17 @@ def run_suite(
 
             summary_line = f"Solved {file_solved}/{file_total} puzzles at depth {depth} ({percentage:.1f}%)"
             print(f"[{fname}] {summary_line}")
-            handle.write(f"[{fname}] {summary_line}\n")
+            if log_handle:
+                log_handle.write(f"[{fname}] {summary_line}\n")
 
         overall_line = (
             f"Overall solved {overall_solved}/{overall_total} puzzles at depth {depth}"
         )
-        handle.write(overall_line + "\n")
+        if log_handle:
+            log_handle.write(overall_line + "\n")
+    finally:
+        if log_handle:
+            log_handle.close()
 
     return overall_solved, overall_total, failures
 

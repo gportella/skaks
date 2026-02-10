@@ -39,6 +39,12 @@ tuning/datasets/lichess_elite/
 *.swo
 .github/
 
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # macOS
 .DS_Store
 optuna.db-journal
