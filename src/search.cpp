@@ -389,8 +389,9 @@ MoveEvaluationResult evaluate_move(Board& board, const Move& move,
 
   int reduction = 0;
   // LATER MOVE REDUCTION
-  if (quiet_like && !king_move && !castle_move && !in_check_after_move &&
-      child_depth >= 2 && move_number > 1 && !is_killer && !is_counter) {
+  if (quiet_like && !king_move && !castle_move && !ctx.parent_in_check &&
+      !in_check_after_move && child_depth >= 2 && move_number > 1 &&
+      !is_killer && !is_counter) {
 
     const double depth_factor = std::log1p(std::min(child_depth, 63));
     const double order_factor = std::log1p(std::min(move_number, 63));
@@ -1437,6 +1438,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
   // done setting up SMP split point and tasks
 
   bool cutoff_triggered = false;
+  bool any_move_searched = false;
 
   // Lambda to apply the result of a move evaluation, whether from
   // the main thread or from an SMP helper
@@ -1446,6 +1448,7 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
     if (cutoff_triggered) {
       return true;
     }
+    any_move_searched = true;
 
     const bool quiet_like = (current_move.captured_pc == OccupancyType::empty) &&
                             (current_move.promo_pc == OccupancyType::empty);
@@ -1719,6 +1722,48 @@ alphabeta_minimax(Board& board, int depth, int alpha, int beta, SideToMove stm,
       }
       apply_result(ready.move, ready.child, ready.score);
     }
+  }
+
+  // Safety net: if pruning skipped every move, force-search one legal move to
+  // avoid returning sentinel +/-INF and polluting TT with a fake mate score.
+  if (!any_move_searched) {
+    for (uint16_t i = 0; i < move_count; ++i) {
+      const uint32_t move_code = moves[i];
+      const Move move = decode_move(move_code);
+      if (is_excluded_move(move)) {
+        continue;
+      }
+      move_ctx.move_number = 1;
+      move_ctx.alpha = alpha;
+      move_ctx.beta = beta;
+      move_ctx.allow_pvs = true;
+      move_ctx.tt_move = (tt_code != 0 && move_code == tt_code);
+      move_ctx.tt_depth = tt_depth;
+      move_ctx.tt_lower_bound = tt_lower_bound;
+      move_ctx.tt_score = tt_score;
+      move_ctx.tt_extension = move_ctx.tt_move ? tt_extension : 0;
+      move_ctx.tt_negative_extension =
+          move_ctx.tt_move ? tt_negative_extension : 0;
+
+      MoveEvaluationResult forced =
+          evaluate_move(board, move, move_ctx, scratch, nodes, evaluator);
+      if (forced.aborted) {
+        if (split_raw) {
+          split_raw->cancel_flag.store(true, std::memory_order_relaxed);
+        }
+        return forced.child;
+      }
+      apply_result(move, forced.child, forced.score);
+      break;
+    }
+  }
+
+  if (!any_move_searched) {
+    SearchResult empty{};
+    empty.score = 0;
+    empty.outcome = SearchResult::Outcome::InProgress;
+    empty.pv_length = 0;
+    return empty;
   }
 
   if (best.aborted) {
