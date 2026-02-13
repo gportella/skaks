@@ -34,6 +34,9 @@ def build_command(script: Path, epd: Path, args: argparse.Namespace) -> List[str
     if args.show_failures:
         command.append("--show-failures")
 
+    if not args.clear_tt_per_puzzle:
+        command.append("--no-clear-tt")
+
     if args.timeout is not None:
         command.extend(["--timeout", str(args.timeout)])
 
@@ -87,6 +90,18 @@ def main(argv: List[str]) -> int:
         action="store_true",
         help="Print failed puzzle details from the underlying runs",
     )
+    parser.add_argument(
+        "--clear-tt-per-puzzle",
+        action="store_true",
+        help="Clear the engine transposition table before each puzzle (default: on)",
+    )
+    parser.add_argument(
+        "--no-clear-tt",
+        action="store_false",
+        dest="clear_tt_per_puzzle",
+        help="Do not clear the engine transposition table between puzzles",
+    )
+    parser.set_defaults(clear_tt_per_puzzle=True)
 
     args = parser.parse_args(argv)
 

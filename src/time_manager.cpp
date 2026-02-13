@@ -140,7 +140,8 @@ void TimeManager::configure(SideToMove stm, const SearchLimits& limits) {
     const double min_floor = static_cast<double>(increment) * 1.3;
     const double max_cap = static_cast<double>(total) /
                            static_cast<double>(std::max<std::uint32_t>(1, 10u));
-    base_budget = std::clamp(base_budget, min_floor, max_cap);
+    const double clamped_min = (min_floor > max_cap) ? max_cap : min_floor;
+    base_budget = std::clamp(base_budget, clamped_min, max_cap);
   }
 
   if (base_budget <= 0.0) {

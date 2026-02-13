@@ -78,6 +78,7 @@ class UciEngine:
     def __init__(self, binary: str, timeout: float, extra_args: Optional[List[str]] = None):
         self.binary = binary
         self.eval_mode: Optional[str] = None
+        self.hash_mb: Optional[int] = None
         env = os.environ.copy()
         argv = [binary]
         if extra_args:
@@ -126,8 +127,27 @@ class UciEngine:
             line = self._read_line()
             if line.startswith("info string eval_mode="):
                 self.eval_mode = line.split("=", 1)[1].strip().lower() or None
+            if line.startswith("option name Hash "):
+                parts = line.split()
+                if "default" in parts:
+                    idx = parts.index("default")
+                    if idx + 1 < len(parts):
+                        try:
+                            self.hash_mb = int(parts[idx + 1])
+                        except ValueError:
+                            self.hash_mb = None
             if line == token:
                 return
+
+    def clear_tt(self) -> None:
+        if self.hash_mb is None:
+            self._send("ucinewgame")
+            self._ready()
+            return
+        temp_hash = 1 if self.hash_mb != 1 else 2
+        self._send(f"setoption name Hash value {temp_hash}")
+        self._send(f"setoption name Hash value {self.hash_mb}")
+        self._ready()
 
     def bestmove(self, fen: str, depth: int, moves: Optional[List[str]] = None) -> str:
         self._send("ucinewgame")
@@ -261,6 +281,7 @@ def run_suite(
     engine: UciEngine,
     depth: int,
     progress_interval: int,
+    clear_tt_per_puzzle: bool,
 ) -> Tuple[int, int, List[Tuple[Puzzle, str]]]:
     log_enabled = "skaks" in engine.binary
     log_handle = None
@@ -301,6 +322,8 @@ def run_suite(
 
                 played_moves: List[str] = []
                 puzzle_solved = True
+                if clear_tt_per_puzzle:
+                    engine.clear_tt()
 
                 for ply_idx in range(0, len(expected_moves), 2):
                     expected_move = expected_moves[ply_idx]
@@ -423,6 +446,18 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--show-failures", action="store_true", help="Print details for failed puzzles"
     )
+    parser.add_argument(
+        "--clear-tt-per-puzzle",
+        action="store_true",
+        help="Clear the engine transposition table before each puzzle (default: on)",
+    )
+    parser.add_argument(
+        "--no-clear-tt",
+        action="store_false",
+        dest="clear_tt_per_puzzle",
+        help="Do not clear the engine transposition table between puzzles",
+    )
+    parser.set_defaults(clear_tt_per_puzzle=True)
     return parser.parse_args(argv)
 
 
@@ -440,7 +475,12 @@ def main(argv: List[str]) -> int:
         extra_args: List[str] = []
         with UciEngine(engine_path, args.timeout, extra_args=extra_args) as engine:
             solved, total, failures = run_suite(
-                puzzles, directory, engine, args.depth, args.progress_interval
+                puzzles,
+                directory,
+                engine,
+                args.depth,
+                args.progress_interval,
+                args.clear_tt_per_puzzle,
             )
     except FileNotFoundError:
         print(f"Engine binary not found: {engine_path}", file=sys.stderr)
